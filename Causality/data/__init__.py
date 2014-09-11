@@ -12,9 +12,11 @@ class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
         ''' offsets is a tuple or list of (start, end) tuples. '''
         self.id = annot_id
+        if isinstance(offsets[0], int):
+            offsets = (offsets,)
         self.offsets = \
-            ((start_offset - sentence_offset, end_offset - sentence_offset)
-             for (start_offset, end_offset) in offsets)
+            [(start_offset - sentence_offset, end_offset - sentence_offset)
+             for (start_offset, end_offset) in offsets]
         self.text = text
 
 class Token(object):
@@ -75,9 +77,9 @@ class ParsedSentence(object):
     def get_head(self, annotation):
         min_depth = float('inf')
         head = None
-        for token in self.tokens:
+        for token in self.tokens[1:]: # skip ROOT
             depth = self.get_depth(token)
-            if depth < min_depth or head is None:
+            if depth < min_depth:
                 for offset_pair in annotation.offsets:
                     if (token.start_offset >= offset_pair[0] and
                         token.end_offset <= offset_pair[1]):
@@ -162,13 +164,12 @@ class ParsedSentence(object):
             # i is one less than the index of the current token in self.tokens,
             # because root.
             original = token.original_text
-            print "Original text:", original
             if token.is_absent:
                 # Handle case of duplicated character, which is the only type of
                 # absent token that will have been detected so far.
                 prev_token = self.vertices[i]
                 if prev_token.original_text.endswith(original):
-                    print "Found duplicated token:", token.original_text
+                    #print "Found duplicated token:", token.original_text
                     token.start_offset = prev_token.end_offset - len(original)
                     token.end_offset = prev_token.end_offset
             elif original == '.' and i == len(non_root_tokens) - 1:
@@ -223,11 +224,13 @@ class ParsedSentence(object):
                                     - self.document_char_offset)
                 token.start_offset = token.end_offset - len(original)
             
+            '''
             if not token.is_absent:
                 print "Annotated token span: ", token.start_offset, ",", \
                     token.end_offset, 'for', token.original_text + \
                     '. Annotated text:', \
                     self.original_text[token.start_offset:token.end_offset]
+            '''
                 
 
     def __make_token_copy(self, token_index, copy_num, copy_node_indices):
