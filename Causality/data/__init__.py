@@ -91,7 +91,7 @@ class ParsedSentence(object):
                         break
 
         if head is None:
-            warnings.warn('Returning null head for annotation ' + annotation.text);
+            warnings.warn('Returning null head for annotation "%s"' % annotation.text);
         return head
 
     def add_causation_instance(self, instance):
@@ -128,7 +128,7 @@ class ParsedSentence(object):
     def __create_tokens(self, token_strings, tag_strings):
         # We need one more node than we have token strings (for root).
         copy_node_indices = [None for _ in range(len(token_strings) + 1)]
-        root = self.__add_new_token(self, '', 'ROOT', 'ROOT')
+        root = self.__add_new_token('', 'ROOT', 'ROOT')
         copy_node_indices[0] = [root.index]
 
         for i, (token_str, tag_str) in (
@@ -246,7 +246,7 @@ class ParsedSentence(object):
         "([A-Za-z_\\-/\\.']+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
 
     def __create_edges(self, edges, copy_node_indices):
-        edge_lines = [line for line in edges.split('\n') if line] # skip blanks
+        edge_lines = [line for line in edges if line] # skip blanks
         matches = [ParsedSentence.EDGE_REGEX.match(edge_line) 
                    for edge_line in edge_lines]
 
