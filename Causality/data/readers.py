@@ -96,3 +96,32 @@ class SentenceReader(Reader):
             _, found_token = streams.read_stream_until(
                 self.parse_file, unescaped, False, False)
             assert found_token, 'Skipped token not found: %s' % unescaped
+
+class DirectoryReader(Reader):
+    def __init__(self, file_regexes, base_reader):
+        self.regexes = [re.compile(regex) for regex in file_regexes]
+        self.base_reader = base_reader
+        self.filenames = (x for x in [])
+
+    def open(self, filepath):
+        self.filenames = recursively_list_files(filepath)
+
+    def get_next(self):
+        # Start by seeing if our current file has any juice left.
+        next_instance = self.base_reader.get_next()
+        while not next_instance:
+            try:
+                self.__open_next_file()
+            except StopIteration:
+                return None
+            next_instance = self.base_reader.get_next()
+
+    def __open_next_file(self):
+        while True: # Eventually, we'll get a StopIteration if nothing matches.
+            next_filename = self.filenames.next()
+            for regex in self.regexes:
+                if regex.match(next_filename):
+                    self.base_reader.close()
+                    self.base_reader.open(next_filename)
+                    return
+        
