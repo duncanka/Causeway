@@ -122,6 +122,9 @@ class ParsedSentence(object):
 
         return False
 
+    def token_texts(self):
+        return [t.original_text for t in self.tokens[1:]]
+
 
     ''' Private support functions '''
 
@@ -192,7 +195,7 @@ class ParsedSentence(object):
                     self.original_text += eaten_ws + next_char
                 else:
                     # The period is actually not there.
-                    token.is_absent = true
+                    token.is_absent = True
                     token.original_text = ''
                     document_text.seek(start_pos)
             else: # Normal case: just read the next token.

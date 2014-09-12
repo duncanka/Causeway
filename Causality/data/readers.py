@@ -11,7 +11,8 @@ class Reader(object):
         self.file_stream = open(filepath, 'r')
 
     def close(self):
-        self.file_stream.close()
+        if self.file_stream:
+            self.file_stream.close()
 
     def get_next(self):
         raise NotImplementedError
@@ -26,17 +27,19 @@ class Reader(object):
 
 class SentenceReader(Reader):
     def __init__(self):
+        super(SentenceReader, self).__init__()
         self.last_opened_path = None
         self.parse_file = None
 
     def open(self, filepath):
-        super(SentenceReader, self).open(filepath)
+        self.parse_file = open(filepath, 'r')
         (base_path, _) = os.path.splitext(filepath)
-        self.parse_file = open(base_path + '.parse', 'r')
+        super(SentenceReader, self).open(base_path + '.txt')
 
     def close(self):
         super(SentenceReader, self).close()
-        self.parse_file.close()
+        if self.parse_file:
+            self.parse_file.close()
         
     def get_next(self):
         if not self.parse_file:
@@ -105,6 +108,14 @@ class DirectoryReader(Reader):
 
     def open(self, filepath):
         self.filenames = recursively_list_files(filepath)
+        try:
+            self.__open_next_file()
+        except StopIteration:
+            pass
+
+    def close(self):
+        self.base_reader.close()
+        self.filenames = (x for x in [])
 
     def get_next(self):
         # Start by seeing if our current file has any juice left.
@@ -113,8 +124,10 @@ class DirectoryReader(Reader):
             try:
                 self.__open_next_file()
             except StopIteration:
+                self.filenames = (x for x in [])
                 return None
             next_instance = self.base_reader.get_next()
+        return next_instance
 
     def __open_next_file(self):
         while True: # Eventually, we'll get a StopIteration if nothing matches.
