@@ -60,9 +60,9 @@ class ParsedSentence(object):
         # Declare a few variables that will be overwritten later, just so that
         # it's easy to tell what's in an instance of this class.
         self.edge_graph = csr_matrix((0, 0), dtype='bool')
-        self.shortest_distances = np.array([[]])
         self.document_char_offset = -1
         self.original_text = ''
+        self.__shortest_distances = np.array([[]])
 
         token_strings = tokenized_text.split(' ')
         tag_strings = tagged_lemmas.split(' ')
@@ -73,7 +73,7 @@ class ParsedSentence(object):
         self.__create_edges(edges, copy_node_indices)
 
     def get_depth(self, token):
-        return self.shortest_distances[0][token.index]
+        return self.__shortest_distances[0][token.index]
 
     def get_head(self, annotation):
         min_depth = float('inf')
@@ -92,7 +92,8 @@ class ParsedSentence(object):
                         break
 
         if head is None:
-            warnings.warn('Returning null head for annotation "%s"' % annotation.text);
+            warnings.warn('Returning null head for annotation "%s"'
+                          % annotation.text);
         return head
 
     def add_causation_instance(self, instance):
@@ -138,8 +139,8 @@ class ParsedSentence(object):
         for i, (token_str, tag_str) in (
                 enumerate(zip(token_strings, tag_strings))):
             lemma, _, pos = tag_str.partition('/')
-            new_token = self.__add_new_token(self.unescape_token_text(token_str),
-                                           pos, lemma)
+            new_token = self.__add_new_token(
+                self.unescape_token_text(token_str), pos, lemma)
             # Detect duplicated tokens.
             if (lemma == '.' and pos == '.'
                     # Previous token is in self.tokens[i], not i-1: root is 0.
@@ -220,8 +221,8 @@ class ParsedSentence(object):
                     # If it ends in a period, and the next character in the
                     # stream is a period, it's a duplicated period. Advance
                     # over the period and append it to the accumulated text.
-                    _, is_period = peek_and_revert_unless(document_text, 
-                                                          lambda char: char == '.')
+                    _, is_period = peek_and_revert_unless(
+                        document_text, lambda char: char == '.')
                     if is_period:
                         self.original_text += '.'
                 token.end_offset = (document_text.tell() 
@@ -270,8 +271,8 @@ class ParsedSentence(object):
         num_nodes = len(self.tokens)
         self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='bool')
         for match_result in matches:
-            (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma, arg2_index,
-             arg2_copy) = match_result.group(*range(1,8))
+            (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma, 
+             arg2_index, arg2_copy) = match_result.group(*range(1,8))
             arg1_index = int(arg1_index)
             arg2_index = int(arg2_index)
            
@@ -281,7 +282,7 @@ class ParsedSentence(object):
             self.edge_labels[(token_1_idx, token_2_idx)] = relation
         self.edge_graph = self.edge_graph.tocsr()
 
-        self.shortest_distances = csgraph.shortest_path(
+        self.__shortest_distances = csgraph.shortest_path(
             self.edge_graph, unweighted=True)
 
 class CausationInstance(object):

@@ -10,15 +10,15 @@ from data import ParsedSentence, Annotation, CausationInstance
 
 class Reader(object):
     def __init__(self):
-        self.file_stream = None
+        self.__file_stream = None
 
     def open(self, filepath):
         self.close()
-        self.file_stream = open(filepath, 'r')
+        self.__file_stream = open(filepath, 'r')
 
     def close(self):
-        if self.file_stream:
-            self.file_stream.close()
+        if self.__file_stream:
+            self.__file_stream.close()
 
     def get_next(self):
         raise NotImplementedError
@@ -35,44 +35,43 @@ class Reader(object):
 class SentenceReader(Reader):
     def __init__(self):
         super(SentenceReader, self).__init__()
-        self.last_opened_path = None
-        self.parse_file = None
+        self.__parse_file = None
 
     def open(self, filepath):
         super(SentenceReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
-        self.parse_file = open(base_path + '.parse', 'r')
+        self.__parse_file = open(base_path + '.parse', 'r')
 
     def close(self):
         super(SentenceReader, self).close()
-        if self.parse_file:
-            self.parse_file.close()
+        if self.__parse_file:
+            self.__parse_file.close()
         
     def get_next(self):
-        if not self.parse_file:
+        if not self.__parse_file:
             return None
 
         # Read the next 3 blocks of the parse file.
-        tokenized = self.parse_file.readline()
+        tokenized = self.__parse_file.readline()
         if not tokenized: # empty string means we've hit the end of the file
             return None
         tokenized = tokenized.strip()
-        tmp = self.parse_file.readline()
+        tmp = self.__parse_file.readline()
         assert not tmp.strip(), (
             'Invalid parse file: expected blank line after tokens: %s' 
             % tokenized)
 
-        lemmas = self.parse_file.readline()
+        lemmas = self.__parse_file.readline()
         lemmas = lemmas.strip()
         assert lemmas, (
             'Invalid parse file: expected lemmas line after tokens: %s'
              % tokenized)
-        tmp = self.parse_file.readline()
+        tmp = self.__parse_file.readline()
         assert not tmp.strip(), (
             'Invalid parse file: expected blank line after lemmas: %s' % lemmas)
         
-        # If the sentence was unparsed, don't return a new ParsedSentence for it,
-        # but do advance the stream past the unparsed words.
+        # If the sentence was unparsed, don't return a new ParsedSentence for
+        # it, but do advance the stream past the unparsed words.
         # NOTE: This relies on the printWordsForUnparsed flag we introduced to
         # the Stanford parser.
         if lemmas == '(())':
@@ -80,21 +79,22 @@ class SentenceReader(Reader):
             return self.get_next()
 
         parse_lines = []
-        tmp = self.parse_file.readline().strip()
+        tmp = self.__parse_file.readline().strip()
         if not tmp:
             self.__skip_tokens(tokenized, 'Skipping sentence with empty parse')
             return self.get_next()
         while tmp:
             parse_lines.append(tmp)
-            tmp = self.parse_file.readline().strip()
+            tmp = self.__parse_file.readline().strip()
 
-        # Leaves file in the state where the final blank line after the edges has
-        # been read. This also means that if there's a blank line at the end of a
-        # file, it won't make us think there's another entry coming.
+        # Leaves file in the state where the final blank line after the edges
+        # has been read. This also means that if there's a blank line at the end
+        # of a file, it won't make us think there's another entry coming.
 
         # Now create the sentence from the read data + the text file.
-        sentence = ParsedSentence(tokenized, lemmas, parse_lines, self.file_stream)
-        assert (len(sentence.original_text) == self.file_stream.tell()
+        sentence = ParsedSentence(
+            tokenized, lemmas, parse_lines, self.__file_stream)
+        assert (len(sentence.original_text) == self.__file_stream.tell()
                 - sentence.document_char_offset), \
             'Sentence length != offset difference: %s' % sentence.original_text
         return sentence
@@ -104,45 +104,45 @@ class SentenceReader(Reader):
         for token in tokenized.split():
             unescaped = ParsedSentence.unescape_token_text(token)
             _, found_token = streams.read_stream_until(
-                self.parse_file, unescaped, False, False)
+                self.__parse_file, unescaped, False, False)
             assert found_token, 'Skipped token not found: %s' % unescaped
 
 class DirectoryReader(Reader):
     def __init__(self, file_regexes, base_reader):
-        self.regexes = [re.compile(regex) for regex in file_regexes]
-        self.base_reader = base_reader
-        self.filenames = iter([])
+        self.__regexes = [re.compile(regex) for regex in file_regexes]
+        self.__base_reader = base_reader
+        self.__filenames = iter([])
 
     def open(self, filepath):
-        self.filenames = recursively_list_files(filepath)
+        self.__filenames = recursively_list_files(filepath)
         try:
             self.__open_next_file()
         except StopIteration:
             pass
 
     def close(self):
-        self.base_reader.close()
-        self.filenames = iter([])
+        self.__base_reader.close()
+        self.__filenames = iter([])
 
     def get_next(self):
         # Start by seeing if our current file has any juice left.
-        next_instance = self.base_reader.get_next()
+        next_instance = self.__base_reader.get_next()
         while not next_instance:
             try:
                 self.__open_next_file()
             except StopIteration:
-                self.filenames = iter([])
+                self.__filenames = iter([])
                 return None
-            next_instance = self.base_reader.get_next()
+            next_instance = self.__base_reader.get_next()
         return next_instance
 
     def __open_next_file(self):
         while True: # Eventually, we'll get a StopIteration if nothing matches.
-            next_filename = self.filenames.next()
-            for regex in self.regexes:
+            next_filename = self.__filenames.next()
+            for regex in self.__regexes:
                 if regex.match(next_filename):
-                    self.base_reader.close()
-                    self.base_reader.open(next_filename)
+                    self.__base_reader.close()
+                    self.__base_reader.open(next_filename)
                     return
 
 
@@ -170,7 +170,7 @@ class StandoffReader(Reader):
 
     def __read_all_instances(self):
         self.instances = self.sentence_reader.get_all()
-        lines = self.file_stream.readlines()
+        lines = self.__file_stream.readlines()
         if not lines:
             warnings.warn("No annotations found")
             self.close()
@@ -230,15 +230,16 @@ class StandoffReader(Reader):
         if lines_to_reprocess:
             recurse = True
             for id_needed in ids_needed_to_reprocess:
-                # Any ID that was referenced before being defined must be defined
-                # somewhere -- either we've seen a definition since then, or it's
-                # something we're intending to define on the next pass.
+                # Any ID that was referenced before being defined must be 
+                # defined somewhere -- either we've seen a definition since
+                # then, or it's something we're intending to define on the next
+                # pass.
                 if (not ids_to_annotations.has_key(id_needed) and 
                     not ids_to_instances.has_key(id_needed) and
                     id_needed not in ids_to_reprocess):
-                    warnings.warn(("ID %s is referenced, but is not defined anywhere. "
-                                   "Ignoring all lines that depend on it.")
-                                  % id_needed)
+                    warnings.warn(
+                        "ID %s is referenced, but is not defined anywhere. " 
+                        "Ignoring all lines that depend on it." % id_needed)
                     recurse = False
             if recurse:
                 self.__process_lines(lines_to_reprocess, ids_to_annotations, 
@@ -261,11 +262,11 @@ class StandoffReader(Reader):
         indices_str = type_and_indices_str[first_space_idx + 1:]
         annotation_offsets = []
         for index_pair_str in indices_str.split(';'):
-            index_pair = index_pair_str.split(' ')
+            index_pair = [int(index) for index in index_pair_str.split(' ')]
             self.__raise_warning_if(
                 len(index_pair) != 2,
                 'Skipping annotation span line without 2 indices')
-            annotation_offsets.append(tuple([int(index) for index in index_pair]))
+            annotation_offsets.append(tuple(index_pair))
 
         # Create the new annotation.
         containing_sentence = StandoffReader.__find_containing_sentence(
@@ -357,9 +358,9 @@ class StandoffReader(Reader):
             ids_to_reprocess.add(line_id)
             ids_needed_to_reprocess.add(id_needed)
         else:
-            # There can be a numerical suffix on the end of the name of the edge.
-            # Since we're generally assuming well-formed data, we don't check 
-            # that there's only one of each.
+            # There can be a numerical suffix on the end of the name of the 
+            # edge. Since we're generally assuming well-formed data, we don't
+            # check that there's only one of each.
             for arg_type, arg_id in split_args[1:]:
                 annotation = ids_to_annotations[arg_id]
                 if arg_type.startswith('Cause'):
