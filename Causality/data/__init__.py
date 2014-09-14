@@ -5,6 +5,7 @@ Define basic causality datatypes
 import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
+from util import Enum
 from util.streams import *
 import warnings
 
@@ -170,7 +171,7 @@ class ParsedSentence(object):
             if token.is_absent:
                 # Handle case of duplicated character, which is the only type of
                 # absent token that will have been detected so far.
-                prev_token = self.vertices[i]
+                prev_token = self.tokens[i]
                 if prev_token.original_text.endswith(original):
                     #print "Found duplicated token:", token.original_text
                     token.start_offset = prev_token.end_offset - len(original)
@@ -212,7 +213,7 @@ class ParsedSentence(object):
                 self.original_text += text_until_token
                 assert found_token, (
                     ('Could not find token "%s" starting at position %d '
-                     + '(accumulated: %s)')
+                     '(accumulated: %s)')
                     % (original, search_start, self.original_text))
 
                 if original[-1] == '.':
@@ -243,7 +244,7 @@ class ParsedSentence(object):
             self.__add_new_token(token.original_text, token.pos, token.lemma,
                                  token.start_offset, token.end_offset, 
                                  token.is_absent, token)
-            copies.append(len(self.vertices) - 1)
+            copies.append(len(self.tokens) - 1)
 
     EDGE_REGEX = re.compile(
         "([A-Za-z_\\-/\\.']+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
@@ -282,3 +283,38 @@ class ParsedSentence(object):
 
         self.shortest_distances = csgraph.shortest_path(
             self.edge_graph, unweighted=True)
+
+class CausationInstance(object):
+    Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit', 
+                    'Prevent'])
+    CausationTypes = Enum(['Consequence', 'Implication', 'Motivation', 
+                           'Purpose'])
+
+    def __init__(self, source_sentence, degree=None, causation_type=None,
+                 connective=None, cause=None, effect=None, annotation_id=None):
+        if degree is None:
+            degree = len(self.Degrees)
+        if causation_type is None:
+            degree = len(self.CausationTypes)
+
+        assert source_sentence is not None
+        self.source_sentence = source_sentence
+        self.degree = degree
+        self.type = causation_type
+        self.connective = connective
+        self.cause = cause
+        self.effect = effect
+        self.id = annotation_id
+
+    def get_cause_and_effect_heads(self):
+        if self.cause:
+            cause = self.source_sentence.get_head(self.cause)
+        else:
+            cause = None
+
+        if self.effect:
+            effect = self.source_sentence.get_head(self.effect)
+        else:
+            effect = None
+
+        return (cause, effect)

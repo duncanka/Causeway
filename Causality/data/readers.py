@@ -1,13 +1,19 @@
 import os
 import re
+import warnings
+
 from util import streams, recursively_list_files
-from data import ParsedSentence
+from data import ParsedSentence, Annotation, CausationInstance
+
+# TODO: convert readers into the more Pythonic paradigm of essentially acting
+# like generators.
 
 class Reader(object):
     def __init__(self):
         self.file_stream = None
 
     def open(self, filepath):
+        self.close()
         self.file_stream = open(filepath, 'r')
 
     def close(self):
@@ -22,6 +28,7 @@ class Reader(object):
         instance = self.get_next()
         while instance is not None:
             instances.append(instance)
+            instance = self.get_next()
         return instances
 
 
@@ -32,9 +39,9 @@ class SentenceReader(Reader):
         self.parse_file = None
 
     def open(self, filepath):
-        self.parse_file = open(filepath, 'r')
-        (base_path, _) = os.path.splitext(filepath)
-        super(SentenceReader, self).open(base_path + '.txt')
+        super(SentenceReader, self).open(filepath)
+        base_path, _ = os.path.splitext(filepath)
+        self.parse_file = open(base_path + '.parse', 'r')
 
     def close(self):
         super(SentenceReader, self).close()
@@ -104,7 +111,7 @@ class DirectoryReader(Reader):
     def __init__(self, file_regexes, base_reader):
         self.regexes = [re.compile(regex) for regex in file_regexes]
         self.base_reader = base_reader
-        self.filenames = (x for x in [])
+        self.filenames = iter([])
 
     def open(self, filepath):
         self.filenames = recursively_list_files(filepath)
@@ -115,7 +122,7 @@ class DirectoryReader(Reader):
 
     def close(self):
         self.base_reader.close()
-        self.filenames = (x for x in [])
+        self.filenames = iter([])
 
     def get_next(self):
         # Start by seeing if our current file has any juice left.
@@ -124,7 +131,7 @@ class DirectoryReader(Reader):
             try:
                 self.__open_next_file()
             except StopIteration:
-                self.filenames = (x for x in [])
+                self.filenames = iter([])
                 return None
             next_instance = self.base_reader.get_next()
         return next_instance
@@ -137,4 +144,254 @@ class DirectoryReader(Reader):
                     self.base_reader.close()
                     self.base_reader.open(next_filename)
                     return
+
+
+class StandoffReader(Reader):
+    def __init__(self):
+        super(StandoffReader, self).__init__()
+        self.sentence_reader = SentenceReader()
+        self.instances = []
+        self.iterator = iter([])
+
+    def open(self, filepath):
+        super(StandoffReader, self).open(filepath)
+        base_path, _ = os.path.splitext(filepath)
+        self.sentence_reader.open(base_path + '.txt')        
+        self.__read_all_instances()
+
+    def close(self):
+        super(StandoffReader, self).close()
+        self.sentence_reader.close()
+        self.instances = []
+        self.iterator = iter([])
+
+    def get_next(self):
+        return next(self.iterator, None)
+
+    def __read_all_instances(self):
+        self.instances = self.sentence_reader.get_all()
+        lines = self.file_stream.readlines()
+        if not lines:
+            warnings.warn("No annotations found")
+            self.close()
+            return
+
+        ids_to_annotations = {}
+        ids_to_instances = {}
+        self.__process_lines(lines, ids_to_annotations, ids_to_instances)
+
+        self.iterator = iter(self.instances)
+
+    @staticmethod
+    def __raise_warning_if(condition, message):
+        if condition:
+            raise UserWarning(message)
+
+    def __process_lines(self, lines, ids_to_annotations, ids_to_instances):
+        lines_to_reprocess = []
+        ids_to_reprocess = set()
+        ids_needed_to_reprocess = set()
+
+        for line in lines:
+            try:
+                line_parts = line.strip().split('\t')
+                if len(line_parts) < 2:
+                    raise UserWarning(
+                        "Ignoring line not formatted as ID, tab, content")
+
+                line_id = line_parts[0]
+                if line_id[0] == 'T': # it's an annotation span
+                    self.__process_text_annotation(
+                        line, line_parts, ids_to_annotations, ids_to_instances, 
+                        lines_to_reprocess, ids_to_reprocess, 
+                        ids_needed_to_reprocess)
+                elif line_id[0] == 'A': # it's an attribute of an event (degree)
+                    self.__process_attribute(
+                        line, line_parts, ids_to_annotations, ids_to_instances,
+                        lines_to_reprocess, ids_to_reprocess, 
+                        ids_needed_to_reprocess)
+                elif line_id[0] == 'E': # it's an event
+                    self.__process_event(
+                        line, line_parts, ids_to_annotations,
+                        ids_to_instances, lines_to_reprocess, ids_to_reprocess,
+                        ids_needed_to_reprocess)
+                elif line_id[0] == '#': # skip annotator notes lines silently
+                    continue
+                else:
+                    warnings.warn("Ignoring annotation line: %s" % line)
+
+            except UserWarning as e:
+                warnings.warn('%s (Line: %s)' % (e.message, line))
+                return            
+
+        # There is no possibility of cyclical relationships in our annotation 
+        # scheme, so it's OK to just assume that with each pass we'll reduce the
+        # set of IDs that need to be added.
+        if lines_to_reprocess:
+            recurse = True
+            for id_needed in ids_needed_to_reprocess:
+                # Any ID that was referenced before being defined must be defined
+                # somewhere -- either we've seen a definition since then, or it's
+                # something we're intending to define on the next pass.
+                if (not ids_to_annotations.has_key(id_needed) and 
+                    not ids_to_instances.has_key(id_needed) and
+                    id_needed not in ids_to_reprocess):
+                    warnings.warn(("ID %s is referenced, but is not defined anywhere. "
+                                   "Ignoring all lines that depend on it.")
+                                  % id_needed)
+                    recurse = False
+            if recurse:
+                self.__process_lines(lines_to_reprocess, ids_to_annotations, 
+                                     ids_to_instances)
+
+    def __process_text_annotation(self, line, line_parts, ids_to_annotations, 
+                                  ids_to_instances, lines_to_reprocess,
+                                  ids_to_reprocess, ids_needed_to_reprocess):
+        try:
+            line_id, type_and_indices_str, text_str = line_parts
+        except ValueError:
+            warnings.warn(("Skipping annotation span line that doesn't have 3 "
+                           "tab-separated entries. (Line: %s)") % line)
+            return
+
+        self.__raise_warning_if(
+            ' ' not in type_and_indices_str,
+            'Skipping annotanion span line with no space in type/index string')
+        first_space_idx = type_and_indices_str.index(' ')
+        indices_str = type_and_indices_str[first_space_idx + 1:]
+        annotation_offsets = []
+        for index_pair_str in indices_str.split(';'):
+            index_pair = index_pair_str.split(' ')
+            self.__raise_warning_if(
+                len(index_pair) != 2,
+                'Skipping annotation span line without 2 indices')
+            annotation_offsets.append(tuple([int(index) for index in index_pair]))
+
+        # Create the new annotation.
+        containing_sentence = StandoffReader.__find_containing_sentence(
+            annotation_offsets, self.instances, line)
+        self.__raise_warning_if(
+            containing_sentence is None,
+            "Skipping annotation for which no sentence could be found")
+        annotation = Annotation(containing_sentence.document_char_offset,
+                                annotation_offsets, text_str, line_id)
+        ids_to_annotations[line_id] = annotation
+
+        # Create the instance if necessary.
+        annotation_type = type_and_indices_str[:first_space_idx]
+        if annotation_type != 'Argument':
+            self.__raise_warning_if(
+                annotation_type not in CausationInstance.CausationTypes,
+                "Skipping text annotation with invalid causation type")
+            instance = CausationInstance(containing_sentence)
+            ids_to_instances[line_id] = instance
+            instance.connective = annotation
+            containing_sentence.add_causation_instance(instance)
+
+
+    def __process_attribute(self, line, line_parts, ids_to_annotations, 
+                            ids_to_instances, lines_to_reprocess,
+                            ids_to_reprocess, ids_needed_to_reprocess):
+        self.__raise_warning_if(
+            len(line_parts) != 2, 
+            "Skipping attribute line lacking 2 tab-separated entries")
+        line_id = line_parts[0]
+        attr_parts = line_parts[1].split(' ')
+        self.__raise_warning_if(
+            len(attr_parts) != 3,
+            "Skipping attribute line lacking 3 space-separated components")
+        self.__raise_warning_if(
+            attr_parts[0] != "Degree",
+            "Skipping attribute line with unrecognized attribute")
+
+        _, id_to_modify, degree = attr_parts
+        try:
+            degree_index = CausationInstance.Degrees.index(degree)
+            ids_to_instances[id_to_modify].degree = degree_index
+        except ValueError:
+            raise UserWarning('Skipping attribute line with invalid degree')
+        except KeyError:
+            lines_to_reprocess.append(line)
+            ids_to_reprocess.add(line_id)
+            ids_needed_to_reprocess.add(id_to_modify)
+
+    def __process_event(self, line, line_parts, ids_to_annotations, 
+                        ids_to_instances, lines_to_reprocess, 
+                        ids_to_reprocess, ids_needed_to_reprocess):
+        self.__raise_warning_if(len(line_parts) != 2,
+            "Skipping event line that does not have 2 tab-separated entries")
+        line_id = line_parts[0]
+        args = line_parts[1].split(' ')
+        self.__raise_warning_if(
+            len(args) < 1,
+            'Skipping event line that does not have at least 1 arg')
+        split_args = [arg.split(':') for arg in args]
+        self.__raise_warning_if(
+            not all([len(arg) == 2 for arg in split_args]),
+            "Skipping event line whose argument doesn't have 2 components")
         
+        # We know we at least have 1 arg, and that each arg has 2 components,
+        # because we verified both of those above.
+        causation_type, connective_id = split_args[0]
+        try:
+            causation_type_index = CausationInstance.CausationTypes.index(
+                causation_type)
+        except ValueError:
+            raise UserWarning('Skipping invalid causation type: %s' 
+                              % causation_type)
+
+        id_needed = None
+        try:
+            instance = ids_to_instances[connective_id]
+            for arg_id in [arg[1] for arg in split_args]:
+                if not ids_to_annotations.has_key(arg_id):
+                    id_needed = arg_id
+                    break
+        except KeyError:
+            id_needed = line_id
+            # Don't even bother processing the rest of the line if we're just
+            # going to have to reprocess it later.
+
+        if id_needed:
+            lines_to_reprocess.append(line)
+            ids_to_reprocess.add(line_id)
+            ids_needed_to_reprocess.add(id_needed)
+        else:
+            # There can be a numerical suffix on the end of the name of the edge.
+            # Since we're generally assuming well-formed data, we don't check 
+            # that there's only one of each.
+            for arg_type, arg_id in split_args[1:]:
+                annotation = ids_to_annotations[arg_id]
+                if arg_type.startswith('Cause'):
+                    instance.cause = annotation
+                elif arg_type.startswith('Effect'):
+                    instance.effect = annotation
+                else:
+                    raise UserWarning('Skipping event with invalid arg types')
+
+            instance.type = causation_type_index
+            instance.id = line_id
+            # Add the event ID as an alias of the instance.
+            ids_to_instances[line_id] = instance
+
+    @staticmethod
+    def __find_containing_sentence(offsets, sentences, line):
+        result = None
+        last_sentence = None
+        first_start = offsets[0][0]
+        for sentence in sentences:
+            if sentence.document_char_offset > first_start:
+                result = last_sentence
+                break
+            last_sentence = sentence
+
+        # It could still be in the last sentence.
+        if result is None and last_sentence is not None:
+            if (last_sentence.document_char_offset + 
+                len(last_sentence.original_text)) > first_start:
+                result = last_sentence
+
+        if result is None:
+            raise Exception
+
+        return result

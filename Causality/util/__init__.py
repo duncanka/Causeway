@@ -10,3 +10,5 @@ def recursively_list_files(path):
         except StopIteration:
             break
         
+class Enum(tuple): # based on http://stackoverflow.com/a/9201329
+    __getattr__ = tuple.index

@@ -30,10 +30,11 @@ def peek_and_revert_unless(stream, condition=lambda char: True):
     return next_char, test_result
 
 def read_stream_until(stream, delimiter, case_insensitive, accumulate=True):
-    if not delimiter:
-        return true
-
     accumulator = (None, '')[accumulate]
+
+    if not delimiter:
+        return (accumulator, True)
+
     found_delimiter_until = 0  # index *after* last delim character found
     for next_char in iter(lambda: stream.read(1), ''):
         if accumulate:
