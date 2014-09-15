@@ -20,6 +20,9 @@ class Annotation(object):
              for (start_offset, end_offset) in offsets]
         self.text = text
 
+    def starts_before(self, other):
+        return self.offsets[0][0] < other.offsets[0][0]
+
 class Token(object):
     def __init__(self, index, parent_sentence, original_text, pos, lemma,
                  start_offset=None, end_offset=None, is_absent=False,
@@ -84,7 +87,7 @@ class ParsedSentence(object):
                 for offset_pair in annotation.offsets:
                     if (token.start_offset >= offset_pair[0] and
                         token.end_offset <= offset_pair[1]):
-                        # We've found a token that's higher than our existing 
+                        # We've found a token that's higher than our existing
                         # best candidate, and which is contained by one of the
                         # annotation ranges.
                         head = token
@@ -100,9 +103,9 @@ class ParsedSentence(object):
         self.causation_instances.append(instance)
 
     def count_words_between(self, token1, token2):
-        ''' Counts words between tokens based purely on the token IDs, 
+        ''' Counts words between tokens based purely on the token IDs,
             discounting punctuation tokens. '''
-        assert (self.tokens[token1.index] == token1 and 
+        assert (self.tokens[token1.index] == token1 and
                 self.tokens[token2.index] == token2), "Tokens not in sentence"
         sentence = token1.parent_sentence
         words_between = -1
@@ -112,9 +115,12 @@ class ParsedSentence(object):
         return words_between
 
     def is_clause(self, token):
-        if self.VERB_TAGS.index(token.pos) != -1:
+        if token.pos == 'ROOT':
+            return False
+        try:
+            self.VERB_TAGS.index(token.pos)
             return True
-        else:
+        except ValueError: # this POS wasn't in the list
             # Grab the sparse column of the edge matrix with the edges of this
             # token, and check the labels on each non-zero edge.
             for edge_end_index in self.edge_graph[token.index].indices:
@@ -148,7 +154,7 @@ class ParsedSentence(object):
                 new_token.is_absent = True
 
             copy_node_indices[i + 1] = [new_token.index]
-        
+
         return copy_node_indices
 
     def __add_new_token(self, *args, **kwargs):
@@ -178,7 +184,7 @@ class ParsedSentence(object):
                     token.start_offset = prev_token.end_offset - len(original)
                     token.end_offset = prev_token.end_offset
             elif original == '.' and i == len(non_root_tokens) - 1:
-                # End-of-sentence period gets special treatment: the "real" 
+                # End-of-sentence period gets special treatment: the "real"
                 # original text may have been a period substitute or missing.
                 # (Other things can get converted to fake end-of-sentence
                 # periods to make life easier for the parser.)
@@ -208,7 +214,7 @@ class ParsedSentence(object):
                     token_text_to_find = original[:-1]
                 else:
                     token_text_to_find = original
-                
+
                 text_until_token, found_token = (
                     read_stream_until(document_text, token_text_to_find, True))
                 self.original_text += text_until_token
@@ -225,10 +231,10 @@ class ParsedSentence(object):
                         document_text, lambda char: char == '.')
                     if is_period:
                         self.original_text += '.'
-                token.end_offset = (document_text.tell() 
+                token.end_offset = (document_text.tell()
                                     - self.document_char_offset)
                 token.start_offset = token.end_offset - len(original)
-            
+
             '''
             if not token.is_absent:
                 print "Annotated token span: ", token.start_offset, ",", \
@@ -236,14 +242,14 @@ class ParsedSentence(object):
                     '. Annotated text:', \
                     self.original_text[token.start_offset:token.end_offset]
             '''
-                
+
 
     def __make_token_copy(self, token_index, copy_num, copy_node_indices):
         copies = copy_node_indices[token_index]
         token = self.tokens[token_index]
         while copy_num >= len(copies):
             self.__add_new_token(token.original_text, token.pos, token.lemma,
-                                 token.start_offset, token.end_offset, 
+                                 token.start_offset, token.end_offset,
                                  token.is_absent, token)
             copies.append(len(self.tokens) - 1)
 
@@ -252,7 +258,7 @@ class ParsedSentence(object):
 
     def __create_edges(self, edges, copy_node_indices):
         edge_lines = [line for line in edges if line] # skip blanks
-        matches = [ParsedSentence.EDGE_REGEX.match(edge_line) 
+        matches = [ParsedSentence.EDGE_REGEX.match(edge_line)
                    for edge_line in edge_lines]
 
         # First, we need to create tokens for all the copy nodes so that we have
@@ -262,20 +268,20 @@ class ParsedSentence(object):
                 'Improperly constructed edge line: %s' % edge_line
             arg1_index, arg1_copy, arg2_index, arg2_copy = \
                 match_result.group(3, 4, 6, 7)
-            self.__make_token_copy(int(arg1_index), len(arg1_copy), 
+            self.__make_token_copy(int(arg1_index), len(arg1_copy),
                                    copy_node_indices)
-            self.__make_token_copy(int(arg2_index), len(arg2_copy), 
+            self.__make_token_copy(int(arg2_index), len(arg2_copy),
                                    copy_node_indices)
 
         # Now, we can actually create the matrix and insert all the edges.
         num_nodes = len(self.tokens)
         self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='bool')
         for match_result in matches:
-            (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma, 
+            (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma,
              arg2_index, arg2_copy) = match_result.group(*range(1,8))
             arg1_index = int(arg1_index)
             arg2_index = int(arg2_index)
-           
+
             token_1_idx = copy_node_indices[arg1_index][len(arg1_copy)]
             token_2_idx = copy_node_indices[arg2_index][len(arg2_copy)]
             self.edge_graph[token_1_idx, token_2_idx] = True
@@ -286,9 +292,9 @@ class ParsedSentence(object):
             self.edge_graph, unweighted=True)
 
 class CausationInstance(object):
-    Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit', 
+    Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit',
                     'Prevent'])
-    CausationTypes = Enum(['Consequence', 'Implication', 'Motivation', 
+    CausationTypes = Enum(['Consequence', 'Implication', 'Motivation',
                            'Purpose'])
 
     def __init__(self, source_sentence, degree=None, causation_type=None,
