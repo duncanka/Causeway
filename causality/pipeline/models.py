@@ -99,7 +99,9 @@ class ClassifierModel(FeaturizedModel):
 
     def _featurized_test(self, parts):
         features, _ = self._featurize(parts)
-        return self.classifier.predict(features)
+        labels = self.classifier.predict(features)
+        for part, label in zip(parts, labels):
+            part.label = label
 
     def _featurize(self, parts):
         relevant_parts = [part for part in parts if isinstance(part,
@@ -129,3 +131,31 @@ class ClassifierPart(object):
     def __init__(self, instance, label):
         self.label = int(label)
         self.instance = instance
+
+# TODO: make this class handle multiple ratios
+class ClassBalancingModelWrapper(object):
+    def __init__(self, classifier):
+        self.classifier = classifier
+
+    def fit(self, data, labels):
+        # Based on http://stackoverflow.com/a/23392678/4044809
+        label_set, label_indices, label_counts = np.unique(
+            labels, return_inverse=True, return_counts=True)
+        max_count = label_counts.max()
+        rows_to_add = max_count * len(label_set) - len(data)
+        rebalanced_data = np.empty((rows_to_add, data.shape[1]), data.dtype)
+        rebalanced_labels = np.empty((rows_to_add,), labels.dtype)
+
+        slices = np.concatenate(([0], np.cumsum(max_count - label_counts)))
+        for j in xrange(len(label_set)):
+            indices = np.random.choice(np.where(label_indices==j)[0],
+                                       max_count - label_counts[j])
+            rebalanced_data[slices[j]:slices[j+1]] = data[indices]
+            rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
+        rebalanced_data = np.vstack((data, rebalanced_data))
+        rebalanced_labels = np.concatenate((labels, rebalanced_labels))
+
+        return self.classifier.fit(rebalanced_data, rebalanced_labels)
+
+    def predict(self, data):
+        return self.classifier.predict(data)

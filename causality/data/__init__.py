@@ -40,6 +40,10 @@ class Token(object):
     def is_root(self):
         return self.pos == 'ROOT'
 
+    def __repr__(self):
+        return "Token(%s/%s [%d:%d])" % (
+            self.original_text, self.pos, self.start_offset, self.end_offset)
+
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
@@ -132,7 +136,6 @@ class ParsedSentence(object):
 
     def token_texts(self):
         return [t.original_text for t in self.tokens[1:]]
-
 
     ''' Private support functions '''
 

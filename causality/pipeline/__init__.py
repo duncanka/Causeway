@@ -1,25 +1,29 @@
 """ Define basic pipeline functionality. """
 
-from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS
+from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
 import warnings
 
 from util import listify
 from util.metrics import ClassificationMetrics
 
 # Define pipeline-related flags.
-DEFINE_boolean('evaluate', False,
-               "True for evaluating the parser (requires --test_paths).")
-DEFINE_list('train_paths', [],
-            "Paths to the files containing the training data")
-DEFINE_list('test_paths', [],
-            "Paths to the files containing the test data")
-DEFINE_list('test_output_paths', [],
-            "Paths at which to place the test results."
-            " Defaults to test_paths. If this is a single path, it is used"
-            " for all test paths. If multiple paths are provided, they must"
-            " correspond one-to-one with the test paths provided.")
-#DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts (TP, agreement,"
-#               " etc.) for evaluation or IAA metrics.")
+try:
+    DEFINE_boolean('evaluate', False,
+                   "True for evaluating the parser (requires --test_paths).")
+    DEFINE_list('train_paths', [],
+                "Paths to the files containing the training data")
+    DEFINE_list('test_paths', [],
+                "Paths to the files containing the test data")
+    DEFINE_list('test_output_paths', [],
+                "Paths at which to place the test results."
+                " Defaults to test_paths. If this is a single path, it is used"
+                " for all test paths. If multiple paths are provided, they must"
+                " correspond one-to-one with the test paths provided.")
+    #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts (TP, agreement,"
+    #               " etc.) for evaluation or IAA metrics.")
+except DuplicateFlagError as e:
+    warnings.warn('Ignoring redefinition of flag %s' % e.flagname)
+
 
 class Pipeline(object):
     def __init__(self, stages, reader, writer=None):

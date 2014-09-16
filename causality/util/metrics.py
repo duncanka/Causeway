@@ -1,23 +1,28 @@
 printer_indent_level = 0
 
 class ClassificationMetrics(object):
-    def __init__(self, tp, fp, fn, tn=0):
+    def __init__(self, tp, fp, fn, tn=None):
+        # Often there is no well-defined concept of a true negative, so it
+        # defaults to undefined.
         self.tp = tp
         self.fp = fp
-        self.tn = max(tn, 0)
+        self.tn = tn
         self.fn = fn
 
+        safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
+
         tp = float(tp)
-        self.precision = tp / (tp + fp)
-        self.recall = tp / (tp + fn)
-        self.f1 = 2 * tp / (2 * tp + fp + fn)
-        if tn != -1:
-            self.accuracy = (tp + tn) / (tp + tn + fp + fn)
+        self.precision = tp / safe_divisor(tp + fp)
+        self.recall = tp / safe_divisor(tp + fn)
+        self.f1 = 2 * tp / safe_divisor(2 * tp + fp + fn)
+        if tn is not None:
+            self.accuracy = (tp + tn) / safe_divisor(tp + tn + fp + fn)
         else:
             self.accuracy = float('nan')
+            self.tn = self.accuracy
 
     def __str__(self):
-        indent = '\t' * printer_indent_level
+        indent = '   ' * printer_indent_level
         return ('%sTP: %g\n'
                 '%sTN: %g\n'
                 '%sFP: %g\n'
