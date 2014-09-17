@@ -7,7 +7,8 @@ from pipeline import ClassifierStage
 from pipeline.models import *
 
 try:
-    DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw'],
+    DEFINE_list('sc_features',
+                ['pos1', 'pos2', 'wordsbtw', 'deplen'],
                 'Features to use for simple causality model')
     DEFINE_integer('sc_max_words_btw_phrases', 10,
                    "Maximum number of words between phrases before just making"
@@ -30,6 +31,18 @@ class PhrasePairCausalityModel(ClassifierModel):
             part.head_token_1, part.head_token_2)
         return min(words_btw, FLAGS.sc_max_words_btw_phrases)
 
+    @staticmethod
+    def extract_dep_path(part):
+        source = part.head_token_1
+        target = part.head_token_2
+        # Arbitrary convention to ensure that the string comes out the same
+        # no matter which direction the dependency path goes: earlier start
+        # offset is source.
+        if source.start_offset > target.start_offset:
+            source, target = target, source
+        deps = part.instance.extract_dependency_path(source, target)
+        return str(deps)
+
     # We can't initialize this yet because we don't have access to the class'
     # static methods to define the mapping.
     FEATURE_EXTRACTOR_MAP = None
@@ -39,7 +52,11 @@ class PhrasePairCausalityModel(ClassifierModel):
             PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
                 'pos1': (True, lambda part: part.head_token_1.pos),
                 'pos2': (True, lambda part: part.head_token_2.pos),
-                'wordsbtw': (False, PhrasePairCausalityModel.words_btw_heads)
+                'wordsbtw': (False, PhrasePairCausalityModel.words_btw_heads),
+                'deppath': (True, PhrasePairCausalityModel.extract_dep_path),
+                'deplen': (False,
+                           lambda part: len(part.instance.extract_dependency_path(
+                               part.head_token_1, part.head_token_2)))
             }
 
         super(PhrasePairCausalityModel, self).__init__(
@@ -54,10 +71,15 @@ class SimpleCausalityStage(ClassifierStage):
         self._expected_causations = []
 
     def _extract_parts(self, sentence):
+        # TODO: make sure order of head tokens in part is normalized
         head_token_pairs = set(causation.get_cause_and_effect_heads()
-                         for causation in sentence.causation_instances)
+                               for causation in sentence.causation_instances)
         clause_tokens = [token for token in sentence.tokens
-                         if sentence.is_clause(token)]
+                         # Only consider tokens that are in the parse tree.
+                         if (sentence.get_depth(token) < len(sentence.tokens)
+                             # Only consider clause or noun phrase heads.
+                             and (sentence.is_clause(token)
+                                  or token.pos in ParsedSentence.NOUN_TAGS))]
         return [PhrasePairPart(sentence, t1, t2, ((t1, t2) in head_token_pairs))
                 for t1, t2 in itertools.combinations(clause_tokens, 2)]
 
@@ -136,13 +158,11 @@ class SimpleCausalityStage(ClassifierStage):
                         break
                 if matching_expected_causation:
                     expected_causation_set.remove(matching_expected_causation)
-                '''
                 else:
-                    print 'No match found for %s (cause: %s, effect: %s)' % (
-                        causation_instance.source_sentence.original_text,
-                        causation_instance.cause.text, causation_instance.effect.text)
+                    #print 'No match found for %s (cause: %s, effect: %s)' % (
+                    #    causation_instance.source_sentence.original_text,
+                    #    causation_instance.cause.text, causation_instance.effect.text)
                     self.fp += 1
-                '''
 
             self.fn += len(expected_causation_set)
 

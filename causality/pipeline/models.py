@@ -57,7 +57,7 @@ class FeaturizedModel(Model):
                 if not is_boolean:
                     self.feature_name_dictionary.insert(feature_name)
                 else:
-                    value_set = [extractor_fn(part) for part in parts]
+                    value_set = set([extractor_fn(part) for part in parts])
                     feature_values[feature_name] = value_set
 
             # All the ones we logged feature values for were the boolean ones.
@@ -137,7 +137,8 @@ class ClassBalancingModelWrapper(object):
     def __init__(self, classifier):
         self.classifier = classifier
 
-    def fit(self, data, labels):
+    @staticmethod
+    def rebalance(data, labels):
         # Based on http://stackoverflow.com/a/23392678/4044809
         label_set, label_indices, label_counts = np.unique(
             labels, return_inverse=True, return_counts=True)
@@ -150,11 +151,15 @@ class ClassBalancingModelWrapper(object):
         for j in xrange(len(label_set)):
             indices = np.random.choice(np.where(label_indices==j)[0],
                                        max_count - label_counts[j])
-            rebalanced_data[slices[j]:slices[j+1]] = data[indices]
-            rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
+            if label_indices.shape[0]: # only bother if there are > 0 indices
+                rebalanced_data[slices[j]:slices[j+1]] = data[indices]
+                rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
         rebalanced_data = np.vstack((data, rebalanced_data))
         rebalanced_labels = np.concatenate((labels, rebalanced_labels))
+        return (rebalanced_data, rebalanced_labels)
 
+    def fit(self, data, labels):
+        rebalanced_data, rebalanced_labels = self.rebalance(data, labels)
         return self.classifier.fit(rebalanced_data, rebalanced_labels)
 
     def predict(self, data):

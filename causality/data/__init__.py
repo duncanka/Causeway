@@ -41,8 +41,29 @@ class Token(object):
         return self.pos == 'ROOT'
 
     def __repr__(self):
-        return "Token(%s/%s [%d:%d])" % (
+        return "Token(%s/%s [%s:%s])" % (
             self.original_text, self.pos, self.start_offset, self.end_offset)
+
+
+class DependencyPath(list):
+    def __str__(self):
+        last_node = None
+        dep_names = []
+        for source, target, dep_name in self:
+            if source is last_node:
+                last_node = target
+            else:
+                last_node = source
+                dep_name += "'"
+            dep_names.append(dep_name)
+        return ' '.join(dep_names)
+
+class DependencyPathError(ValueError):
+    def __init__(self, source, target):
+        self.source = source
+        self.target = target
+        super(DependencyPathError, self).__init__(
+            '%s is not reachable from %s' % (target, source))
 
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
@@ -58,7 +79,7 @@ class ParsedSentence(object):
     def __init__(self, tokenized_text, tagged_lemmas, edges, document_text):
         self.tokens = []
         self.causation_instances = []
-        self.edge_labels = {} # maps (n1_id, n2_id) tuples to labels
+        self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
         try:
             self.source_file_path = document_text.name
         except AttributeError:
@@ -69,7 +90,8 @@ class ParsedSentence(object):
         self.edge_graph = csr_matrix((0, 0), dtype='bool')
         self.document_char_offset = -1
         self.original_text = ''
-        self.__shortest_distances = np.array([[]])
+        self.__depths = np.array([])
+        self.__path_predecessors = np.array([[]])
 
         token_strings = tokenized_text.split(' ')
         tag_strings = tagged_lemmas.split(' ')
@@ -80,7 +102,7 @@ class ParsedSentence(object):
         self.__create_edges(edges, copy_node_indices)
 
     def get_depth(self, token):
-        return self.__shortest_distances[0][token.index]
+        return self.__depths[token.index]
 
     def get_head(self, annotation):
         min_depth = float('inf')
@@ -136,6 +158,26 @@ class ParsedSentence(object):
 
     def token_texts(self):
         return [t.original_text for t in self.tokens[1:]]
+
+    def extract_dependency_path(self, source, target):
+        edges = []
+        while target is not source:
+            predecessor_index = self.__path_predecessors[source.index,
+                                                         target.index]
+            if predecessor_index == -9999:
+                raise DependencyPathError(source, target)
+            predecessor = self.tokens[predecessor_index]
+
+            try:
+                # Normal case: the predecessor is the source of the edge.
+                label = self.edge_labels[(predecessor_index, target.index)]
+                edges.append((predecessor, target, label))
+            except KeyError:
+                # Back edge case: the predecessor is the target of the edge.
+                label = self.edge_labels[(target.index, predecessor_index)]
+                edges.append((target, predecessor, label))
+            target = predecessor
+        return DependencyPath(reversed(edges))
 
     ''' Private support functions '''
 
@@ -291,8 +333,13 @@ class ParsedSentence(object):
             self.edge_labels[(token_1_idx, token_2_idx)] = relation
         self.edge_graph = self.edge_graph.tocsr()
 
-        self.__shortest_distances = csgraph.shortest_path(
-            self.edge_graph, unweighted=True)
+        # TODO: do this with breadth_first_order instead
+        shortest_distances = csgraph.shortest_path(self.edge_graph,
+                                                   unweighted=True)
+        self.__depths = shortest_distances[0]
+        _, self.__path_predecessors = csgraph.shortest_path(
+            self.edge_graph, unweighted=True, return_predecessors=True,
+            directed=False)
 
 class CausationInstance(object):
     Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit',
