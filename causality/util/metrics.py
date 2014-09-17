@@ -1,3 +1,5 @@
+import numpy as np
+
 printer_indent_level = 0
 
 class ClassificationMetrics(object):
@@ -34,3 +36,14 @@ class ClassificationMetrics(object):
                     indent, self.tp, indent, self.tn, indent, self.fp, indent,
                     self.fn, indent, self.recall, indent, self.precision,
                     indent, self.accuracy, indent, self.f1)
+
+def diff_binary_vectors(predicted, gold):
+    # Make sure np.where works properly
+    predicted = np.array(predicted)
+    gold = np.array(gold)
+
+    tp = np.count_nonzero((predicted == 1) & (gold == 1))
+    tn = np.count_nonzero((predicted == 0) & (gold == 0))
+    fp = np.count_nonzero((predicted == 1) & (gold == 0))
+    fn = np.count_nonzero((predicted == 0) & (gold == 1))
+    return ClassificationMetrics(tp, fp, fn, tn)
