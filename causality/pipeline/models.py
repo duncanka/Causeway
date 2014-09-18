@@ -42,30 +42,37 @@ class FeaturizedModel(Model):
         return '%s=%s' % (base_name, value)
 
     def __init__(self, part_type, feature_extractor_map, selected_features):
+        """
+        part_type is the class object corresponding to the part type this model
+        is for.
+        feature_extractor_map is a map from feature names to
+        (feature_is_boolean, feature_extractor_function) tuples.
+        selected_features is a list of names of features to extract.
+        """
         super(FeaturizedModel, self).__init__(part_type)
         self.selected_features = selected_features
         self.feature_name_dictionary = FeaturizedModel.NameDictionary()
         self.feature_extractor_map = feature_extractor_map
 
     def train(self, parts):
-        # Build feature name dictionary if not already present.
-        if not self.feature_name_dictionary:
-            feature_values = {}
-            for feature_name in self.selected_features:
-                is_boolean, extractor_fn = (
-                    self.feature_extractor_map[feature_name])
-                if not is_boolean:
-                    self.feature_name_dictionary.insert(feature_name)
-                else:
-                    value_set = set([extractor_fn(part) for part in parts])
-                    feature_values[feature_name] = value_set
+        # Build feature name dictionary. (Unfortunately, this means we featurize
+        # everything twice, but I can't think of a cleverer way.)
+        feature_values = {}
+        for feature_name in self.selected_features:
+            is_boolean, extractor_fn = (
+                self.feature_extractor_map[feature_name])
+            if not is_boolean:
+                self.feature_name_dictionary.insert(feature_name)
+            else:
+                value_set = set([extractor_fn(part) for part in parts])
+                feature_values[feature_name] = value_set
 
-            # All the ones we logged feature values for were the boolean ones.
-            # Now we register all the corresponding feature names.
-            for base_name, value_set in feature_values.iteritems():
-                for value in value_set:
-                    self.feature_name_dictionary.insert(
-                        self.get_boolean_feature_name(base_name, value))
+        # All the ones we logged feature values for were the boolean ones.
+        # Now we register all the corresponding feature names.
+        for base_name, value_set in feature_values.iteritems():
+            for value in value_set:
+                self.feature_name_dictionary.insert(
+                    self.get_boolean_feature_name(base_name, value))
 
         self._featurized_train(parts)
 
@@ -104,9 +111,9 @@ class ClassifierModel(FeaturizedModel):
         labels = self.classifier.predict(features)
         for part, label in zip(parts, labels):
             part.label = label
-        #print len(old_labels), 'data points'
-        #from util.metrics import diff_binary_vectors
-        #print diff_binary_vectors(labels, old_labels)
+        print len(old_labels), 'data points'
+        from util.metrics import diff_binary_vectors
+        print diff_binary_vectors(labels, old_labels)
         '''
         for part, label, old_label in zip(parts[:1000], labels[:1000], old_labels[:1000]):
             if label != old_label:
@@ -117,7 +124,7 @@ class ClassifierModel(FeaturizedModel):
                 elif old_label and not label:
                     print 'False negative: %s (%s)' % (
                         heads, part.instance.original_text)
-        '''
+        #'''
 
 
     def _featurize(self, parts):

@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
-from util import Enum
+from util import Enum, merge_dicts
 from util.streams import *
 
 class Annotation(object):
@@ -68,9 +68,13 @@ class DependencyPathError(ValueError):
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
-    NOUN_TAGS = ["NN", "NNS", "NNP", "NNPS", "PRP", "WP"]
+    NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP"]
     # TODO:should MD be included below?
     VERB_TAGS = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD"]
+    ADVERB_TAGS = ["RB", "RBR", "RBS", "WRB"]
+    ADJECTIVE_TAGS = ["JJ", "JJR", "JJS"]
+    DET_TAGS = ["DT", "EX", "PDT"]
+    POS_GENERAL = {} # created for real below
 
     @staticmethod
     def unescape_token_text(token_text):
@@ -140,12 +144,13 @@ class ParsedSentence(object):
                 words_between += 1
         return words_between
 
-    def is_clause(self, token):
+    def is_clause_head(self, token):
         if token.pos == 'ROOT':
             return False
         try:
             self.VERB_TAGS.index(token.pos)
-            return True
+            if token.pos != 'MD': # Modals, though verbs, aren't heads of clauses
+                return True
         except ValueError: # this POS wasn't in the list
             # Grab the sparse column of the edge matrix with the edges of this
             # token, and check the labels on each non-zero edge.
@@ -340,6 +345,13 @@ class ParsedSentence(object):
         _, self.__path_predecessors = csgraph.shortest_path(
             self.edge_graph, unweighted=True, return_predecessors=True,
             directed=False)
+
+ParsedSentence.POS_GENERAL = merge_dicts(
+    [{tag: 'NOUN' for tag in ParsedSentence.NOUN_TAGS},
+     {tag: 'VERB' for tag in ParsedSentence.VERB_TAGS},
+     {tag: 'ADV' for tag in ParsedSentence.ADVERB_TAGS},
+     {tag: 'ADJ' for tag in ParsedSentence.ADJECTIVE_TAGS}])
+
 
 class CausationInstance(object):
     Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit',

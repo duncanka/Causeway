@@ -18,3 +18,9 @@ def listify(arg):
     if isinstance(arg, list) or isinstance(arg, tuple):
         return arg
     return [arg]
+
+def merge_dicts(dictionaries):
+    d = dictionaries[0]
+    for next_dict in dictionaries[1:]:
+        d.update(next_dict)
+    return d

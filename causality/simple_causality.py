@@ -43,9 +43,9 @@ class PhrasePairCausalityModel(ClassifierModel):
         deps = part.instance.extract_dependency_path(source, target)
         return str(deps)
 
-    # We can't initialize this yet because we don't have access to the class'
-    # static methods to define the mapping.
-    FEATURE_EXTRACTOR_MAP = None
+    # We can't initialize this properly yet because we don't have access to the
+    # class' static methods to define the mapping.
+    FEATURE_EXTRACTOR_MAP = {}
 
     @staticmethod
     def cause_starts_first(cause, effect):
@@ -55,20 +55,24 @@ class PhrasePairCausalityModel(ClassifierModel):
             effect.start_offset > cause.start_offset)
 
     def __init__(self, classifier):
-        if not PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP:
-            PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
-                'pos1': (True, lambda part: part.head_token_1.pos),
-                'pos2': (True, lambda part: part.head_token_2.pos),
-                'wordsbtw': (False, PhrasePairCausalityModel.words_btw_heads),
-                'deppath': (True, PhrasePairCausalityModel.extract_dep_path),
-                'deplen': (False,
-                           lambda part: len(part.instance.extract_dependency_path(
-                               part.head_token_1, part.head_token_2)))
-            }
-
         super(PhrasePairCausalityModel, self).__init__(
             PhrasePairPart, PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP,
             FLAGS.sc_features, classifier)
+
+PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
+    'pos1': (True, lambda part: part.head_token_1.pos),
+    'pos2': (True, lambda part: part.head_token_2.pos),
+    # Generalized POS tags don't seem to be that useful.
+    'pos1gen': (True, lambda part: ParsedSentence.POS_GENERAL.get(
+        part.head_token_1.pos, part.head_token_1.pos)),
+    'pos2gen': (True, lambda part: ParsedSentence.POS_GENERAL.get(
+        part.head_token_2.pos, part.head_token_2.pos)),
+    'wordsbtw': (False, PhrasePairCausalityModel.words_btw_heads),
+    'deppath': (True, PhrasePairCausalityModel.extract_dep_path),
+    'deplen': (False,
+               lambda part: len(part.instance.extract_dependency_path(
+                   part.head_token_1, part.head_token_2)))
+}
 
 
 class SimpleCausalityStage(ClassifierStage):
@@ -86,7 +90,7 @@ class SimpleCausalityStage(ClassifierStage):
                          # Only consider tokens that are in the parse tree.
                          if (sentence.get_depth(token) < len(sentence.tokens)
                              # Only consider clause or noun phrase heads.
-                             and (sentence.is_clause(token)
+                             and (sentence.is_clause_head(token)
                                   or token.pos in ParsedSentence.NOUN_TAGS))]
         return [PhrasePairPart(sentence, t1, t2, ((t1, t2) in head_token_pairs))
                 for t1, t2 in itertools.combinations(clause_tokens, 2)]
