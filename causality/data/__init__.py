@@ -2,12 +2,12 @@
 Define basic causality datatypes
 '''
 
+import logging
 import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 from util import Enum
 from util.streams import *
-import warnings
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
@@ -121,8 +121,8 @@ class ParsedSentence(object):
                         break
 
         if head is None:
-            warnings.warn('Returning null head for annotation "%s"'
-                          % annotation.text);
+            logging.warn('Returning null head for annotation "%s"'
+                         % annotation.text);
         return head
 
     def add_causation_instance(self, instance):

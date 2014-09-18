@@ -1,6 +1,6 @@
+import logging
 import os
 import re
-import warnings
 
 from util import streams, recursively_list_files
 from data import ParsedSentence, Annotation, CausationInstance
@@ -172,7 +172,7 @@ class StandoffReader(Reader):
         self.instances = self.sentence_reader.get_all()
         lines = self._file_stream.readlines()
         if not lines:
-            warnings.warn("No annotations found")
+            logging.warn("No annotations found")
             self.close()
             return
 
@@ -218,10 +218,10 @@ class StandoffReader(Reader):
                 elif line_id[0] == '#': # skip annotator notes lines silently
                     continue
                 else:
-                    warnings.warn("Ignoring annotation line: %s" % line)
+                    logging.warn("Ignoring annotation line: %s" % line.strip())
 
             except UserWarning as e:
-                warnings.warn('%s (Line: %s)' % (e.message, line))
+                logging.warn('%s (Line: %s)' % (e.message, line))
                 return
 
         # There is no possibility of cyclical relationships in our annotation
@@ -237,7 +237,7 @@ class StandoffReader(Reader):
                 if (not ids_to_annotations.has_key(id_needed) and
                     not ids_to_instances.has_key(id_needed) and
                     id_needed not in ids_to_reprocess):
-                    warnings.warn(
+                    logging.warn(
                         "ID %s is referenced, but is not defined anywhere. "
                         "Ignoring all lines that depend on it." % id_needed)
                     recurse = False
@@ -251,8 +251,8 @@ class StandoffReader(Reader):
         try:
             line_id, type_and_indices_str, text_str = line_parts
         except ValueError:
-            warnings.warn(("Skipping annotation span line that doesn't have 3 "
-                           "tab-separated entries. (Line: %s)") % line)
+            logging.warn(("Skipping annotation span line that doesn't have 3 "
+                          "tab-separated entries. (Line: %s)") % line)
             return
 
         self.__raise_warning_if(

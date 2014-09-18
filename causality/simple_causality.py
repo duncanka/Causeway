@@ -1,6 +1,6 @@
 from gflags import DEFINE_list, DEFINE_integer, FLAGS, DuplicateFlagError
 import itertools
-import warnings
+import logging
 
 from data import *
 from pipeline import ClassifierStage
@@ -14,7 +14,7 @@ try:
                    "Maximum number of words between phrases before just making"
                    " the value the max");
 except DuplicateFlagError as e:
-    warnings.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 class PhrasePairPart(ClassifierPart):
     def __init__(self, sentence, head_token_1, head_token_2, label):

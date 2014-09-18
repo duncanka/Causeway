@@ -2,6 +2,7 @@
 
 import gflags
 from sklearn import tree, neighbors, linear_model, svm
+import logging
 import sys
 FLAGS = gflags.FLAGS
 
@@ -19,17 +20,22 @@ try:
     gflags.DEFINE_bool(
         'rebalance', True, 'Whether to rebalance classes for training')
 except gflags.DuplicateFlagError as e:
-    warnings.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
 #def main(argv):
 if __name__ == '__main__':
     argv = sys.argv
     try:
-      FLAGS(argv)  # parse flags
+        FLAGS(argv)  # parse flags
     except gflags.FlagsError, e:
-      print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
-      sys.exit(1)
+        print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
+        sys.exit(1)
+
+    logging.basicConfig(
+        format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
+        level=logging.WARN)
+    logging.captureWarnings(True)
 
     if FLAGS.classifier_model == 'tree':
         classifier = tree.DecisionTreeClassifier()

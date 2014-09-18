@@ -1,7 +1,7 @@
 """ Define basic pipeline functionality. """
 
 from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
-import warnings
+import logging
 
 from util import listify
 from util.metrics import ClassificationMetrics
@@ -22,7 +22,7 @@ try:
     #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts (TP, agreement,"
     #               " etc.) for evaluation or IAA metrics.")
 except DuplicateFlagError as e:
-    warnings.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
 class Pipeline(object):
@@ -79,8 +79,8 @@ class Pipeline(object):
     def __test_instances_from_reader(self, batch_size):
         print 'Testing', batch_size, 'instances at a time'
         if (not self.writer):
-            warnings.warn("No writer provided; pipeline results not written"
-                          " anywhere")
+            logging.warn("No writer provided; pipeline results not written"
+                         " anywhere")
 
         for path, output_path in zip(FLAGS.test_paths,
                                      FLAGS.test_output_paths):

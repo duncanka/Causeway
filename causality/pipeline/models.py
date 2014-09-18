@@ -1,7 +1,7 @@
 """ Define standard machine-learned model framework for pipelines. """
 
+import logging
 import numpy as np
-import warnings
 
 class Model(object):
     def __init__(self, part_type):
@@ -107,6 +107,18 @@ class ClassifierModel(FeaturizedModel):
         #print len(old_labels), 'data points'
         #from util.metrics import diff_binary_vectors
         #print diff_binary_vectors(labels, old_labels)
+        '''
+        for part, label, old_label in zip(parts[:1000], labels[:1000], old_labels[:1000]):
+            if label != old_label:
+                heads = (part.head_token_1, part.head_token_2)
+                if label and not old_label:
+                    print 'False positive: %s (%s)' % (
+                        heads, part.instance.original_text)
+                elif old_label and not label:
+                    print 'False negative: %s (%s)' % (
+                        heads, part.instance.original_text)
+        '''
+
 
     def _featurize(self, parts):
         relevant_parts = [part for part in parts if isinstance(part,
@@ -128,7 +140,7 @@ class ClassifierModel(FeaturizedModel):
                     row_ref[self.feature_name_dictionary[feature_name]
                             ] = feature_value
                 except KeyError:
-                    warnings.warn('Ignoring unknown feature: %s' % feature_name)
+                    logging.warn('Ignoring unknown feature: %s' % feature_name)
 
         return features, labels
 
