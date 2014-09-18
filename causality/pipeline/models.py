@@ -98,10 +98,15 @@ class ClassifierModel(FeaturizedModel):
         self.classifier.fit(features, labels)
 
     def _featurized_test(self, parts):
-        features, _ = self._featurize(parts)
+        features, old_labels = self._featurize(parts)
+        #features, old_labels = ClassBalancingModelWrapper.rebalance(features,
+        #                                                            old_labels)
         labels = self.classifier.predict(features)
         for part, label in zip(parts, labels):
             part.label = label
+        #print len(old_labels), 'data points'
+        #from util.metrics import diff_binary_vectors
+        #print diff_binary_vectors(labels, old_labels)
 
     def _featurize(self, parts):
         relevant_parts = [part for part in parts if isinstance(part,

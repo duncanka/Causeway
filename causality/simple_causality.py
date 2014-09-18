@@ -47,6 +47,13 @@ class PhrasePairCausalityModel(ClassifierModel):
     # static methods to define the mapping.
     FEATURE_EXTRACTOR_MAP = None
 
+    @staticmethod
+    def cause_starts_first(cause, effect):
+        # None, if present as an argument, should be second.
+        return effect is None or (
+            cause is not None and
+            effect.start_offset > cause.start_offset)
+
     def __init__(self, classifier):
         if not PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP:
             PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
@@ -71,9 +78,10 @@ class SimpleCausalityStage(ClassifierStage):
         self._expected_causations = []
 
     def _extract_parts(self, sentence):
-        # TODO: make sure order of head tokens in part is normalized
-        head_token_pairs = set(causation.get_cause_and_effect_heads()
-                               for causation in sentence.causation_instances)
+        head_token_pairs = set(
+            causation.get_cause_and_effect_heads(
+                PhrasePairCausalityModel.cause_starts_first)
+            for causation in sentence.causation_instances)
         clause_tokens = [token for token in sentence.tokens
                          # Only consider tokens that are in the parse tree.
                          if (sentence.get_depth(token) < len(sentence.tokens)
@@ -136,10 +144,7 @@ class SimpleCausalityStage(ClassifierStage):
             instances = [expected_instance, predicted_instance]
             # Iterate over both expected and predicted to reorder both.
             for head_pair, instance in zip(head_pairs, instances):
-                # None, if present as an argument, should be first.
-                if (head_pair[0] is not None and (
-                        head_pair[1] is None or
-                        head_pair[1].start_offset < head_pair[0].start_offset)):
+                if not PhrasePairCausalityModel.cause_starts_first(*head_pair):
                     head_pair[0], head_pair[1] = head_pair[1], head_pair[0]
 
             return expected_heads == predicted_heads

@@ -363,7 +363,7 @@ class CausationInstance(object):
         self.effect = effect
         self.id = annotation_id
 
-    def get_cause_and_effect_heads(self):
+    def get_cause_and_effect_heads(self, cause_before_relation=None):
         if self.cause:
             cause = self.source_sentence.get_head(self.cause)
         else:
@@ -373,5 +373,8 @@ class CausationInstance(object):
             effect = self.source_sentence.get_head(self.effect)
         else:
             effect = None
+
+        if cause_before_relation and cause_before_relation(effect, cause):
+            cause, effect = effect, cause
 
         return (cause, effect)
