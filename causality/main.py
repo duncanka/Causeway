@@ -17,8 +17,9 @@ try:
                        ['tree', 'knn', 'logistic', 'svm'],
                        'Which type of machine learning model to use as the'
                        ' underlying classifier')
-    gflags.DEFINE_bool(
-        'rebalance', True, 'Whether to rebalance classes for training')
+    gflags.DEFINE_float(
+        'rebalance_ratio', 1.0,
+        'The maximum ratio by which to rebalance classes for training')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -46,8 +47,7 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'svm':
         classifier = svm.SVC()
 
-    if FLAGS.rebalance:
-        classifier = ClassBalancingModelWrapper(classifier)
+    classifier = ClassBalancingModelWrapper(classifier, FLAGS.rebalance_ratio)
 
     causality_pipeline = Pipeline(
         SimpleCausalityStage(classifier),

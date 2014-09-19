@@ -158,23 +158,34 @@ class ClassifierPart(object):
 
 # TODO: make this class handle multiple ratios
 class ClassBalancingModelWrapper(object):
-    def __init__(self, classifier):
+    def __init__(self, classifier, ratio=float('inf')):
         self.classifier = classifier
+        self.ratio = ratio
 
     @staticmethod
-    def rebalance(data, labels):
+    def rebalance(data, labels, ratio=float('inf')):
+        """
+        ratio indicates the maximum ratio by which any class is allowed to
+        increase.
+        """
+        if ratio <= 1.0: # No increase
+            return data, labels
+
         # Based on http://stackoverflow.com/a/23392678/4044809
         label_set, label_indices, label_counts = np.unique(
             labels, return_inverse=True, return_counts=True)
         max_count = label_counts.max()
-        rows_to_add = max_count * len(label_set) - len(data)
+        counts_to_add = [min(max_count - current_count, ratio * current_count)
+                         for current_count in label_counts]
+        counts_to_add = [int(round(count)) for count in counts_to_add]
+        rows_to_add = np.sum(counts_to_add)
         rebalanced_data = np.empty((rows_to_add, data.shape[1]), data.dtype)
         rebalanced_labels = np.empty((rows_to_add,), labels.dtype)
 
-        slices = np.concatenate(([0], np.cumsum(max_count - label_counts)))
+        slices = np.concatenate(([0], np.cumsum(counts_to_add)))
         for j in xrange(len(label_set)):
             indices = np.random.choice(np.where(label_indices==j)[0],
-                                       max_count - label_counts[j])
+                                       counts_to_add[j])
             if label_indices.shape[0]: # only bother if there are > 0 indices
                 rebalanced_data[slices[j]:slices[j+1]] = data[indices]
                 rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
@@ -183,7 +194,8 @@ class ClassBalancingModelWrapper(object):
         return (rebalanced_data, rebalanced_labels)
 
     def fit(self, data, labels):
-        rebalanced_data, rebalanced_labels = self.rebalance(data, labels)
+        rebalanced_data, rebalanced_labels = self.rebalance(
+            data, labels, self.ratio)
         return self.classifier.fit(rebalanced_data, rebalanced_labels)
 
     def predict(self, data):
