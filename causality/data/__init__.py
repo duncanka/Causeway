@@ -108,25 +108,18 @@ class ParsedSentence(object):
     def get_depth(self, token):
         return self.__depths[token.index]
 
-    def get_head(self, annotation):
+    def get_head(self, tokens):
         min_depth = float('inf')
         head = None
-        for token in self.tokens[1:]: # skip ROOT
+        for token in tokens:
             depth = self.get_depth(token)
             if depth < min_depth:
-                for offset_pair in annotation.offsets:
-                    if (token.start_offset >= offset_pair[0] and
-                        token.end_offset <= offset_pair[1]):
-                        # We've found a token that's higher than our existing
-                        # best candidate, and which is contained by one of the
-                        # annotation ranges.
-                        head = token
-                        min_depth = depth
-                        break
+                head = token
+                min_depth = depth
 
         if head is None:
-            logging.warn('Returning null head for annotation "%s"'
-                         % annotation.text);
+            logging.warn('Returning null head for tokens %s'
+                         % tokens);
         return head
 
     def add_causation_instance(self, instance):
@@ -183,6 +176,51 @@ class ParsedSentence(object):
                 edges.append((target, predecessor, label))
             target = predecessor
         return DependencyPath(reversed(edges))
+
+    def find_tokens_for_annotation(self, annotation):
+        tokens = []
+        tokens_iter = iter(self.tokens)
+        tokens_iter.next()  # skip ROOT
+        next_token = tokens_iter.next()
+        try:
+            for start, end in annotation.offsets:
+                prev_token = None
+                while next_token.start_offset < start:
+                    prev_token = next_token
+                    next_token = tokens_iter.next()
+                if next_token.start_offset != start:
+                    warning = ("Annotation index %d does not correspond to a"
+                               " token start" % start)
+                    if prev_token and prev_token.end_offset >= start:
+                        tokens.append(prev_token)
+                        warning += '; the token it bisects has been appended'
+                    logging.warn(warning)
+                # We might have grabbed a whole additional token just because
+                # of an annotation that included a final space, so make sure
+                # next_token really is in the annotation span before adding it.
+                if next_token.start_offset < end:
+                    tokens.append(next_token)
+
+                while next_token.end_offset < end:
+                    prev_token = next_token
+                    next_token = tokens_iter.next()
+                    if next_token.start_offset < end:
+                        tokens.append(next_token)
+                if next_token.end_offset != end:
+                    warning = ("Annotation index %d does not correspond to a"
+                               " token end" % end)
+                    # If we appended the next token, that means the index
+                    # brought us into the middle of the next word.
+                    if tokens[-1] is next_token:
+                        warning += '; the token it bisects has been appended'
+                    logging.warn(warning)
+
+            # TODO: Should we check to make sure the annotation text is right?
+            return tokens
+
+        except StopIteration:
+            raise ValueError("Annotation %s couldn't be matched against tokens!"
+                             % annotation.offsets)
 
     ''' Private support functions '''
 

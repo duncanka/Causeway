@@ -13,6 +13,19 @@ class Model(object):
     def test(self, destination_path):
         raise NotImplementedError
 
+class TrainableFeatureExtractor(object):
+    def __init__(self, feature_training_data_extractor,
+                 feature_extractor_creator):
+        self.feature_training_data_extractor = feature_training_data_extractor
+        self.feature_extractor_creator = feature_extractor_creator
+        self.subfeature_extractor_map = None
+
+    def train(self, parts):
+        extracted_data = self.feature_training_data_extractor(parts)
+        print 'Extracted', extracted_data
+        self.subfeature_extractor_map = self.feature_extractor_creator(
+            extracted_data)
+        return extracted_data
 
 class FeaturizedModel(Model):
     class NameDictionary(object):
@@ -53,19 +66,33 @@ class FeaturizedModel(Model):
         self.selected_features = selected_features
         self.feature_name_dictionary = FeaturizedModel.NameDictionary()
         self.feature_extractor_map = feature_extractor_map
+        self.feature_training_data = {}
 
     def train(self, parts):
         # Build feature name dictionary. (Unfortunately, this means we featurize
         # everything twice, but I can't think of a cleverer way.)
         feature_values = {}
-        for feature_name in self.selected_features:
-            is_boolean, extractor_fn = (
-                self.feature_extractor_map[feature_name])
-            if not is_boolean:
-                self.feature_name_dictionary.insert(feature_name)
-            else:
-                value_set = set([extractor_fn(part) for part in parts])
+
+        def insert_names(feature_name, is_categorical, feature_extractor):
+            if is_categorical:
+                value_set = set([feature_extractor(part) for part in parts])
                 feature_values[feature_name] = value_set
+            else:
+                self.feature_name_dictionary.insert(feature_name)
+
+        for feature_name in self.selected_features:
+            is_categorical, extractor = (
+                self.feature_extractor_map[feature_name])
+
+            if isinstance(extractor, TrainableFeatureExtractor):
+                self.feature_training_data[feature_name] = (
+                    extractor.train(parts))
+                for subfeature_name, subfeature_extractor in (
+                    extractor.subfeature_extractor_map.iteritems()):
+                    insert_names(subfeature_name, is_categorical,
+                                 subfeature_extractor)
+            else:
+                insert_names(feature_name, is_categorical, extractor)
 
         # All the ones we logged feature values for were the boolean ones.
         # Now we register all the corresponding feature names.
@@ -136,18 +163,27 @@ class ClassifierModel(FeaturizedModel):
 
         for part, row_ref in zip(relevant_parts, features):
             for feature_name in self.selected_features:
-                is_boolean, extractor_fn = (
+                is_boolean, extractor = (
                     self.feature_extractor_map[feature_name])
-                feature_value = extractor_fn(part)
-                if is_boolean:
-                    feature_name = self.get_boolean_feature_name(feature_name,
-                                                                 feature_value)
-                    feature_value = 1.0
-                try:
-                    row_ref[self.feature_name_dictionary[feature_name]
-                            ] = feature_value
-                except KeyError:
-                    logging.warn('Ignoring unknown feature: %s' % feature_name)
+
+                def insert_value(feature_name, feature_extractor):
+                    feature_value = feature_extractor(part)
+                    if is_boolean:
+                        feature_name = self.get_boolean_feature_name(feature_name,
+                                                                     feature_value)
+                        feature_value = 1.0
+                    try:
+                        row_ref[self.feature_name_dictionary[feature_name]
+                                ] = feature_value
+                    except KeyError:
+                        logging.warn('Ignoring unknown feature: %s' % feature_name)
+
+                if isinstance(extractor, TrainableFeatureExtractor):
+                    for subfeature_name, subfeature_extractor in (
+                        extractor.subfeature_extractor_map.iteritems()):
+                        insert_value(subfeature_name, subfeature_extractor)
+                else:
+                    insert_value(feature_name, extractor)
 
         return features, labels
 

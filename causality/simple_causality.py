@@ -9,7 +9,7 @@ from util import Enum
 
 try:
     DEFINE_list('sc_features',
-                ['pos1', 'pos2', 'wordsbtw', 'deplen'],
+                ['pos1', 'pos2', 'wordsbtw', 'deplen', 'connectives'],
                 'Features to use for simple causality model')
     DEFINE_integer('sc_max_words_btw_phrases', 10,
                    "Maximum number of words between phrases before just making"
@@ -48,7 +48,7 @@ class PhrasePairCausalityModel(ClassifierModel):
 
     @staticmethod
     def get_connective_position(connective, head1, head2):
-        connective_start = connective.offsets[0][0]
+        connective_start = connective.start_offset
         head1_start = head1.start_offset
         head2_start = head2.start_offset
 
@@ -64,10 +64,11 @@ class PhrasePairCausalityModel(ClassifierModel):
         connectives_seen = set()
         for part in parts:
             for causation in part.instance.causation_instances:
-                # Keep it simple for now: only single-word connectives.
                 connective = causation.connective
-                if len(connective.offsets) == 1:
-                    connective_text = connective.text
+                # Keep it simple for now: only single-word connectives.
+                if len(connective) == 1:
+                    connective = connective[0]
+                    connective_text = connective.original_text.lower()
                     connective_position = (
                         PhrasePairCausalityModel.get_connective_position(
                             connective, part.head_token_1, part.head_token_2))
@@ -82,7 +83,7 @@ class PhrasePairCausalityModel(ClassifierModel):
         for connective_text, connective_position in connective_patterns:
             def extractor(part):
                 for token in part.instance.tokens:
-                    if (token.text == connective_text and
+                    if (token.original_text.lower() == connective_text and
                         (PhrasePairCausalityModel.get_connective_position(
                             token, part.head_token_1, part.head_token_2)
                          == connective_position)):
@@ -99,13 +100,6 @@ class PhrasePairCausalityModel(ClassifierModel):
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the mapping.
     FEATURE_EXTRACTOR_MAP = {}
-
-    @staticmethod
-    def cause_starts_first(cause, effect):
-        # None, if present as an argument, should be second.
-        return effect is None or (
-            cause is not None and
-            effect.start_offset > cause.start_offset)
 
     def __init__(self, classifier):
         super(PhrasePairCausalityModel, self).__init__(
@@ -126,11 +120,21 @@ PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
     'deppath': (True, PhrasePairCausalityModel.extract_dep_path),
     'deplen': (False,
                lambda part: len(part.instance.extract_dependency_path(
-                   part.head_token_1, part.head_token_2)))
+                   part.head_token_1, part.head_token_2))),
+    'connectives': (False, TrainableFeatureExtractor(
+            PhrasePairCausalityModel.extract_connective_patterns,
+            PhrasePairCausalityModel.make_connective_feature_extractors))
 }
 
 
 class SimpleCausalityStage(ClassifierStage):
+    @staticmethod
+    def cause_starts_first(cause, effect):
+        # None, if present as an argument, should be second.
+        return effect is None or (
+            cause is not None and
+            effect.start_offset > cause.start_offset)
+
     def __init__(self, classifier):
         super(SimpleCausalityStage, self).__init__(
             'Simple causality', [PhrasePairCausalityModel(classifier)])
@@ -139,7 +143,7 @@ class SimpleCausalityStage(ClassifierStage):
     def _extract_parts(self, sentence):
         head_token_pairs = set(
             causation.get_cause_and_effect_heads(
-                PhrasePairCausalityModel.cause_starts_first)
+                SimpleCausalityStage.cause_starts_first)
             for causation in sentence.causation_instances)
         clause_tokens = [token for token in sentence.tokens
                          # Only consider tokens that are in the parse tree.
@@ -168,8 +172,8 @@ class SimpleCausalityStage(ClassifierStage):
             if effect.starts_before(cause): # swap if they're ordered wrong
                 effect, cause = cause, effect
 
-            causation.cause = cause
-            causation.effect = effect
+            causation.cause = sentence.find_tokens_for_annotation(cause)
+            causation.effect = sentence.find_tokens_for_annotation(effect)
             sentence.causation_instances.append(causation)
 
     def _begin_evaluation(self):
@@ -203,7 +207,7 @@ class SimpleCausalityStage(ClassifierStage):
             instances = [expected_instance, predicted_instance]
             # Iterate over both expected and predicted to reorder both.
             for head_pair, instance in zip(head_pairs, instances):
-                if not PhrasePairCausalityModel.cause_starts_first(*head_pair):
+                if not SimpleCausalityStage.cause_starts_first(*head_pair):
                     head_pair[0], head_pair[1] = head_pair[1], head_pair[0]
 
             return expected_heads == predicted_heads
@@ -225,7 +229,8 @@ class SimpleCausalityStage(ClassifierStage):
                 else:
                     #print 'No match found for %s (cause: %s, effect: %s)' % (
                     #    causation_instance.source_sentence.original_text,
-                    #    causation_instance.cause.text, causation_instance.effect.text)
+                    #    causation_instance.cause.original_text,
+                    #    causation_instance.effect.original_text)
                     self.fp += 1
 
             self.fn += len(expected_causation_set)

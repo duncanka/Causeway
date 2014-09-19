@@ -218,7 +218,7 @@ class StandoffReader(Reader):
                 elif line_id[0] == '#': # skip annotator notes lines silently
                     continue
                 else:
-                    logging.warn("Ignoring annotation line: %s" % line.strip())
+                    logging.info("Ignoring annotation line: %s" % line.strip())
 
             except UserWarning as e:
                 logging.warn('%s (Line: %s)' % (e.message, line))
@@ -286,9 +286,9 @@ class StandoffReader(Reader):
                 "Skipping text annotation with invalid causation type")
             instance = CausationInstance(containing_sentence)
             ids_to_instances[line_id] = instance
-            instance.connective = annotation
+            instance.connective = (
+                containing_sentence.find_tokens_for_annotation(annotation))
             containing_sentence.add_causation_instance(instance)
-
 
     def __process_attribute(self, line, line_parts, ids_to_annotations,
                             ids_to_instances, lines_to_reprocess,
@@ -358,15 +358,18 @@ class StandoffReader(Reader):
             ids_to_reprocess.add(line_id)
             ids_needed_to_reprocess.add(id_needed)
         else:
+            sentence = instance.source_sentence
             # There can be a numerical suffix on the end of the name of the
             # edge. Since we're generally assuming well-formed data, we don't
             # check that there's only one of each.
             for arg_type, arg_id in split_args[1:]:
                 annotation = ids_to_annotations[arg_id]
+                annotation_tokens = sentence.find_tokens_for_annotation(
+                    annotation)
                 if arg_type.startswith('Cause'):
-                    instance.cause = annotation
+                    instance.cause = annotation_tokens
                 elif arg_type.startswith('Effect'):
-                    instance.effect = annotation
+                    instance.effect = annotation_tokens
                 else:
                     raise UserWarning('Skipping event with invalid arg types')
 
