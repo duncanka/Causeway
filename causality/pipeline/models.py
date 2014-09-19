@@ -22,7 +22,6 @@ class TrainableFeatureExtractor(object):
 
     def train(self, parts):
         extracted_data = self.feature_training_data_extractor(parts)
-        print 'Extracted', extracted_data
         self.subfeature_extractor_map = self.feature_extractor_creator(
             extracted_data)
         return extracted_data

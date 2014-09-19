@@ -29,7 +29,7 @@ class Token(object):
                  copy_of=None):
         self.index = index
         self.parent_sentence = parent_sentence
-        self.original_text = original_text
+        self.original_text = original_text.lower()
         self.pos = pos
         self.lemma = lemma
         self.start_offset = start_offset

@@ -62,13 +62,18 @@ class PhrasePairCausalityModel(ClassifierModel):
     @staticmethod
     def extract_connective_patterns(parts):
         connectives_seen = set()
+        instances_seen = set()
         for part in parts:
+            if part.instance in instances_seen:
+                continue
+            instances_seen.add(part.instance)
+
             for causation in part.instance.causation_instances:
                 connective = causation.connective
                 # Keep it simple for now: only single-word connectives.
                 if len(connective) == 1:
                     connective = connective[0]
-                    connective_text = connective.original_text.lower()
+                    connective_text = connective.original_text
                     connective_position = (
                         PhrasePairCausalityModel.get_connective_position(
                             connective, part.head_token_1, part.head_token_2))
@@ -83,9 +88,9 @@ class PhrasePairCausalityModel(ClassifierModel):
         for connective_text, connective_position in connective_patterns:
             def extractor(part):
                 for token in part.instance.tokens:
-                    if (token.original_text.lower() == connective_text and
+                    if (token.original_text == connective_text and
                         (PhrasePairCausalityModel.get_connective_position(
-                            token, part.head_token_1, part.head_token_2)
+                                token, part.head_token_1, part.head_token_2)
                          == connective_position)):
                         return True
                 return False
@@ -184,42 +189,41 @@ class SimpleCausalityStage(ClassifierStage):
         self._expected_causations = [set(sentence.causation_instances)
                                     for sentence in sentences]
 
+    @staticmethod
+    def causations_equivalent(expected_instance, predicted_instance):
+        """
+        What it means for an expected instance to match a predicted instance
+        is that the heads of the arguments match.
+        """
+        # Convert to lists to allow switching later.
+        expected_heads = list(
+            expected_instance.get_cause_and_effect_heads())
+        predicted_heads = list(
+            predicted_instance.get_cause_and_effect_heads())
+
+        # Above, we arbitrarily established predicted cause is simply the
+        # earliest argument, so we check whether the heads match in order of
+        # appearance in the sentence, not whether cause and effect labels
+        # match. (We make sure both lists of heads have the same convention
+        # enforced on them, the same order on both, so it doesn't matter
+        # which convention we use for which is the cause and which is the
+        # effect.)
+        head_pairs = [expected_heads, predicted_heads]
+        instances = [expected_instance, predicted_instance]
+        # Iterate over both expected and predicted to reorder both.
+        for head_pair, instance in zip(head_pairs, instances):
+            if not SimpleCausalityStage.cause_starts_first(*head_pair):
+                head_pair[0], head_pair[1] = head_pair[1], head_pair[0]
+
+        return expected_heads == predicted_heads
+
     def _evaluate(self, sentences):
-        def causations_equivalent(expected_instance, predicted_instance):
-            """
-            What it means for an expected instance to match a predicted instance
-            is that the heads of the arguments match.
-            """
-            # Convert to lists to allow switching later.
-            expected_heads = list(
-                expected_instance.get_cause_and_effect_heads())
-            predicted_heads = list(
-                predicted_instance.get_cause_and_effect_heads())
-
-            # Above, we arbitrarily established predicted cause is simply the
-            # earliest argument, so we check whether the heads match in order of
-            # appearance in the sentence, not whether cause and effect labels
-            # match. (We make sure both lists of heads have the same convention
-            # enforced on them, the same order on both, so it doesn't matter
-            # which convention we use for which is the cause and which is the
-            # effect.)
-            head_pairs = [expected_heads, predicted_heads]
-            instances = [expected_instance, predicted_instance]
-            # Iterate over both expected and predicted to reorder both.
-            for head_pair, instance in zip(head_pairs, instances):
-                if not SimpleCausalityStage.cause_starts_first(*head_pair):
-                    head_pair[0], head_pair[1] = head_pair[1], head_pair[0]
-
-            return expected_heads == predicted_heads
-            # End of causations_equivalent
-
-        # Start of _evaluate
         for sentence, expected_causation_set in zip(sentences,
                                                     self._expected_causations):
             for causation_instance in sentence.causation_instances:
                 matching_expected_causation = None
                 for expected_causation in expected_causation_set:
-                    if causations_equivalent(expected_causation,
+                    if self.causations_equivalent(expected_causation,
                                              causation_instance):
                         matching_expected_causation = expected_causation
                         self.tp += 1
