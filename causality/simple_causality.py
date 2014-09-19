@@ -5,6 +5,7 @@ import logging
 from data import *
 from pipeline import ClassifierStage
 from pipeline.models import *
+from util import Enum
 
 try:
     DEFINE_list('sc_features',
@@ -43,6 +44,58 @@ class PhrasePairCausalityModel(ClassifierModel):
         deps = part.instance.extract_dependency_path(source, target)
         return str(deps)
 
+    ConnectivePositions = Enum(['Before', 'Between', 'After'])
+
+    @staticmethod
+    def get_connective_position(connective, head1, head2):
+        connective_start = connective.offsets[0][0]
+        head1_start = head1.start_offset
+        head2_start = head2.start_offset
+
+        if connective_start < head1_start and connective_start < head2_start:
+            return PhrasePairCausalityModel.ConnectivePositions.Before
+        elif connective_start > head1_start and connective_start > head2_start:
+            return PhrasePairCausalityModel.ConnectivePositions.After
+        else: # one after and one before
+            return PhrasePairCausalityModel.ConnectivePositions.Between
+
+    @staticmethod
+    def extract_connective_patterns(parts):
+        connectives_seen = set()
+        for part in parts:
+            for causation in part.instance.causation_instances:
+                # Keep it simple for now: only single-word connectives.
+                connective = causation.connective
+                if len(connective.offsets) == 1:
+                    connective_text = connective.text
+                    connective_position = (
+                        PhrasePairCausalityModel.get_connective_position(
+                            connective, part.head_token_1, part.head_token_2))
+                    connectives_seen.add(
+                        (connective_text, connective_position))
+
+        return connectives_seen
+
+    @staticmethod
+    def make_connective_feature_extractors(connective_patterns):
+        connective_feature_map = {}
+        for connective_text, connective_position in connective_patterns:
+            def extractor(part):
+                for token in part.instance.tokens:
+                    if (token.text == connective_text and
+                        (PhrasePairCausalityModel.get_connective_position(
+                            token, part.head_token_1, part.head_token_2)
+                         == connective_position)):
+                        return True
+                return False
+            feature_name = '%s_%s' % (
+                connective_text,
+                PhrasePairCausalityModel.ConnectivePositions[
+                    connective_position])
+            connective_feature_map[feature_name] = extractor
+
+        return connective_feature_map
+
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the mapping.
     FEATURE_EXTRACTOR_MAP = {}
@@ -56,7 +109,9 @@ class PhrasePairCausalityModel(ClassifierModel):
 
     def __init__(self, classifier):
         super(PhrasePairCausalityModel, self).__init__(
-            PhrasePairPart, PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP,
+            PhrasePairPart,
+            # Avoid any potential harm that could come to our class variable.
+            PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP.copy(),
             FLAGS.sc_features, classifier)
 
 PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
