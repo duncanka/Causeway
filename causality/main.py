@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import gflags
-from sklearn import tree, neighbors, linear_model, svm
+from sklearn import tree, neighbors, linear_model, svm, ensemble
 import logging
 import sys
 FLAGS = gflags.FLAGS
@@ -14,7 +14,7 @@ from util import metrics
 
 try:
     gflags.DEFINE_enum('classifier_model', 'svm',
-                       ['tree', 'knn', 'logistic', 'svm'],
+                       ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'Which type of machine learning model to use as the'
                        ' underlying classifier')
     gflags.DEFINE_float(
@@ -46,6 +46,8 @@ if __name__ == '__main__':
         classifier = linear_model.LogisticRegression()
     elif FLAGS.classifier_model == 'svm':
         classifier = svm.SVC()
+    elif FLAGS.classifier_model == 'forest':
+        classifier = ensemble.RandomForestClassifier()
 
     classifier = ClassBalancingModelWrapper(classifier, FLAGS.rebalance_ratio)
 
