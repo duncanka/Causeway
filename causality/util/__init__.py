@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 
 def recursively_list_files(path):
@@ -27,3 +28,25 @@ def merge_dicts(dictionaries):
     for next_dict in dictionaries[1:]:
         d.update(next_dict)
     return d
+
+def truncated_string(string, truncate_to=25):
+    truncated = string[:truncate_to]
+    if len(truncated) < len(string):
+        truncated += '...'
+    return truncated
+
+def print_indented(indent_level, *args, **kwargs):
+    single_indent_str = kwargs.pop('single_indent_str', '    ')
+
+    if indent_level == 0:
+        print(*args, **kwargs)
+    else:
+        prefix = single_indent_str * indent_level
+        prefix_kwargs = dict(kwargs)
+        prefix_kwargs['end'] = ''
+
+        stringified = [str(arg) for arg in args]
+        result_str = kwargs.get('sep', ' ').join(stringified)
+        for line in result_str.split('\n'):
+            print(prefix, **prefix_kwargs)
+            print(line, **kwargs)

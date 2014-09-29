@@ -10,7 +10,7 @@ from data.readers import *
 from pipeline import *
 from pipeline.models import ClassBalancingModelWrapper
 from simple_causality import SimpleCausalityStage
-from util import metrics
+from util import metrics, print_indented
 
 try:
     gflags.DEFINE_enum('classifier_model', 'svm',
@@ -63,9 +63,7 @@ if __name__ == '__main__':
         stage_names = [p.name for p in causality_pipeline.stages]
         for stage_name, result in zip(stage_names, eval_results):
             print "Evaluation for stage %s:" % stage_name
-            metrics.printer_indent_level += 1
-            print result
-            metrics.printer_indent_level -= 1
+            print_indented(result, 1)
     elif FLAGS.test_paths:
         causality_pipeline.test()
 

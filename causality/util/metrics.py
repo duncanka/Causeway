@@ -1,9 +1,16 @@
 import copy
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import numpy as np
 from nltk.metrics import confusionmatrix
 
-printer_indent_level = 0
+try:
+    DEFINE_bool('metrics_log_raw_counts', False,
+                "Log raw counts (TP, FP, etc.) for evaluation or IAA metrics.");
+except DuplicateFlagError as e:
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+
+safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
 
 class ClassificationMetrics(object):
     def __init__(self, tp, fp, fn, tn=None):
@@ -13,8 +20,6 @@ class ClassificationMetrics(object):
         self.fp = fp
         self.tn = tn
         self.fn = fn
-
-        safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
 
         tp = float(tp)
         self.precision = tp / safe_divisor(tp + fp)
@@ -27,18 +32,24 @@ class ClassificationMetrics(object):
             self.tn = self.accuracy
 
     def __str__(self):
-        indent = '   ' * printer_indent_level
-        return ('%sTP: %g\n'
-                '%sTN: %g\n'
-                '%sFP: %g\n'
-                '%sFN: %g\n'
-                '%sRecall: %g\n'
-                '%sPrecision: %g\n'
-                '%sAccuracy: %g\n'
-                '%sF1: %g\n') % (
-                    indent, self.tp, indent, self.tn, indent, self.fp, indent,
-                    self.fn, indent, self.recall, indent, self.precision,
-                    indent, self.accuracy, indent, self.f1)
+        if FLAGS.metrics_log_raw_counts:
+            return ('TP: %g\n'
+                    'TN: %g\n'
+                    'FP: %g\n'
+                    'FN: %g\n'
+                    'Accuracy: %g\n'
+                    'Precision: %g\n'
+                    'Recall: %g\n'
+                    'F1: %g') % (
+                        self.tp, self.tn, self.fp, self.fn, self.accuracy,
+                        self.precision, self.recall, self.f1)
+        else:
+            return ('Accuracy: %g\n'
+                    'Precision: %g\n'
+                    'Recall: %g\n'
+                    'F1: %g') % (
+                        self.accuracy, self.precision, self.recall, self.f1)
+
 
 def diff_binary_vectors(predicted, gold):
     # Make sure np.where works properly
@@ -91,19 +102,36 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
 
         return new_matrix
 
+    def pp_metrics(self):
+        return '% Agreement: {:.2}\nKappa: {:.2}'.format(
+            self.pct_agreement(), self.kappa())
+
+    def pp(self, *args, **kwargs):
+        """
+        Accepts a 'metrics' keyword argument (or fifth positional argument)
+        indicating whether to print the agreement metrics, as well.
+        """
+        pp = super(ConfusionMatrix, self).pp(*args, **kwargs)
+        if (len(args) > 4 and args[4] == True) or kwargs.get('metrics', False):
+            pp += self.pp_metrics()
+        return pp
+
     def num_agreements(self):
         return self._correct
 
     def pct_agreement(self):
-        return self._correct / float(self._total)
+        return self._correct / safe_divisor(float(self._total))
 
     def kappa(self):
+        if not self._total:
+            return float('nan')
+
         row_totals = np.sum(self._confusion, axis=1)
         col_totals = np.sum(self._confusion, axis=0)
-        total_float = float(self._total)
+        total_float = safe_divisor(float(self._total))
         agree_by_chance = sum([(row_total * col_total) / total_float
                                for row_total, col_total
                                in zip(row_totals, col_totals)])
-        kappa = (self._correct - agree_by_chance) / (
+        kappa = (self._correct - agree_by_chance) / safe_divisor(
             self._total - agree_by_chance)
         return kappa
