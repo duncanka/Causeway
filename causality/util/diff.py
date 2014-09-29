@@ -8,6 +8,18 @@ class SequenceDiff(object):
         self.lcs = self._compute_lcs_matrix(a, b)
         self.pairs = self._compute_pairs(self.lcs, a, b, len(a), len(b))
 
+    def get_matching_pairs(self):
+        return [pair for pair in self.pairs
+                if pair[0] is not None and pair[1] is not None]
+
+    def get_a_only_elements(self):
+        return [pair[0] for pair in self.pairs
+                if pair[0] is not None and pair[1] is None]
+
+    def get_b_only_elements(self):
+        return [pair[1] for pair in self.pairs
+                if pair[0] is None and pair[1] is not None]
+
     def _compute_lcs_matrix(self, a, b):
         m = len(a)
         n = len(b)
