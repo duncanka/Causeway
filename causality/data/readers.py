@@ -140,7 +140,7 @@ class DirectoryReader(Reader):
         while True: # Eventually, we'll get a StopIteration if nothing matches.
             next_filename = self._filenames.next()
             for regex in self._regexes:
-                if regex.match(next_filename):
+                if regex.match(os.path.basename(next_filename)):
                     self._base_reader.close()
                     self._base_reader.open(next_filename)
                     return
