@@ -24,9 +24,8 @@ except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-def make_annotation_comparator(min_partial_overlap=None):
-    if min_partial_overlap is None:
-        min_partial_overlap = FLAGS.iaa_min_partial_overlap
+def make_annotation_comparator(allow_partial):
+    min_partial_overlap = [1.0, FLAGS.iaa_min_partial_overlap][allow_partial]
 
     def match_annotations(token_list_1, token_list_2):
         offsets_1 = [(token.start_offset, token.end_offset)
