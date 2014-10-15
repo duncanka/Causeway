@@ -79,6 +79,11 @@ def main(argv):
         print('Nothing to log; exiting')
         sys.exit(0)
 
+    logging.basicConfig(
+        format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
+        level=logging.WARN)
+    logging.captureWarnings(True)
+
     reader = DirectoryReader(FLAGS.iaa_file_regexes, StandoffReader())
     all_instances = []
     for path in FLAGS.iaa_paths:
