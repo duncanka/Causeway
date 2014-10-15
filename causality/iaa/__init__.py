@@ -111,9 +111,8 @@ class CausalityMetrics(object):
                 (not is_given_id and
                  self.ids_considered == self.IDsConsidered.NonGivenOnly)):
                 causations.append(instance)
-        cmp_by_start = lambda inst1, inst2: (
-            inst1.connective[0].start_offset < inst2.connective[0].start_offset)
-        return sorted(causations, cmp_by_start)
+        sort_key = lambda inst: inst.connective[0].start_offset
+        return sorted(causations, key=sort_key)
 
     def _match_connectives(self, gold, predicted):
         matching_instances = []
