@@ -96,7 +96,7 @@ class ParsedSentence(object):
         # Declare a few variables that will be overwritten later, just so that
         # it's easy to tell what's in an instance of this class.
         self.edge_graph = csr_matrix((0, 0), dtype='bool')
-        self.document_char_offset = -1
+        self.document_char_offset = 0
         self.original_text = ''
         self.__depths = np.array([])
         self.__path_predecessors = np.array([[]])
@@ -194,7 +194,8 @@ class ParsedSentence(object):
                     next_token = tokens_iter.next()
                 if next_token.start_offset != start:
                     warning = ("Annotation index %d does not correspond to a"
-                               " token start" % start)
+                               " token start" %
+                               (start + self.document_char_offset))
                     if prev_token and prev_token.end_offset >= start:
                         tokens.append(prev_token)
                         warning += '; the token it bisects has been appended'
@@ -212,7 +213,8 @@ class ParsedSentence(object):
                         tokens.append(next_token)
                 if next_token.end_offset != end:
                     warning = ("Annotation index %d does not correspond to a"
-                               " token end" % end)
+                               " token end" %
+                               (end + self.document_char_offset))
                     # If we appended the next token, that means the index
                     # brought us into the middle of the next word.
                     if tokens[-1] is next_token:

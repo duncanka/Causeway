@@ -249,16 +249,17 @@ class CausalityMetrics(object):
                 self._log_unique_instance(instance, 1, indent + 1)
             for instance in self.predicted_only_instances:
                 self._log_unique_instance(instance, 2, indent + 1)
-            self._log_property_differences(CausationInstance.Degrees,
-                                           indent + 1)
             self._log_property_differences(CausationInstance.CausationTypes,
+                                           indent + 1)
+            self._log_property_differences(CausationInstance.Degrees,
                                            indent + 1)
             self._log_property_differences(self.ArgTypes, indent + 1)
 
         # Ignore connective-related metrics if we have nothing interesting to
         # show there.
-        print_indented(indent, 'Connectives:')
-        if self.connective_metrics is not None:
+        if log_stats or log_confusion or self.connective_metrics:
+            print_indented(indent, 'Connectives:')
+        if self.connective_metrics:
             if log_stats:
                 print_indented(indent + 1, self.connective_metrics)
 
