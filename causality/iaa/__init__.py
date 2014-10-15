@@ -290,8 +290,8 @@ class CausalityMetrics(object):
 
     @staticmethod
     def _log_unique_instance(instance, annotator_num, indent):
-        connective_text = ' '.join([t.original_text
-                                    for t in instance.connective])
+        connective_text = ParsedSentence.get_annotation_text(
+            instance.connective)
         print_indented(indent, "Annotation", annotator_num,
                        'only: "%s"' % connective_text,
                        '(sentence: "%s")' % get_truncated_sentence(instance))
@@ -315,7 +315,9 @@ class CausalityMetrics(object):
                 values = (value_extractor(instance_1),
                           value_extractor(instance_2))
             print_indented(
-                indent, property_name, 's differ',
+                indent, property_name, 's for connective "',
+                ParsedSentence.get_annotation_text(instance_1.connective),
+                '" differ',
                 (': %s vs. %s' % values if value_extractor else ''),
                 ' (sentence: "', get_truncated_sentence(instance_1), '")',
                 sep='')

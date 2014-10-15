@@ -80,6 +80,10 @@ class ParsedSentence(object):
     def unescape_token_text(token_text):
         return ParsedSentence.UNESCAPE_MAP.get(token_text, token_text)
 
+    @staticmethod
+    def get_annotation_text(annotation_tokens):
+        return ' '.join([token.original_text for token in annotation_tokens])
+
     def __init__(self, tokenized_text, tagged_lemmas, edges, document_text):
         self.tokens = []
         self.causation_instances = []
