@@ -63,7 +63,7 @@ if __name__ == '__main__':
         stage_names = [p.name for p in causality_pipeline.stages]
         for stage_name, result in zip(stage_names, eval_results):
             print "Evaluation for stage %s:" % stage_name
-            print_indented(result, 1)
+            print_indented(1, result)
     elif FLAGS.test_paths:
         causality_pipeline.test()
 
