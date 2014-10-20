@@ -21,6 +21,9 @@ class ClassificationMetrics(object):
         self.tn = tn
         self.fn = fn
 
+        #assert tp >= 0 and fp >= 0 and fn >= 0 and (tn is None or tn >= 0), (
+        #    'Invalid raw metrics values (%s)' % ((tp, fp, fn, tn),))
+
         tp = float(tp)
         self.precision = tp / safe_divisor(tp + fp)
         self.recall = tp / safe_divisor(tp + fn)

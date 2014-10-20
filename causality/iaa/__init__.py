@@ -187,8 +187,7 @@ class CausalityMetrics(object):
     def _match_arguments(self, matches):
         # Initially, we assume every argument was unique. We'll update this
         # incrementally as we find matches.
-        gold_only_args = 2 * len(matches)
-        predicted_only_args = gold_only_args
+        gold_only_args = predicted_only_args = 2 * len(matches)
         null_args = 0
 
         gold_labels = []
@@ -206,8 +205,11 @@ class CausalityMetrics(object):
                     continue
                 for j in range(len(predicted_args)):
                     if predicted_args[j] is None:
-                        predicted_only_args -= 1
-                        null_args += 1
+                        # Only update arg counts on the first round to avoid
+                        # double-counting
+                        if i == 0:
+                            predicted_only_args -= 1
+                            null_args += 1
                         continue
                     elif predicted_args_matched[j]:
                         continue
@@ -223,6 +225,7 @@ class CausalityMetrics(object):
                         predicted_only_args -= 1
                         # We're done matching this gold arg; move on to the next
                         break
+
 
         total_matches = len(gold_labels)
         assert 4 * len(matches) == (2 * total_matches + gold_only_args +
