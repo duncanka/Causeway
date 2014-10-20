@@ -1,7 +1,16 @@
 """ Define standard machine-learned model framework for pipelines. """
 
+import gflags
 import logging
 import numpy as np
+
+try:
+    gflags.DEFINE_bool(
+        'rebalance_stochastically', False,
+        'Rebalance classes by stochastically choosing samples to replicate')
+except gflags.DuplicateFlagError as e:
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+
 
 class Model(object):
     def __init__(self, part_type):
@@ -219,8 +228,18 @@ class ClassBalancingModelWrapper(object):
 
         slices = np.concatenate(([0], np.cumsum(counts_to_add)))
         for j in xrange(len(label_set)):
-            indices = np.random.choice(np.where(label_indices==j)[0],
-                                       counts_to_add[j])
+            label_row_indices = np.where(label_indices==j)[0]
+            if gflags.FLAGS.rebalance_stochastically:
+                indices = np.random.choice(label_row_indices,
+                                           counts_to_add[j])
+            else:
+                full_repetitions = counts_to_add[j] / label_row_indices.shape[0]
+                indices = np.tile(label_row_indices, (full_repetitions,))
+                still_needed = indices.shape[0] - counts_to_add[j]
+                if still_needed:
+                    indices = np.concatenate(indices,
+                                             label_row_indices[:still_needed])
+
             if label_indices.shape[0]: # only bother if there are > 0 indices
                 rebalanced_data[slices[j]:slices[j+1]] = data[indices]
                 rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
