@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=logging.WARN)
+        level=logging.INFO)
     logging.captureWarnings(True)
 
     if FLAGS.classifier_model == 'tree':

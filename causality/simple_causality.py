@@ -8,12 +8,15 @@ from pipeline.models import *
 from util import Enum
 
 try:
-    DEFINE_list('sc_features',
-                ['pos1', 'pos2', 'wordsbtw', 'deplen', 'connectives'],
+    DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
+                                'deplen', 'connectives'],
                 'Features to use for simple causality model')
     DEFINE_integer('sc_max_words_btw_phrases', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max");
+    DEFINE_integer('sc_max_dep_path_len', 3,
+                   "Maximum number of dependency path steps to allow before"
+                   " just making the value 'LONG-RANGE'");
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -22,7 +25,6 @@ class PhrasePairPart(ClassifierPart):
         super(PhrasePairPart, self).__init__(sentence, label)
         self.head_token_1 = head_token_1
         self.head_token_2 = head_token_2
-
 
 class PhrasePairCausalityModel(ClassifierModel):
     # First define longer feature extraction functions.
@@ -42,7 +44,10 @@ class PhrasePairCausalityModel(ClassifierModel):
         if source.start_offset > target.start_offset:
             source, target = target, source
         deps = part.instance.extract_dependency_path(source, target)
-        return str(deps)
+        if len(deps) > FLAGS.sc_max_dep_path_len:
+            return 'LONG-RANGE'
+        else:
+            return str(deps)
 
     ConnectivePositions = Enum(['Before', 'Between', 'After'])
 

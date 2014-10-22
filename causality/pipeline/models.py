@@ -4,6 +4,8 @@ import gflags
 import logging
 import numpy as np
 
+from util.metrics import diff_binary_vectors
+
 try:
     gflags.DEFINE_bool(
         'rebalance_stochastically', False,
@@ -137,18 +139,18 @@ class ClassifierModel(FeaturizedModel):
 
     def _featurized_train(self, parts):
         features, labels = self._featurize(parts)
+        logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
+        logging.info('Done fitting classifier.')
 
     def _featurized_test(self, parts):
         features, old_labels = self._featurize(parts)
-        #features, old_labels = ClassBalancingModelWrapper.rebalance(features,
-        #                                                            old_labels)
         labels = self.classifier.predict(features)
         for part, label in zip(parts, labels):
             part.label = label
-        print len(old_labels), 'data points'
-        from util.metrics import diff_binary_vectors
-        print diff_binary_vectors(labels, old_labels)
+        logging.debug('%d data points' % len(old_labels))
+        logging.debug('Raw classifier performance:')
+        logging.debug('\n' + str(diff_binary_vectors(labels, old_labels)))
         '''
         for part, label, old_label in zip(parts[:1000], labels[:1000], old_labels[:1000]):
             if label != old_label:
@@ -163,6 +165,7 @@ class ClassifierModel(FeaturizedModel):
 
 
     def _featurize(self, parts):
+        logging.info('Featurizing...')
         relevant_parts = [part for part in parts if isinstance(part,
                                                                self.part_type)]
         features = np.zeros((len(relevant_parts),
@@ -184,7 +187,7 @@ class ClassifierModel(FeaturizedModel):
                         row_ref[self.feature_name_dictionary[feature_name]
                                 ] = feature_value
                     except KeyError:
-                        logging.warn('Ignoring unknown feature: %s' % feature_name)
+                        logging.debug('Ignoring unknown feature: %s' % feature_name)
 
                 if isinstance(extractor, TrainableFeatureExtractor):
                     for subfeature_name, subfeature_extractor in (
@@ -193,6 +196,7 @@ class ClassifierModel(FeaturizedModel):
                 else:
                     insert_value(feature_name, extractor)
 
+        logging.info('Done featurizing.')
         return features, labels
 
 class ClassifierPart(object):
@@ -200,7 +204,6 @@ class ClassifierPart(object):
         self.label = int(label)
         self.instance = instance
 
-# TODO: make this class handle multiple ratios
 class ClassBalancingModelWrapper(object):
     def __init__(self, classifier, ratio=float('inf')):
         self.classifier = classifier

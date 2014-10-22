@@ -19,8 +19,8 @@ try:
                 " Defaults to test_paths. If this is a single path, it is used"
                 " for all test paths. If multiple paths are provided, they must"
                 " correspond one-to-one with the test paths provided.")
-    #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts (TP, agreement,"
-    #               " etc.) for evaluation or IAA metrics.")
+    #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts"
+    #               " (TP, agreement, etc.) for evaluation or IAA metrics.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -77,7 +77,7 @@ class Pipeline(object):
                         ), ("Test path count & test output path count conflict")
 
     def __test_instances_from_reader(self, batch_size):
-        print 'Testing', batch_size, 'instances at a time'
+        logging.info('Testing %d instances at a time' % batch_size)
         if (not self.writer):
             logging.warn("No writer provided; pipeline results not written"
                          " anywhere")
