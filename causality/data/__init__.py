@@ -141,6 +141,14 @@ class ParsedSentence(object):
                 words_between += 1
         return words_between
 
+    def get_children(self, token):
+        ''' Returns a list of (edge_label, child_token) tuples. '''
+        # Grab the sparse column of the edge matrix with the edges of this
+        # token. Iterate over the edge end indices therein.
+        return [(self.edge_labels[(token.index, edge_end_index)],
+                 self.tokens[edge_end_index])
+                for edge_end_index in self.edge_graph[token.index].indices]
+
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
             return False
