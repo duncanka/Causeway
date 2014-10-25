@@ -9,7 +9,7 @@ from util import Enum
 
 try:
     DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
-                                'deplen', 'connectives'],
+                                'deplen', 'connectives', 'tenses'],
                 'Features to use for simple causality model')
     DEFINE_integer('sc_max_words_btw_phrases', 10,
                    "Maximum number of words between phrases before just making"
@@ -26,7 +26,7 @@ class PhrasePairPart(ClassifierPart):
         self.head_token_1 = head_token_1
         self.head_token_2 = head_token_2
 
-class PhrasePairCausalityModel(ClassifierModel):
+class PhrasePairModel(ClassifierModel):
     # First define longer feature extraction functions.
     @staticmethod
     def words_btw_heads(part):
@@ -58,11 +58,11 @@ class PhrasePairCausalityModel(ClassifierModel):
         head2_start = head2.start_offset
 
         if connective_start < head1_start and connective_start < head2_start:
-            return PhrasePairCausalityModel.ConnectivePositions.Before
+            return PhrasePairModel.ConnectivePositions.Before
         elif connective_start > head1_start and connective_start > head2_start:
-            return PhrasePairCausalityModel.ConnectivePositions.After
+            return PhrasePairModel.ConnectivePositions.After
         else: # one after and one before
-            return PhrasePairCausalityModel.ConnectivePositions.Between
+            return PhrasePairModel.ConnectivePositions.Between
 
     @staticmethod
     def extract_connective_patterns(parts):
@@ -80,12 +80,69 @@ class PhrasePairCausalityModel(ClassifierModel):
                     connective = connective[0]
                     connective_text = connective.original_text
                     connective_position = (
-                        PhrasePairCausalityModel.get_connective_position(
+                        PhrasePairModel.get_connective_position(
                             connective, part.head_token_1, part.head_token_2))
                     connectives_seen.add(
                         (connective_text, connective_position))
 
         return connectives_seen
+
+    Tenses = Enum(['Past', 'Present', 'Future', 'Infinitive', 'None'])
+
+    @staticmethod
+    def tense_from_verb_pos(pos):
+        if pos == 'VBD':
+            return PhrasePairModel.Tenses.Past
+        elif pos in ['VBP', 'VBZ']:
+            return PhrasePairModel.Tenses.Present
+        # else return None
+
+    @staticmethod
+    def extract_tense(head):
+        # If it's not a copular construction and it's a noun phrase, the whole
+        # argument is a noun phrase, so the notion of tense doesn't apply.
+        copulas = head.parent_sentence.get_children(head, 'cop')
+        if not copulas and head.pos in ParsedSentence.NOUN_TAGS:
+            return PhrasePairModel.Tenses.None
+
+        # If it's a tensed verb, use the verb tense.
+        verb_tense = PhrasePairModel.tense_from_verb_pos(head.pos)
+        if verb_tense is not None:
+            return verb_tense
+
+        auxiliaries = head.parent_sentence.get_children(head, 'aux')
+        # First pass: look for future and infinitival auxiliaries. These take
+        # precedence over tensed auxiliaries or copulas.
+        for aux in auxiliaries:
+            # Also account for the truncated versions in contractions.
+            if aux.original_text in ['will', 'wo', 'shall', 'sha']:
+                return PhrasePairModel.Tenses.Future
+            elif aux.original_text == 'to':
+                return PhrasePairModel.Tenses.Infinitive
+
+        # Second pass: look for auxiliaries that have tense information, then
+        # copulas.
+        passive_auxes = head.parent_sentence.get_children(head, 'auxpass')
+        # Check auxiliaries first, because they can alter copulas or passives.
+        children = auxiliaries + passive_auxes + copulas
+        for child in children:
+            verb_tense = PhrasePairModel.tense_from_verb_pos(child.pos)
+            if verb_tense is not None:
+                return verb_tense
+
+        # Third pass: If we've gotten this far, it means there is no definitive
+        # tense information attached to the verb. That licenses us to use the
+        # more ambiguous forms of verbal tense information.
+        # As before, we first check the head itself, then the auxiliaries, then
+        # the copulas.
+        for verb in [head] + children:
+            if verb.pos == 'VB':
+                return PhrasePairModel.Tenses.Present
+            elif verb.pos == 'VBG':
+                return PhrasePairModel.Tenses.Infinitive
+
+        logging.debug('Implicit infinitive: %s' % head)
+        return PhrasePairModel.Tenses.Infinitive
 
     @staticmethod
     def make_connective_feature_extractors(connective_patterns):
@@ -94,14 +151,14 @@ class PhrasePairCausalityModel(ClassifierModel):
             def extractor(part):
                 for token in part.instance.tokens:
                     if (token.original_text == connective_text and
-                        (PhrasePairCausalityModel.get_connective_position(
+                        (PhrasePairModel.get_connective_position(
                                 token, part.head_token_1, part.head_token_2)
                          == connective_position)):
                         return True
                 return False
             feature_name = '%s_%s' % (
                 connective_text,
-                PhrasePairCausalityModel.ConnectivePositions[
+                PhrasePairModel.ConnectivePositions[
                     connective_position])
             connective_feature_map[feature_name] = extractor
 
@@ -112,13 +169,13 @@ class PhrasePairCausalityModel(ClassifierModel):
     FEATURE_EXTRACTOR_MAP = {}
 
     def __init__(self, classifier):
-        super(PhrasePairCausalityModel, self).__init__(
+        super(PhrasePairModel, self).__init__(
             PhrasePairPart,
             # Avoid any potential harm that could come to our class variable.
-            PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP.copy(),
+            PhrasePairModel.FEATURE_EXTRACTOR_MAP.copy(),
             FLAGS.sc_features, classifier)
 
-PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
+PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
     'pos1': (True, lambda part: part.head_token_1.pos),
     'pos2': (True, lambda part: part.head_token_2.pos),
     # Generalized POS tags don't seem to be that useful.
@@ -126,14 +183,17 @@ PhrasePairCausalityModel.FEATURE_EXTRACTOR_MAP = {
         part.head_token_1.pos, part.head_token_1.pos)),
     'pos2gen': (True, lambda part: ParsedSentence.POS_GENERAL.get(
         part.head_token_2.pos, part.head_token_2.pos)),
-    'wordsbtw': (False, PhrasePairCausalityModel.words_btw_heads),
-    'deppath': (True, PhrasePairCausalityModel.extract_dep_path),
+    'wordsbtw': (False, PhrasePairModel.words_btw_heads),
+    'deppath': (True, PhrasePairModel.extract_dep_path),
     'deplen': (False,
                lambda part: len(part.instance.extract_dependency_path(
                    part.head_token_1, part.head_token_2))),
     'connectives': (False, TrainableFeatureExtractor(
-            PhrasePairCausalityModel.extract_connective_patterns,
-            PhrasePairCausalityModel.make_connective_feature_extractors))
+            PhrasePairModel.extract_connective_patterns,
+            PhrasePairModel.make_connective_feature_extractors)),
+    'tenses': (True, lambda part: '/'.join(
+        [PhrasePairModel.Tenses[PhrasePairModel.extract_tense(head)]
+         for head in part.head_token_1, part.head_token_2]))
 }
 
 
@@ -147,7 +207,7 @@ class SimpleCausalityStage(ClassifierStage):
 
     def __init__(self, classifier):
         super(SimpleCausalityStage, self).__init__(
-            'Simple causality', [PhrasePairCausalityModel(classifier)])
+            'Simple causality', [PhrasePairModel(classifier)])
         self._expected_causations = []
 
     def _extract_parts(self, sentence):

@@ -68,7 +68,7 @@ class DependencyPathError(ValueError):
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
-    NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP"]
+    NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP", "WDT"]
     # TODO:should MD be included below?
     VERB_TAGS = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD"]
     ADVERB_TAGS = ["RB", "RBR", "RBS", "WRB"]
@@ -141,13 +141,22 @@ class ParsedSentence(object):
                 words_between += 1
         return words_between
 
-    def get_children(self, token):
-        ''' Returns a list of (edge_label, child_token) tuples. '''
+    def get_children(self, token, edge_type=None):
+        '''
+        If edge_type is given, returns a list of children of token related by an
+        edge with label edge_type. Otherwise, returns a list of
+        (edge_label, child_token) tuples.
+        '''
         # Grab the sparse column of the edge matrix with the edges of this
         # token. Iterate over the edge end indices therein.
-        return [(self.edge_labels[(token.index, edge_end_index)],
-                 self.tokens[edge_end_index])
-                for edge_end_index in self.edge_graph[token.index].indices]
+        edges = [(self.edge_labels[(token.index, edge_end_index)],
+                  self.tokens[edge_end_index])
+                 for edge_end_index in self.edge_graph[token.index].indices]
+        if edge_type:
+            return [token for label, token in edges
+                    if label == edge_type]
+        else:
+            return edges
 
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
