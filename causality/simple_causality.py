@@ -97,8 +97,27 @@ class PhrasePairModel(ClassifierModel):
             return PhrasePairModel.Tenses.Present
         # else return None
 
+    # We're going to be extracting tenses for pairs of heads for the same
+    # sentence. That means we'll get calls for the same head repeatedly, so we
+    # cache them for as long as we're dealing with the same sentence.
+    __cached_tenses = {}
+    __cached_tenses_sentence = None
     @staticmethod
     def extract_tense(head):
+        if head.parent_sentence is PhrasePairModel.__cached_tenses_sentence:
+            try:
+                return PhrasePairModel.__cached_tenses[head]
+            except KeyError:
+                pass
+        else:
+            PhrasePairModel.__cached_tenses_sentence = head.parent_sentence
+
+        tense = PhrasePairModel.__extract_tense_helper(head)
+        PhrasePairModel.__cached_tenses[head] = tense
+        return tense
+
+    @staticmethod
+    def __extract_tense_helper(head):
         # If it's not a copular construction and it's a noun phrase, the whole
         # argument is a noun phrase, so the notion of tense doesn't apply.
         copulas = head.parent_sentence.get_children(head, 'cop')

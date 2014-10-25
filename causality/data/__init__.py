@@ -149,14 +149,15 @@ class ParsedSentence(object):
         '''
         # Grab the sparse column of the edge matrix with the edges of this
         # token. Iterate over the edge end indices therein.
-        edges = [(self.edge_labels[(token.index, edge_end_index)],
-                  self.tokens[edge_end_index])
-                 for edge_end_index in self.edge_graph[token.index].indices]
         if edge_type:
-            return [token for label, token in edges
-                    if label == edge_type]
+            return [self.tokens[edge_end_index] for edge_end_index
+                    in self.edge_graph[token.index].indices
+                    if (self.edge_labels[(token.index, edge_end_index)]
+                        == edge_type)]
         else:
-            return edges
+            return [(self.edge_labels[(token.index, edge_end_index)],
+                     self.tokens[edge_end_index])
+                    for edge_end_index in self.edge_graph[token.index].indices]
 
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
