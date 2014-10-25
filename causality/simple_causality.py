@@ -146,7 +146,7 @@ class PhrasePairModel(ClassifierModel):
 
     @staticmethod
     def make_connective_feature_extractors(connective_patterns):
-        connective_feature_map = {}
+        connective_features = []
         for connective_text, connective_position in connective_patterns:
             def extractor(part):
                 for token in part.instance.tokens:
@@ -160,9 +160,9 @@ class PhrasePairModel(ClassifierModel):
                 connective_text,
                 PhrasePairModel.ConnectivePositions[
                     connective_position])
-            connective_feature_map[feature_name] = extractor
+            connective_features.append((feature_name, extractor))
 
-        return connective_feature_map
+        return connective_features
 
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the mapping.

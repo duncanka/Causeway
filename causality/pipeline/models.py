@@ -31,11 +31,18 @@ class TrainableFeatureExtractor(object):
         self.feature_extractor_creator = feature_extractor_creator
         self.subfeature_extractor_map = None
 
-    def train(self, parts):
+    def train(self, parts, feature_name):
         extracted_data = self.feature_training_data_extractor(parts)
-        self.subfeature_extractor_map = self.feature_extractor_creator(
-            extracted_data)
+        subfeature_extractors = self.feature_extractor_creator(extracted_data)
+        self.subfeature_extractor_map = dict(
+            (self._get_full_feature_name(feature_name, subfeature_name),
+             subfeature_extractor)
+            for subfeature_name, subfeature_extractor in subfeature_extractors)
         return extracted_data
+
+    @staticmethod
+    def _get_full_feature_name(feature_name, subfeature_name):
+        return '%s:%s' % (feature_name, subfeature_name)
 
 class FeaturizedModel(Model):
     class NameDictionary(object):
@@ -96,7 +103,7 @@ class FeaturizedModel(Model):
 
             if isinstance(extractor, TrainableFeatureExtractor):
                 self.feature_training_data[feature_name] = (
-                    extractor.train(parts))
+                    extractor.train(parts, feature_name))
                 for subfeature_name, subfeature_extractor in (
                     extractor.subfeature_extractor_map.iteritems()):
                     insert_names(subfeature_name, is_categorical,
