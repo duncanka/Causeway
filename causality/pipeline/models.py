@@ -4,6 +4,7 @@ import gflags
 import logging
 import numpy as np
 
+from util import Enum
 from util.metrics import diff_binary_vectors
 
 try:
@@ -45,6 +46,8 @@ class TrainableFeatureExtractor(object):
         return '%s:%s' % (feature_name, subfeature_name)
 
 class FeaturizedModel(Model):
+    FeatureTypes = Enum(['Categorical', 'Numerical'])
+
     class NameDictionary(object):
         def __init__(self):
             self.names_to_ids = {}
@@ -68,7 +71,7 @@ class FeaturizedModel(Model):
             return self.names_to_ids.has_key(entry)
 
     @staticmethod
-    def get_boolean_feature_name(base_name, value):
+    def get_categorical_feature_name(base_name, value):
         return '%s=%s' % (base_name, value)
 
     def __init__(self, part_type, feature_extractor_map, selected_features):
@@ -76,7 +79,7 @@ class FeaturizedModel(Model):
         part_type is the class object corresponding to the part type this model
         is for.
         feature_extractor_map is a map from feature names to
-        (feature_is_boolean, feature_extractor_function) tuples.
+        (variable_type, feature_extractor_function) tuples.
         selected_features is a list of names of features to extract.
         """
         super(FeaturizedModel, self).__init__(part_type)
@@ -90,15 +93,15 @@ class FeaturizedModel(Model):
         # everything twice, but I can't think of a cleverer way.)
         feature_values = {}
 
-        def insert_names(feature_name, is_categorical, feature_extractor):
-            if is_categorical:
+        def insert_names(feature_name, feature_type, feature_extractor):
+            if feature_type == self.FeatureTypes.Categorical:
                 value_set = set([feature_extractor(part) for part in parts])
                 feature_values[feature_name] = value_set
-            else:
+            else: # feature_type == Numerical
                 self.feature_name_dictionary.insert(feature_name)
 
         for feature_name in self.selected_features:
-            is_categorical, extractor = (
+            feature_type, extractor = (
                 self.feature_extractor_map[feature_name])
 
             if isinstance(extractor, TrainableFeatureExtractor):
@@ -106,17 +109,17 @@ class FeaturizedModel(Model):
                     extractor.train(parts, feature_name))
                 for subfeature_name, subfeature_extractor in (
                     extractor.subfeature_extractor_map.iteritems()):
-                    insert_names(subfeature_name, is_categorical,
+                    insert_names(subfeature_name, feature_type,
                                  subfeature_extractor)
             else:
-                insert_names(feature_name, is_categorical, extractor)
+                insert_names(feature_name, feature_type, extractor)
 
         # All the ones we logged feature values for were the boolean ones.
         # Now we register all the corresponding feature names.
         for base_name, value_set in feature_values.iteritems():
             for value in value_set:
                 self.feature_name_dictionary.insert(
-                    self.get_boolean_feature_name(base_name, value))
+                    self.get_categorical_feature_name(base_name, value))
 
         self._featurized_train(parts)
 
@@ -181,14 +184,14 @@ class ClassifierModel(FeaturizedModel):
 
         for part, row_ref in zip(relevant_parts, features):
             for feature_name in self.selected_features:
-                is_boolean, extractor = (
+                feature_type, extractor = (
                     self.feature_extractor_map[feature_name])
 
                 def insert_value(feature_name, feature_extractor):
                     feature_value = feature_extractor(part)
-                    if is_boolean:
-                        feature_name = self.get_boolean_feature_name(feature_name,
-                                                                     feature_value)
+                    if feature_type == self.FeatureTypes.Categorical:
+                        feature_name = self.get_categorical_feature_name(
+                            feature_name, feature_value)
                         feature_value = 1.0
                     try:
                         row_ref[self.feature_name_dictionary[feature_name]

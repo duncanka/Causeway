@@ -194,23 +194,25 @@ class PhrasePairModel(ClassifierModel):
             PhrasePairModel.FEATURE_EXTRACTOR_MAP.copy(),
             FLAGS.sc_features, classifier)
 
+Categorical = PhrasePairModel.FeatureTypes.Categorical
+Numerical = PhrasePairModel.FeatureTypes.Numerical
 PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
-    'pos1': (True, lambda part: part.head_token_1.pos),
-    'pos2': (True, lambda part: part.head_token_2.pos),
+    'pos1': (Categorical, lambda part: part.head_token_1.pos),
+    'pos2': (Categorical, lambda part: part.head_token_2.pos),
     # Generalized POS tags don't seem to be that useful.
-    'pos1gen': (True, lambda part: ParsedSentence.POS_GENERAL.get(
+    'pos1gen': (Categorical, lambda part: ParsedSentence.POS_GENERAL.get(
         part.head_token_1.pos, part.head_token_1.pos)),
-    'pos2gen': (True, lambda part: ParsedSentence.POS_GENERAL.get(
+    'pos2gen': (Categorical, lambda part: ParsedSentence.POS_GENERAL.get(
         part.head_token_2.pos, part.head_token_2.pos)),
-    'wordsbtw': (False, PhrasePairModel.words_btw_heads),
-    'deppath': (True, PhrasePairModel.extract_dep_path),
-    'deplen': (False,
+    'wordsbtw': (Numerical, PhrasePairModel.words_btw_heads),
+    'deppath': (Categorical, PhrasePairModel.extract_dep_path),
+    'deplen': (Numerical,
                lambda part: len(part.instance.extract_dependency_path(
                    part.head_token_1, part.head_token_2))),
-    'connectives': (False, TrainableFeatureExtractor(
+    'connectives': (Categorical, TrainableFeatureExtractor(
             PhrasePairModel.extract_connective_patterns,
             PhrasePairModel.make_connective_feature_extractors)),
-    'tenses': (True, lambda part: '/'.join(
+    'tenses': (Categorical, lambda part: '/'.join(
         [PhrasePairModel.Tenses[PhrasePairModel.extract_tense(head)]
          for head in part.head_token_1, part.head_token_2]))
 }
