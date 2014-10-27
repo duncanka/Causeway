@@ -87,7 +87,7 @@ class PhrasePairModel(ClassifierModel):
 
         return connectives_seen
 
-    Tenses = Enum(['Past', 'Present', 'Future', 'Infinitive', 'None'])
+    Tenses = Enum(['Past', 'Present', 'Future', 'Infinitive', 'Nominal'])
 
     @staticmethod
     def tense_from_verb_pos(pos):
@@ -122,7 +122,7 @@ class PhrasePairModel(ClassifierModel):
         # argument is a noun phrase, so the notion of tense doesn't apply.
         copulas = head.parent_sentence.get_children(head, 'cop')
         if not copulas and head.pos in ParsedSentence.NOUN_TAGS:
-            return PhrasePairModel.Tenses.None
+            return PhrasePairModel.Tenses.Nominal
 
         # If it's a tensed verb, use the verb tense.
         verb_tense = PhrasePairModel.tense_from_verb_pos(head.pos)
