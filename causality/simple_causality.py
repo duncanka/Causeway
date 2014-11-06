@@ -87,21 +87,12 @@ class PhrasePairModel(ClassifierModel):
 
         return connectives_seen
 
-    Tenses = Enum(['Past', 'Present', 'Future', 'Infinitive', 'Nominal'])
-
-    @staticmethod
-    def tense_from_verb_pos(pos):
-        if pos == 'VBD':
-            return PhrasePairModel.Tenses.Past
-        elif pos in ['VBP', 'VBZ']:
-            return PhrasePairModel.Tenses.Present
-        # else return None
-
     # We're going to be extracting tenses for pairs of heads for the same
     # sentence. That means we'll get calls for the same head repeatedly, so we
     # cache them for as long as we're dealing with the same sentence.
     __cached_tenses = {}
     __cached_tenses_sentence = None
+    tenses = set()
     @staticmethod
     def extract_tense(head):
         if head.parent_sentence is PhrasePairModel.__cached_tenses_sentence:
@@ -114,6 +105,7 @@ class PhrasePairModel(ClassifierModel):
 
         tense = PhrasePairModel.__extract_tense_helper(head)
         PhrasePairModel.__cached_tenses[head] = tense
+        PhrasePairModel.tenses.add(tense)
         return tense
 
     @staticmethod
@@ -122,46 +114,17 @@ class PhrasePairModel(ClassifierModel):
         # argument is a noun phrase, so the notion of tense doesn't apply.
         copulas = head.parent_sentence.get_children(head, 'cop')
         if not copulas and head.pos in ParsedSentence.NOUN_TAGS:
-            return PhrasePairModel.Tenses.Nominal
-
-        # If it's a tensed verb, use the verb tense.
-        verb_tense = PhrasePairModel.tense_from_verb_pos(head.pos)
-        if verb_tense is not None:
-            return verb_tense
-
+            return '<NOM>'
+        
         auxiliaries = head.parent_sentence.get_children(head, 'aux')
-        # First pass: look for future and infinitival auxiliaries. These take
-        # precedence over tensed auxiliaries or copulas.
-        for aux in auxiliaries:
-            # Also account for the truncated versions in contractions.
-            if aux.original_text in ['will', 'wo', 'shall', 'sha']:
-                return PhrasePairModel.Tenses.Future
-            elif aux.original_text == 'to':
-                return PhrasePairModel.Tenses.Infinitive
-
-        # Second pass: look for auxiliaries that have tense information, then
-        # copulas.
         passive_auxes = head.parent_sentence.get_children(head, 'auxpass')
-        # Check auxiliaries first, because they can alter copulas or passives.
-        children = auxiliaries + passive_auxes + copulas
-        for child in children:
-            verb_tense = PhrasePairModel.tense_from_verb_pos(child.pos)
-            if verb_tense is not None:
-                return verb_tense
-
-        # Third pass: If we've gotten this far, it means there is no definitive
-        # tense information attached to the verb. That licenses us to use the
-        # more ambiguous forms of verbal tense information.
-        # As before, we first check the head itself, then the auxiliaries, then
-        # the copulas.
-        for verb in [head] + children:
-            if verb.pos == 'VB':
-                return PhrasePairModel.Tenses.Present
-            elif verb.pos == 'VBG':
-                return PhrasePairModel.Tenses.Infinitive
-
-        logging.debug('Implicit infinitive: %s' % head)
-        return PhrasePairModel.Tenses.Infinitive
+        auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
+        auxes_plus_head.sort(key=lambda token: token.start_offset)
+        
+        aux_token_strings = [
+            token.pos if token is head else  token.original_text
+            for token in auxes_plus_head] 
+        return '_'.join(aux_token_strings)
 
     @staticmethod
     def make_connective_feature_extractors(connective_patterns):
@@ -213,7 +176,7 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
             PhrasePairModel.extract_connective_patterns,
             PhrasePairModel.make_connective_feature_extractors)),
     'tenses': (Categorical, lambda part: '/'.join(
-        [PhrasePairModel.Tenses[PhrasePairModel.extract_tense(head)]
+        [PhrasePairModel.extract_tense(head)
          for head in part.head_token_1, part.head_token_2]))
 }
 
@@ -295,9 +258,7 @@ class SimpleCausalityStage(ClassifierStage):
         # which convention we use for which is the cause and which is the
         # effect.)
         head_pairs = [expected_heads, predicted_heads]
-        instances = [expected_instance, predicted_instance]
-        # Iterate over both expected and predicted to reorder both.
-        for head_pair, instance in zip(head_pairs, instances):
+        for head_pair in head_pairs:
             if not SimpleCausalityStage.cause_starts_first(*head_pair):
                 head_pair[0], head_pair[1] = head_pair[1], head_pair[0]
 
