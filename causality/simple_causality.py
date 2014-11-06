@@ -92,7 +92,6 @@ class PhrasePairModel(ClassifierModel):
     # cache them for as long as we're dealing with the same sentence.
     __cached_tenses = {}
     __cached_tenses_sentence = None
-    tenses = set()
     @staticmethod
     def extract_tense(head):
         if head.parent_sentence is PhrasePairModel.__cached_tenses_sentence:
@@ -105,7 +104,6 @@ class PhrasePairModel(ClassifierModel):
 
         tense = PhrasePairModel.__extract_tense_helper(head)
         PhrasePairModel.__cached_tenses[head] = tense
-        PhrasePairModel.tenses.add(tense)
         return tense
 
     @staticmethod
@@ -121,9 +119,26 @@ class PhrasePairModel(ClassifierModel):
         auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
         auxes_plus_head.sort(key=lambda token: token.start_offset)
         
-        aux_token_strings = [
-            token.pos if token is head else  token.original_text
-            for token in auxes_plus_head] 
+        CONTRACTION_DICT = {
+            "'s": 'is',
+             "'m": 'am',
+             "'d": 'would',
+             "'re": 'are',
+             'wo': 'will',  # from "won't"
+             'ca': 'can'  # from "can't"
+        }
+        aux_token_strings = []
+        for token in auxes_plus_head:
+            if token is head:
+                aux_token_strings.append(token.pos)
+            else:
+                if token in copulas:
+                    aux_token_strings.append('COP.' + token.pos)
+                else:
+                    aux_token_strings.append(
+                         CONTRACTION_DICT.get(token.original_text,
+                                              token.original_text))
+
         return '_'.join(aux_token_strings)
 
     @staticmethod
