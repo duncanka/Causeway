@@ -113,8 +113,11 @@ class DirectoryReader(Reader):
         self._base_reader = base_reader
         self._filenames = iter([])
 
-    def open(self, filepath):
-        self._filenames = recursively_list_files(filepath)
+    def open(self, dirpath):
+        if not os.path.isdir(dirpath):
+            raise IOError("No such directory: '%s" % dirpath)
+
+        self._filenames = recursively_list_files(dirpath)
         try:
             self.__open_next_file()
         except StopIteration:
