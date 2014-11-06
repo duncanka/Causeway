@@ -176,15 +176,16 @@ class StandoffReader(Reader):
     def __read_all_instances(self):
         self.instances = self.sentence_reader.get_all()
         self.sentence_reader.close()
+
         lines = self._file_stream.readlines()
         if not lines:
             logging.warn("No annotations found")
-            self.close()
-            return
-
-        ids_to_annotations = {}
-        ids_to_instances = {}
-        self.__process_lines(lines, ids_to_annotations, ids_to_instances)
+            # Don't close the reader: we still want to return the sentences,
+            # even if they have no causality annotations.
+        else:
+            ids_to_annotations = {}
+            ids_to_instances = {}
+            self.__process_lines(lines, ids_to_annotations, ids_to_instances)
 
         self.iterator = iter(self.instances)
 
