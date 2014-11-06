@@ -17,6 +17,9 @@ try:
         " not be compared).")
     DEFINE_integer('iaa_max_sentence', sys.maxint,
                    'Maximum number of sentences to analyze when computing IAA.')
+    DEFINE_bool('iaa_include_no_partial', False,
+                'Include a comparsion that does not count partial overlap of'
+                ' spans as a match.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -24,7 +27,12 @@ except DuplicateFlagError as e:
 def compare_instance_lists(gold, predicted, indent=0):
     printing_some_metrics = FLAGS.iaa_log_confusion or FLAGS.iaa_log_stats
 
-    for allow_partial in [True, False]:
+    if FLAGS.iaa_include_no_partial:
+        partial_possibilities = [True, False]
+    else:
+        partial_possibilities = [True]
+
+    for allow_partial in partial_possibilities:
         print_indented(indent, ('%sllowing partial matches:'
                                 % ['Not a', 'A'][allow_partial]))
 
