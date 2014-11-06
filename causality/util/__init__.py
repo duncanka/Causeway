@@ -6,6 +6,8 @@ def recursively_list_files(path):
     while True:
         try:
             root, dirs, files = walker.next()
+            dirs.sort()
+            files.sort()
             for filename in files:
                 yield os.path.join(root, filename)
         except StopIteration:
