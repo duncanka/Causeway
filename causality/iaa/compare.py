@@ -87,6 +87,7 @@ def main(argv):
     for path in FLAGS.iaa_paths:
         reader.open(path)
         all_instances.append(reader.get_all()[:FLAGS.iaa_max_sentence])
+    reader.close()
 
     instances_path_pairs = zip(all_instances, FLAGS.iaa_paths)
     for ((gold, gold_path), (predicted, predicted_path)) in (

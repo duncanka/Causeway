@@ -150,6 +150,7 @@ class DirectoryReader(Reader):
 
 
 class StandoffReader(Reader):
+    ''' Returns ParsedSentence instances, with CausationInstances added. '''
     def __init__(self):
         super(StandoffReader, self).__init__()
         self.sentence_reader = SentenceReader()
@@ -164,7 +165,8 @@ class StandoffReader(Reader):
 
     def close(self):
         super(StandoffReader, self).close()
-        self.sentence_reader.close()
+        # self.sentence_reader gets closed immediately after opening, so we
+        # don't need to bother closing it again.
         self.instances = []
         self.iterator = iter([])
 
@@ -173,6 +175,7 @@ class StandoffReader(Reader):
 
     def __read_all_instances(self):
         self.instances = self.sentence_reader.get_all()
+        self.sentence_reader.close()
         lines = self._file_stream.readlines()
         if not lines:
             logging.warn("No annotations found")
