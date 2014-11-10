@@ -134,7 +134,6 @@ class ParsedSentence(object):
             discounting punctuation tokens. '''
         assert (self.tokens[token1.index] == token1 and
                 self.tokens[token2.index] == token2), "Tokens not in sentence"
-        sentence = token1.parent_sentence
         words_between = -1
         for token in self.tokens[token1.index : token2.index + 1]:
             if token.pos[0].isalnum():
@@ -245,6 +244,21 @@ class ParsedSentence(object):
         except StopIteration:
             raise ValueError("Annotation %s couldn't be matched against tokens!"
                              % annotation.offsets)
+
+    def to_ptb_tree_string(self):
+        visited = set()
+        def convert_node(node, incoming_arc_label):
+            visited.add(node)
+            node_str = '(%s %s %s' % (node.original_text, incoming_arc_label,
+                                      node.pos)
+            for child_arc_label, child in sorted(
+                self.get_children(node), key=lambda pair: pair[1].start_offset):
+                if child not in visited:
+                    node_str += ' ' + convert_node(child, child_arc_label)
+            node_str += ')'
+            return node_str
+        return convert_node(self.get_children(self.tokens[0], 'root')[0],
+                            'root')
 
     ''' Private support functions '''
 
