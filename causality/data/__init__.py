@@ -246,6 +246,8 @@ class ParsedSentence(object):
                              % annotation.offsets)
 
     def to_ptb_tree_string(self):
+        # Collapsed dependencies can have cycles, so we need to avoid infinite
+        # recursion.
         visited = set()
         def convert_node(node, incoming_arc_label):
             visited.add(node)
