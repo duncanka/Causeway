@@ -164,7 +164,7 @@ class ParsedSentence(object):
             return False
         try:
             self.VERB_TAGS.index(token.pos)
-            if token.pos != 'MD': # Modals, though verbs, aren't heads of clauses
+            if token.pos != 'MD': # Modals, though verbs, aren't clause heads
                 return True
         except ValueError: # this POS wasn't in the list
             # Grab the sparse column of the edge matrix with the edges of this
