@@ -248,11 +248,14 @@ class ParsedSentence(object):
     def to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
         # recursion.
+        # TODO: This misses the important case of nodes with multiple parents.
+        # What can we do to capture those cases? Perhaps run the tree through a
+        # TSurgeon script that duplicates the relevant nodes?
         visited = set()
         def convert_node(node, incoming_arc_label):
             visited.add(node)
-            node_str = '(%s %s %s' % (node.original_text, incoming_arc_label,
-                                      node.pos)
+            node_str = '(%s_%d %s %s' % (node.original_text, node.index,
+                                         incoming_arc_label, node.pos)
             for child_arc_label, child in sorted(
                 self.get_children(node), key=lambda pair: pair[1].start_offset):
                 if child not in visited:
