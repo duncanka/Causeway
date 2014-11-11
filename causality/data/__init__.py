@@ -435,9 +435,8 @@ ParsedSentence.POS_GENERAL = merge_dicts(
 
 
 class CausationInstance(object):
-    Degrees = Enum(['Entail', 'Facilitate', 'Enable', 'Disentail', 'Inhibit',
-                    'Prevent'])
-    CausationTypes = Enum(['Consequence', 'Implication', 'Motivation',
+    Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
+    CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
                            'Purpose'])
 
     def __init__(self, source_sentence, degree=None, causation_type=None,
