@@ -1,0 +1,72 @@
+diff -ur src-orig/edu/stanford/nlp/trees/PennTreeReader.java src/edu/stanford/nlp/trees/PennTreeReader.java
+--- src-orig/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-11 23:57:21.432509148 -0500
++++ src/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-12 17:48:24.315909845 -0500
+@@ -134,7 +134,9 @@
+   public Tree readTree() throws IOException {
+     Tree t = null;
+
+-    while (tokenizer.hasNext() && t == null) {
++    // Order matters this. If the tokenizer is reading from a stream,
++    // this could hang if the conditions were in the other order.
++    while (t == null && tokenizer.hasNext()) {
+
+       //Setup PDA
+       this.currentTree = null;
+diff -ur src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java src/edu/stanford/nlp/trees/tregex/TregexPattern.java
+--- src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-11 23:57:21.440509149 -0500
++++ src/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-12 17:45:26.695905623 -0500
+@@ -726,29 +726,37 @@
+       p.prettyPrint(errPW);
+
+       String[] handles = argsMap.get(printHandleOption);
++      TRegexTreeVisitor vis = new TRegexTreeVisitor(p, handles, encoding);
+       if (argsMap.containsKey("-filter")) {
+         TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
+-        treebank = new MemoryTreebank(trf, encoding);//has to be in memory since we're not storing it on disk
+         //read from stdin
+         Reader reader = new BufferedReader(new InputStreamReader(System.in, encoding));
+-        ((MemoryTreebank) treebank).load(reader);
++        TreeReader tr = trf.newTreeReader(reader);
++        Tree t = tr.readTree();
++        while (t != null) {
++            vis.visitTree(t);
++            t = tr.readTree();
++        }
+         reader.close();
+-      } else if (args.length == 1) {
+-        errPW.println("using default tree");
+-        TreeReader r = new PennTreeReader(new StringReader("(VP (VP (VBZ Try) (NP (NP (DT this) (NN wine)) (CC and) (NP (DT these) (NNS snails)))) (PUNCT .))"), new LabeledScoredTreeFactory(new StringLabelFactory()));
+-        Tree t = r.readTree();
+-        treebank = new MemoryTreebank();
+-        treebank.add(t);
+-      } else {
+-        int last = args.length - 1;
+-        errPW.println("Reading trees from file(s) " + args[last]);
+-        TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
+-        treebank = new DiskTreebank(trf, encoding);
+-        treebank.loadPath(args[last], null, true);
++      } else {
++    	  if (args.length == 1) {
++	        errPW.println("using default tree");
++	        TreeReader r = new PennTreeReader(new StringReader("(VP (VP (VBZ Try) (NP (NP (DT this) (NN wine)) (CC and) (NP (DT these) (NNS snails)))) (PUNCT .))"), new LabeledScoredTreeFactory(new StringLabelFactory()));
++	        Tree t = r.readTree();
++	        treebank = new MemoryTreebank();
++	        treebank.add(t);
++	        r.close();
++	      } else {
++	        int last = args.length - 1;
++	        errPW.println("Reading trees from file(s) " + args[last]);
++	        TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
++	        treebank = new DiskTreebank(trf, encoding);
++	        treebank.loadPath(args[last], null, true);
++	      }
++
++	      treebank.apply(vis);
+       }
+-      TRegexTreeVisitor vis = new TRegexTreeVisitor(p, handles, encoding);
+-
+-      treebank.apply(vis);
++
+       Timing.endTime();
+       if (TRegexTreeVisitor.printMatches) {
+         errPW.println("There were " + vis.numMatches() + " matches in total.");
