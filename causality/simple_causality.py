@@ -1,6 +1,9 @@
-from gflags import DEFINE_list, DEFINE_integer, FLAGS, DuplicateFlagError
+from gflags import *
 import itertools
 import logging
+import os
+import re
+import subprocess
 
 from data import *
 from pipeline import ClassifierStage
@@ -9,7 +12,7 @@ from util import Enum
 
 try:
     DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
-                                'deplen', 'connectives', 'tenses'],
+                                'deplen', 'tenses', 'tregexes'],
                 'Features to use for simple causality model')
     DEFINE_integer('sc_max_words_btw_phrases', 10,
                    "Maximum number of words between phrases before just making"
@@ -17,6 +20,10 @@ try:
     DEFINE_integer('sc_max_dep_path_len', 3,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'");
+    DEFINE_string('tregex_command',
+                  '/home/jesse/Documents/Work/Research/'
+                  'stanford-tregex-2014-10-26/tregex.sh',
+                  'Command to run TRegex')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -87,9 +94,31 @@ class PhrasePairModel(ClassifierModel):
 
         return connectives_seen
 
+    @staticmethod
+    def make_connective_feature_extractors(connective_patterns):
+        connective_features = []
+        for connective_text, connective_position in connective_patterns:
+            def extractor(part):
+                for token in part.instance.tokens:
+                    if (token.original_text == connective_text and
+                        (PhrasePairModel.get_connective_position(
+                                token, part.head_token_1, part.head_token_2)
+                         == connective_position)):
+                        return True
+                return False
+            feature_name = '%s_%s' % (
+                connective_text,
+                PhrasePairModel.ConnectivePositions[
+                    connective_position])
+            connective_features.append((feature_name, extractor))
+
+        return connective_features
+
     # We're going to be extracting tenses for pairs of heads for the same
     # sentence. That means we'll get calls for the same head repeatedly, so we
     # cache them for as long as we're dealing with the same sentence.
+    # TODO: Make framework send "done training" or "done testing" signals to
+    # tell classifier to clear caches.
     __cached_tenses = {}
     __cached_tenses_sentence = None
     @staticmethod
@@ -113,12 +142,12 @@ class PhrasePairModel(ClassifierModel):
         copulas = head.parent_sentence.get_children(head, 'cop')
         if not copulas and head.pos in ParsedSentence.NOUN_TAGS:
             return '<NOM>'
-        
+
         auxiliaries = head.parent_sentence.get_children(head, 'aux')
         passive_auxes = head.parent_sentence.get_children(head, 'auxpass')
         auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
         auxes_plus_head.sort(key=lambda token: token.start_offset)
-        
+
         CONTRACTION_DICT = {
             "'s": 'is',
              "'m": 'am',
@@ -142,24 +171,67 @@ class PhrasePairModel(ClassifierModel):
         return '_'.join(aux_token_strings)
 
     @staticmethod
-    def make_connective_feature_extractors(connective_patterns):
-        connective_features = []
-        for connective_text, connective_position in connective_patterns:
-            def extractor(part):
-                for token in part.instance.tokens:
-                    if (token.original_text == connective_text and
-                        (PhrasePairModel.get_connective_position(
-                                token, part.head_token_1, part.head_token_2)
-                         == connective_position)):
-                        return True
-                return False
-            feature_name = '%s_%s' % (
-                connective_text,
-                PhrasePairModel.ConnectivePositions[
-                    connective_position])
-            connective_features.append((feature_name, extractor))
+    def extract_tregex_patterns(parts):
+        '''
+        # TODO: Complete this code, using a function that extracts TRegex
+        # expressions from connective instances, and limiting to 1-word
+        # connectives and arguments.
+        # TODO (later): Extend that code to multiple-word connectives and args.
+        causations_seen = set()
+        connectives_seen = set()
 
-        return connective_features
+        for part in parts:
+            parent_sentence = part.head_token_1.parent_sentence
+            for instance in parent_sentence.causation_instances:
+                if instance in causations_seen:
+                    continue
+                causations_seen.add(instance)
+        '''
+        # For now, just return one pattern we know works.
+        return ['__=effect[<2 /^VB.*/ | < (__ <1 cop)] < (__=cause  '
+                '[<2 /^VB.*/ | < (__ <1 cop)] <'
+                '(/^because_[0-9]+$/=connective <1 mark <2 IN))']
+
+    @staticmethod
+    def make_tregex_extractors(tregex_patterns):
+        '''
+        Things to cache:
+          1. Tree strings
+          2. Results of running particular TRegexes on particular trees
+        '''
+
+        features = []
+        for pattern in tregex_patterns:
+            def extractor(part):
+                # Get the tree to pass to TRegex
+                parent_sentence = part.head_token_1.parent_sentence
+                ptb_string = parent_sentence.to_ptb_tree_string()
+
+                # Run TRegex
+                tregex_process = subprocess.Popen(
+                    [FLAGS.tregex_command, '-u', '-s', '-o', '-h', 'cause',
+                     '-h', 'effect', pattern],
+                    stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdout, _ = tregex_process.communicate(ptb_string)
+
+                # Parse TRegex output
+                if stdout is None:
+                    return False
+                lines = stdout.split()
+                line_pairs = zip(lines[0::2], lines[1::2])
+                index_pairs = [sorted([int(line.split("_")[-1])
+                                       for line in line_pair])
+                                for line_pair in line_pairs]
+                for index_pair in index_pairs:
+                    if index_pair == [part.head_token_1.index,
+                                      part.head_token_2.index]:
+                        return True
+
+                return False
+
+            features.append((pattern, extractor))
+        return features
+
 
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the mapping.
@@ -192,7 +264,10 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
             PhrasePairModel.make_connective_feature_extractors)),
     'tenses': (Categorical, lambda part: '/'.join(
         [PhrasePairModel.extract_tense(head)
-         for head in part.head_token_1, part.head_token_2]))
+         for head in part.head_token_1, part.head_token_2])),
+    'tregexes' : (Categorical, TrainableFeatureExtractor(
+            PhrasePairModel.extract_tregex_patterns,
+            PhrasePairModel.make_tregex_extractors))
 }
 
 
