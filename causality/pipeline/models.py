@@ -101,6 +101,7 @@ class FeaturizedModel(Model):
                 self.feature_name_dictionary.insert(feature_name)
 
         for feature_name in self.selected_features:
+            logging.debug('Registering feature %s' % feature_name)
             feature_type, extractor = (
                 self.feature_extractor_map[feature_name])
 
@@ -113,6 +114,7 @@ class FeaturizedModel(Model):
                                  subfeature_extractor)
             else:
                 insert_names(feature_name, feature_type, extractor)
+        logging.debug('Finished registering features')
 
         # All the ones we logged feature values for were the boolean ones.
         # Now we register all the corresponding feature names.

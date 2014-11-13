@@ -1,9 +1,9 @@
 from gflags import *
 import itertools
+import pexpect
 import logging
 import os
 import re
-import subprocess
 
 from data import *
 from pipeline import ClassifierStage
@@ -130,6 +130,7 @@ class PhrasePairModel(ClassifierModel):
                 pass
         else:
             PhrasePairModel.__cached_tenses_sentence = head.parent_sentence
+            PhrasePairModel.__cached_tenses = {}
 
         tense = PhrasePairModel.__extract_tense_helper(head)
         PhrasePairModel.__cached_tenses[head] = tense
@@ -192,6 +193,9 @@ class PhrasePairModel(ClassifierModel):
                 '[<2 /^VB.*/ | < (__ <1 cop)] <'
                 '(/^because_[0-9]+$/=connective <1 mark <2 IN))']
 
+    __tregex_processes = {}
+    __cached_ptb_string = None
+    __cached_ptb_sentence = None
     @staticmethod
     def make_tregex_extractors(tregex_patterns):
         '''
@@ -202,22 +206,31 @@ class PhrasePairModel(ClassifierModel):
 
         features = []
         for pattern in tregex_patterns:
+            # To get rid of stderr junk, we need to redirect, which requires
+            # spawning a shell.
+            tregex_process = pexpect.spawn(
+                'sh',
+                ['-c', '%s -u -s -o -l -N -h cause -h effect -filter "" "%s"'
+                 ' 2> /dev/null' % (FLAGS.tregex_command, pattern)])
+            tregex_process.delaybeforesend = 0
+            tregex_process.setecho(False)
+            PhrasePairModel.__tregex_processes[pattern] = tregex_process
+            
             def extractor(part):
                 # Get the tree to pass to TRegex
                 parent_sentence = part.head_token_1.parent_sentence
-                ptb_string = parent_sentence.to_ptb_tree_string()
+                if parent_sentence is not PhrasePairModel.__cached_ptb_sentence:
+                    PhrasePairModel.__cached_ptb_string = (
+                        parent_sentence.to_ptb_tree_string())
+                    PhrasePairModel.__cached_ptb_sentence = parent_sentence
+                ptb_string = PhrasePairModel.__cached_ptb_string
 
-                # Run TRegex
-                tregex_process = subprocess.Popen(
-                    [FLAGS.tregex_command, '-u', '-s', '-o', '-h', 'cause',
-                     '-h', 'effect', pattern],
-                    stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-                stdout, _ = tregex_process.communicate(ptb_string)
+                # Interact with TRegex
+                tregex_process.sendline(ptb_string)
+                tregex_process.expect("\r\n\r\n") # look for the double newline
+                lines = tregex_process.before.split()[1:] # skip tree num line
 
                 # Parse TRegex output
-                if stdout is None:
-                    return False
-                lines = stdout.split()
                 line_pairs = zip(lines[0::2], lines[1::2])
                 index_pairs = [sorted([int(line.split("_")[-1])
                                        for line in line_pair])
