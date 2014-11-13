@@ -1,0 +1,140 @@
+diff -ru src-orig/edu/stanford/nlp/trees/PennTreeReader.java src/edu/stanford/nlp/trees/PennTreeReader.java
+--- src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-11 23:57:21.440509149 -0500
++++ src/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-12 20:38:19.729142309 -0500
+@@ -524,7 +524,7 @@
+   /**
+    * Prints out all matches of a tree pattern on each tree in the path.
+    * Usage: <br><br><code>
+-   * java edu.stanford.nlp.trees.tregex.TregexPattern [[-TCwfosnu] [-filter] [-h &lt;node-name&gt;]]* pattern
++   * java edu.stanford.nlp.trees.tregex.TregexPattern [[-TCwfoslnNu] [-filter] [-h &lt;node-name&gt;]]* pattern
+    *  filepath   </code>
+    *
+    * <p>
+@@ -543,8 +543,11 @@
+    * <li> <code>-o</code> Specifies that each tree node can be reported only once as the root of a match (by default a node will
+    * be printed once for every <em>way</em> the pattern matches).
+    * <li> <code>-s</code> causes trees to be printed all on one line (by default they are pretty printed).
++   * <li> <code>-l</code> causes an extra blank line to be printed after each tree for which something is output
+    * <li> <code>-n</code> causes the number of the tree in which the match was found to be
+    * printed before every match.
++   * <li> <code>-N</code> causes the number of each tree to be printed as it is examined, whether or not there's a match, and causes a double blank line after
++   * each tree that's examined. Overrides <code>-n</code>.
+    * <li> <code>-u</code> causes only the label of each matching node to be printed, not complete subtrees.
+    * <li> <code>-t</code> causes only the yield (terminal words) of the selected node to be printed (or the yield of the whole tree, if the <code>-w</code> option is used).
+    * <li> <code>-encoding &lt;charset_encoding&gt;</code> option allows specification of character encoding of trees..
+@@ -597,7 +600,9 @@
+     String wholeTreeMode = "-w";
+     String filenameOption = "-f";
+     String oneMatchPerRootNodeMode = "-o";
++    String extraBlankLines = "-l";
+     String reportTreeNumbers = "-n";
++    String alwaysReportTreeNumbers = "-N";
+     String rootLabelOnly = "-u";
+     String oneLine = "-s";
+     Map<String,Integer> flagMap = Generics.newHashMap();
+@@ -619,7 +624,9 @@
+     flagMap.put(printAllTrees, 0);
+     flagMap.put(filenameOption, 0);
+     flagMap.put(oneMatchPerRootNodeMode, 0);
++    flagMap.put(extraBlankLines, 0);
+     flagMap.put(reportTreeNumbers, 0);
++    flagMap.put(alwaysReportTreeNumbers, 0);
+     flagMap.put(rootLabelOnly, 0);
+     flagMap.put(oneLine, 0);
+     Map<String, String[]> argsMap = StringUtils.argsToMap(args, flagMap);
+@@ -643,7 +650,7 @@
+     }
+
+     if (args.length < 1) {
+-      errPW.println("Usage: java edu.stanford.nlp.trees.tregex.TregexPattern [-T] [-C] [-w] [-f] [-o] [-n] [-s] [-filter]  [-hf class] [-trf class] [-h handle]* pattern [filepath]");
++      errPW.println("Usage: java edu.stanford.nlp.trees.tregex.TregexPattern [-T] [-C] [-w] [-f] [-o] [-l] [-n] [-N] [-s] [-filter]  [-hf class] [-trf class] [-h handle]* pattern [filepath]");
+       return;
+     }
+     String matchString = args[0];
+@@ -692,8 +699,12 @@
+     }
+     if(argsMap.containsKey(oneMatchPerRootNodeMode))
+       TRegexTreeVisitor.oneMatchPerRootNode = true;
++    if(argsMap.containsKey(extraBlankLines))
++      TRegexTreeVisitor.extraBlankLines = true;
+     if(argsMap.containsKey(reportTreeNumbers))
+       TRegexTreeVisitor.reportTreeNumbers = true;
++    if(argsMap.containsKey(alwaysReportTreeNumbers))
++      TRegexTreeVisitor.alwaysReportTreeNumbers = true;
+     if (argsMap.containsKey(rootLabelOnly)) {
+       treePrintFormats.append(TreePrint.rootLabelOnlyFormat).append(',');
+     } else if (argsMap.containsKey(oneLine)) { // display short form
+@@ -789,7 +808,9 @@
+     static boolean printMatches = true;
+     static boolean printFilename = false;
+     static boolean oneMatchPerRootNode = false;
++    static boolean extraBlankLines = false;
+     static boolean reportTreeNumbers = false;
++    static boolean alwaysReportTreeNumbers = false;
+
+     static TreePrint tp;
+     private PrintWriter pw;
+@@ -820,16 +841,30 @@
+         pw.println("Next tree read:");
+         tp.printTree(t,pw);
+       }
++      if (alwaysReportTreeNumbers) {
++    	  pw.println(treeNumber + ":");
++      }
++
+       TregexMatcher match = p.matcher(t);
+       if(printNonMatchingTrees) {
+-        if(match.find())
++        if(match.find()) {
+           numMatches++;
+-        else
++          if (extraBlankLines && (alwaysReportTreeNumbers || printTree)) {
++            pw.println();
++          }
++        }
++        else {
+           tp.printTree(t,pw);
++          if (extraBlankLines) {
++          	pw.println();
++          }
++        }
+         return;
+       }
+       Tree lastMatchingRootNode = null;
++      boolean anyMatches = false;
+       while (match.find()) {
++    	anyMatches = true;
+         if(oneMatchPerRootNode) {
+           if(lastMatchingRootNode == match.getMatch())
+             continue;
+@@ -837,6 +872,7 @@
+             lastMatchingRootNode = match.getMatch();
+         }
+         numMatches++;
++
+         if (printFilename && treebank instanceof DiskTreebank) {
+           DiskTreebank dtb = (DiskTreebank) treebank;
+           pw.print("# ");
+@@ -847,8 +883,9 @@
+           pw.print(':');
+           pw.println(match.getMatch().nodeNumber(t));
+         }
++
+         if (printMatches) {
+-          if(reportTreeNumbers) {
++          if(reportTreeNumbers && !alwaysReportTreeNumbers) {
+             pw.print(treeNumber);
+             pw.print(": ");
+           }
+@@ -875,6 +912,11 @@
+           // pw.println();  // TreePrint already puts a blank line in
+         } // end if (printMatches)
+       } // end while match.find()
++
++      if (extraBlankLines && (printTree || alwaysReportTreeNumbers ||
++    		  				  (anyMatches && (printMatches || printSubtreeCode || printFilename)))) {
++      	pw.println();
++      }
+     } // end visitTree
+
+     public int numMatches() {
