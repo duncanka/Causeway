@@ -278,7 +278,9 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
     'tenses': (Categorical, lambda part: '/'.join(
         [PhrasePairModel.extract_tense(head)
          for head in part.head_token_1, part.head_token_2])),
-    'tregexes' : (Categorical, TrainableFeatureExtractor(
+    # The tregexes feature is numerical in the sense that for each pattern it
+    # extracts, the subfeature for that pattern is binary (present or not).
+    'tregexes' : (Numerical, TrainableFeatureExtractor(
             PhrasePairModel.extract_tregex_patterns,
             PhrasePairModel.make_tregex_extractors))
 }

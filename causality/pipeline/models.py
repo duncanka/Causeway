@@ -97,11 +97,15 @@ class FeaturizedModel(Model):
             if feature_type == self.FeatureTypes.Categorical:
                 value_set = set([feature_extractor(part) for part in parts])
                 feature_values[feature_name] = value_set
+                num_values = len(value_set)
             else: # feature_type == Numerical
                 self.feature_name_dictionary.insert(feature_name)
+                num_values = 1
+            logging.debug('%d feature map entries for feature "%s"'
+                           % (num_values, feature_name))
 
         for feature_name in self.selected_features:
-            logging.debug('Registering feature %s' % feature_name)
+            logging.debug('Registering feature "%s"' % feature_name)
             feature_type, extractor = (
                 self.feature_extractor_map[feature_name])
 
