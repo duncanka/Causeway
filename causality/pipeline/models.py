@@ -90,9 +90,10 @@ class FeaturizedModel(Model):
 
     def train(self, parts):
         # Build feature name dictionary. (Unfortunately, this means we featurize
-        # everything twice, but I can't think of a cleverer way.)
-        feature_values = {}
+        # most things twice, but I can't think of a cleverer way.)
+        logging.info("Registering features...")
 
+        feature_values = {}
         def insert_names(feature_name, feature_type, feature_extractor):
             if feature_type == self.FeatureTypes.Categorical:
                 value_set = set([feature_extractor(part) for part in parts])
@@ -101,24 +102,28 @@ class FeaturizedModel(Model):
             else: # feature_type == Numerical
                 self.feature_name_dictionary.insert(feature_name)
                 num_values = 1
-            logging.debug('%d feature map entries for feature "%s"'
-                           % (num_values, feature_name))
+            return num_values
 
         for feature_name in self.selected_features:
             logging.debug('Registering feature "%s"' % feature_name)
+            num_values = 0
+
             feature_type, extractor = (
                 self.feature_extractor_map[feature_name])
-
             if isinstance(extractor, TrainableFeatureExtractor):
                 self.feature_training_data[feature_name] = (
                     extractor.train(parts, feature_name))
                 for subfeature_name, subfeature_extractor in (
                     extractor.subfeature_extractor_map.iteritems()):
-                    insert_names(subfeature_name, feature_type,
-                                 subfeature_extractor)
+                    num_values += insert_names(subfeature_name, feature_type,
+                                               subfeature_extractor)
             else:
-                insert_names(feature_name, feature_type, extractor)
-        logging.debug('Finished registering features')
+                num_values = insert_names(
+                    feature_name, feature_type, extractor)
+
+            logging.debug("%d features registered in map for '%s'" % (
+                            num_values, feature_name))
+        logging.info('Done registering features.')
 
         # All the ones we logged feature values for were the boolean ones.
         # Now we register all the corresponding feature names.
