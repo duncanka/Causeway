@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=logging.INFO)
+        level=logging.DEBUG)
     logging.captureWarnings(True)
 
     if FLAGS.classifier_model == 'tree':
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'svm':
         classifier = svm.SVC()
     elif FLAGS.classifier_model == 'forest':
-        classifier = ensemble.RandomForestClassifier()
+        classifier = ensemble.RandomForestClassifier(n_jobs=-1)
 
     classifier = ClassBalancingModelWrapper(classifier, FLAGS.rebalance_ratio)
 
