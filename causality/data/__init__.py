@@ -24,6 +24,14 @@ class Annotation(object):
         return self.offsets[0][0] < other.offsets[0][0]
 
 class Token(object):
+    NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP", "WDT"]
+    # TODO:should MD be included below?
+    VERB_TAGS = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD"]
+    ADVERB_TAGS = ["RB", "RBR", "RBS", "WRB"]
+    ADJECTIVE_TAGS = ["JJ", "JJR", "JJS"]
+    DET_TAGS = ["DT", "EX", "PDT"]
+    POS_GENERAL = {} # created for real below
+
     def __init__(self, index, parent_sentence, original_text, pos, lemma,
                  start_offset=None, end_offset=None, is_absent=False,
                  copy_of=None):
@@ -40,10 +48,18 @@ class Token(object):
     def is_root(self):
         return self.pos == 'ROOT'
 
+    def get_gen_pos(self):
+        return Token.POS_GENERAL.get(self.pos, self.pos)
+
     def __repr__(self):
         return "Token(%s/%s [%s:%s])" % (
             self.original_text, self.pos, self.start_offset, self.end_offset)
 
+Token.POS_GENERAL = merge_dicts(
+    [{tag: 'NOUN' for tag in Token.NOUN_TAGS},
+     {tag: 'VERB' for tag in Token.VERB_TAGS},
+     {tag: 'ADV' for tag in Token.ADVERB_TAGS},
+     {tag: 'ADJ' for tag in Token.ADJECTIVE_TAGS}])
 
 class DependencyPath(list):
     def __str__(self):
@@ -68,13 +84,6 @@ class DependencyPathError(ValueError):
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
-    NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP", "WDT"]
-    # TODO:should MD be included below?
-    VERB_TAGS = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "MD"]
-    ADVERB_TAGS = ["RB", "RBR", "RBS", "WRB"]
-    ADJECTIVE_TAGS = ["JJ", "JJR", "JJS"]
-    DET_TAGS = ["DT", "EX", "PDT"]
-    POS_GENERAL = {} # created for real below
 
     @staticmethod
     def unescape_token_text(token_text):
@@ -140,6 +149,15 @@ class ParsedSentence(object):
                 words_between += 1
         return words_between
 
+    def get_most_direct_parent(self, token):
+        '''
+        Returns a tuple (e, p), p is the parent of the given token along the
+        shortest path to root, and e is the label of the edge from p to token.
+        '''
+        parent_index = self.__path_predecessors[0, token.index]
+        edge_label = self.edge_labels[(parent_index, token.index)]
+        return (edge_label, self.tokens[parent_index])
+
     def get_children(self, token, edge_type=None):
         '''
         If edge_type is given, returns a list of children of token related by an
@@ -162,7 +180,7 @@ class ParsedSentence(object):
         if token.pos == 'ROOT':
             return False
         try:
-            self.VERB_TAGS.index(token.pos)
+            Token.VERB_TAGS.index(token.pos)
             if token.pos != 'MD': # Modals, though verbs, aren't clause heads
                 return True
         except ValueError: # this POS wasn't in the list
@@ -426,12 +444,6 @@ class ParsedSentence(object):
         _, self.__path_predecessors = csgraph.shortest_path(
             self.edge_graph, unweighted=True, return_predecessors=True,
             directed=False)
-
-ParsedSentence.POS_GENERAL = merge_dicts(
-    [{tag: 'NOUN' for tag in ParsedSentence.NOUN_TAGS},
-     {tag: 'VERB' for tag in ParsedSentence.VERB_TAGS},
-     {tag: 'ADV' for tag in ParsedSentence.ADVERB_TAGS},
-     {tag: 'ADJ' for tag in ParsedSentence.ADJECTIVE_TAGS}])
 
 
 class CausationInstance(object):
