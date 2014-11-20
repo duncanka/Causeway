@@ -141,7 +141,7 @@ class PhrasePairModel(ClassifierModel):
         # If it's not a copular construction and it's a noun phrase, the whole
         # argument is a noun phrase, so the notion of tense doesn't apply.
         copulas = head.parent_sentence.get_children(head, 'cop')
-        if not copulas and head.pos in ParsedSentence.NOUN_TAGS:
+        if not copulas and head.pos in Token.NOUN_TAGS:
             return '<NOM>'
 
         auxiliaries = head.parent_sentence.get_children(head, 'aux')
@@ -173,13 +173,46 @@ class PhrasePairModel(ClassifierModel):
 
     @staticmethod
     def extract_tregex_patterns(parts):
-        '''
-        # TODO: Complete this code, using a function that extracts TRegex
-        # expressions from connective instances, and limiting to 1-word
-        # connectives and arguments.
-        # TODO (later): Extend that code to multiple-word connectives and args.
+        # TODO: Extend this code to multiple-word connectives and args.
+        # TODO: Figure out tree transformations to get rid of dumb things like
+        #       conjunctions that introduce spurious differences btw patterns?
+        patterns = set()
         causations_seen = set()
-        connectives_seen = set()
+
+        def get_connective_arg_pattern(connective, arg, arg_name):
+            parent_sentence = connective.parent_sentence
+            dep_path = parent_sentence.extract_dependency_path(connective, arg)
+            pattern = '=connective'
+            last_node = connective
+
+            for source, target, dep_name in dep_path:
+                if last_node is connective:
+                    node_name = '=' + arg_name
+                else:
+                    node_name = ''
+
+                if source is last_node: # forward dependency
+                    next_node = target
+                else: # dependency was traversed backwards
+                    next_node = source
+
+                if parent_sentence.is_clause_head(next_node):
+                    node_pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
+                else:
+                    node_pos_pattern = ('<2 /^%s.*/' % next_node.get_gen_pos())
+
+                # Pattern also depends on which way the dependency goes.
+                if source is last_node: # forward dependency
+                    pattern = '%s < (__%s %s <1 %s' % (
+                        pattern, node_name, node_pos_pattern, dep_name)
+                else: # dependency was traversed backwards
+                    pattern = '%s <1 %s > (__%s %s' % (
+                        pattern, dep_name, node_name, node_pos_pattern)
+
+                last_node = next_node
+
+            pattern += ')' * len(dep_path)
+            return pattern
 
         for part in parts:
             parent_sentence = part.head_token_1.parent_sentence
@@ -187,17 +220,39 @@ class PhrasePairModel(ClassifierModel):
                 if instance in causations_seen:
                     continue
                 causations_seen.add(instance)
-        '''
-        # For now, just return one pattern we know works.
-        return ['__=effect[<2 /^VB.*/ | < (__ <1 cop)] < (__=cause  '
-                '[<2 /^VB.*/ | < (__ <1 cop)] <'
-                '(/^because_[0-9]+$/=connective <1 mark <2 IN))']
+
+                if (len(instance.connective) == 1 and instance.cause is not None
+                    and instance.effect is not None):
+                    connective = instance.connective[0]
+                    cause_head = parent_sentence.get_head(instance.cause)
+                    effect_head = parent_sentence.get_head(instance.effect)
+
+                    cause_pattern = get_connective_arg_pattern(
+                        connective, cause_head, 'cause')
+                    effect_pattern = (
+                        get_connective_arg_pattern(connective,
+                                                   effect_head, 'effect'))
+
+                    connective_pattern = (
+                        '/^%s_[0-9]+$/=connective <2 /^%s.*/' % (
+                            connective.lemma, connective.get_gen_pos()))
+
+                    pattern = '%s : %s : %s' % (
+                        connective_pattern, cause_pattern, effect_pattern)
+
+                    patterns.add(pattern)
+
+        return patterns
 
     __tregex_processes = {}
     __cached_ptb_string = None
     __cached_ptb_sentence = None
     @staticmethod
     def make_tregex_extractors(tregex_patterns):
+        for process in PhrasePairModel.__tregex_processes.values():
+            process.kill(9)
+        PhrasePairModel.__tregex_processes.clear()
+
         '''
         Things to cache:
           1. Tree strings
@@ -215,7 +270,7 @@ class PhrasePairModel(ClassifierModel):
             tregex_process.delaybeforesend = 0
             tregex_process.setecho(False)
             PhrasePairModel.__tregex_processes[pattern] = tregex_process
-            
+
             def extractor(part):
                 # Get the tree to pass to TRegex
                 parent_sentence = part.head_token_1.parent_sentence
@@ -263,10 +318,8 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
     'pos1': (Categorical, lambda part: part.head_token_1.pos),
     'pos2': (Categorical, lambda part: part.head_token_2.pos),
     # Generalized POS tags don't seem to be that useful.
-    'pos1gen': (Categorical, lambda part: ParsedSentence.POS_GENERAL.get(
-        part.head_token_1.pos, part.head_token_1.pos)),
-    'pos2gen': (Categorical, lambda part: ParsedSentence.POS_GENERAL.get(
-        part.head_token_2.pos, part.head_token_2.pos)),
+    'pos1gen': (Categorical, lambda part: part.head_token_1.get_gen_pos()),
+    'pos2gen': (Categorical, lambda part: part.head_token_2.get_gen_pos()),
     'wordsbtw': (Numerical, PhrasePairModel.words_btw_heads),
     'deppath': (Categorical, PhrasePairModel.extract_dep_path),
     'deplen': (Numerical,
@@ -309,7 +362,7 @@ class SimpleCausalityStage(ClassifierStage):
                          if (sentence.get_depth(token) < len(sentence.tokens)
                              # Only consider clause or noun phrase heads.
                              and (sentence.is_clause_head(token)
-                                  or token.pos in ParsedSentence.NOUN_TAGS))]
+                                  or token.pos in Token.NOUN_TAGS))]
         return [PhrasePairPart(sentence, t1, t2, ((t1, t2) in head_token_pairs))
                 for t1, t2 in itertools.combinations(clause_tokens, 2)]
 

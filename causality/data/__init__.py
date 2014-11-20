@@ -56,10 +56,10 @@ class Token(object):
             self.original_text, self.pos, self.start_offset, self.end_offset)
 
 Token.POS_GENERAL = merge_dicts(
-    [{tag: 'NOUN' for tag in Token.NOUN_TAGS},
-     {tag: 'VERB' for tag in Token.VERB_TAGS},
+    [{tag: 'NN' for tag in Token.NOUN_TAGS},
+     {tag: 'VB' for tag in Token.VERB_TAGS},
      {tag: 'ADV' for tag in Token.ADVERB_TAGS},
-     {tag: 'ADJ' for tag in Token.ADJECTIVE_TAGS}])
+     {tag: 'RB' for tag in Token.ADJECTIVE_TAGS}])
 
 class DependencyPath(list):
     def __str__(self):
@@ -272,7 +272,7 @@ class ParsedSentence(object):
         visited = set()
         def convert_node(node, incoming_arc_label):
             visited.add(node)
-            node_str = '(%s_%d %s %s' % (node.original_text, node.index,
+            node_str = '(%s_%d %s %s' % (node.lemma, node.index,
                                          incoming_arc_label, node.pos)
             for child_arc_label, child in sorted(
                 self.get_children(node), key=lambda pair: pair[1].start_offset):
