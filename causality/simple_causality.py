@@ -2,8 +2,6 @@ from gflags import *
 import itertools
 import pexpect
 import logging
-import os
-import re
 
 from data import *
 from pipeline import ClassifierStage
@@ -186,26 +184,26 @@ class PhrasePairModel(ClassifierModel):
             last_node = connective
 
             for source, target, dep_name in dep_path:
-                if last_node is connective:
+                forward_dependency = source is last_node
+                if forward_dependency:
+                    next_node = target
+                else:
+                    next_node = source
+
+                if next_node is arg:
                     node_name = '=' + arg_name
                 else:
                     node_name = ''
-
-                if source is last_node: # forward dependency
-                    next_node = target
-                else: # dependency was traversed backwards
-                    next_node = source
 
                 if parent_sentence.is_clause_head(next_node):
                     node_pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
                 else:
                     node_pos_pattern = ('<2 /^%s.*/' % next_node.get_gen_pos())
 
-                # Pattern also depends on which way the dependency goes.
-                if source is last_node: # forward dependency
+                if forward_dependency:
                     pattern = '%s < (__%s %s <1 %s' % (
                         pattern, node_name, node_pos_pattern, dep_name)
-                else: # dependency was traversed backwards
+                else:
                     pattern = '%s <1 %s > (__%s %s' % (
                         pattern, dep_name, node_name, node_pos_pattern)
 
@@ -240,6 +238,9 @@ class PhrasePairModel(ClassifierModel):
                     pattern = '%s : %s : %s' % (
                         connective_pattern, cause_pattern, effect_pattern)
 
+                    #if pattern not in patterns:
+                    #    print 'Adding pattern:\n\t%s\n\tSentence: %s\n' % (
+                    #        pattern, parent_sentence.original_text)
                     patterns.add(pattern)
 
         return patterns
