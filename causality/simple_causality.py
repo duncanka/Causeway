@@ -245,8 +245,9 @@ class PhrasePairModel(ClassifierModel):
         return patterns
 
     __tregex_processes = {}
-    __cached_ptb_string = None
-    __cached_ptb_sentence = None
+    __cached_tregex_results = {}
+    __cached_ptb_str = None
+    __cached_tregex_sentence = None
     @staticmethod
     def make_tregex_extractors(tregex_patterns):
         for process in PhrasePairModel.__tregex_processes.values():
@@ -274,22 +275,31 @@ class PhrasePairModel(ClassifierModel):
             def extractor(part):
                 # Get the tree to pass to TRegex
                 parent_sentence = part.head_token_1.parent_sentence
-                if parent_sentence is not PhrasePairModel.__cached_ptb_sentence:
-                    PhrasePairModel.__cached_ptb_string = (
+                if parent_sentence is not (
+                    PhrasePairModel.__cached_tregex_sentence):
+                    PhrasePairModel.__cached_tregex_sentence = parent_sentence
+                    PhrasePairModel.__cached_tregex_results = {}
+                    PhrasePairModel.__cached_ptb_str = (
                         parent_sentence.to_ptb_tree_string())
-                    PhrasePairModel.__cached_ptb_sentence = parent_sentence
-                ptb_string = PhrasePairModel.__cached_ptb_string
 
-                # Interact with TRegex
-                tregex_process.sendline(ptb_string)
-                tregex_process.expect("\r\n\r\n") # look for the double newline
-                lines = tregex_process.before.split()[1:] # skip tree num line
+                try:
+                    index_pairs = PhrasePairModel.__cached_tregex_results[pattern]
+                except KeyError:
+                    ptb_string = PhrasePairModel.__cached_ptb_str
 
-                # Parse TRegex output
-                line_pairs = zip(lines[0::2], lines[1::2])
-                index_pairs = [sorted([int(line.split("_")[-1])
-                                       for line in line_pair])
-                                for line_pair in line_pairs]
+                    # Interact with TRegex
+                    tregex_process.sendline(ptb_string)
+                    tregex_process.expect("\r\n\r\n") # look for the double newline
+                    lines = tregex_process.before.split()[1:] # skip tree num line
+
+                    # Parse TRegex output
+                    line_pairs = zip(lines[0::2], lines[1::2])
+                    index_pairs = [sorted([int(line.split("_")[-1])
+                                           for line in line_pair])
+                                    for line_pair in line_pairs]
+                    PhrasePairModel.__cached_tregex_results[pattern] = (
+                        index_pairs)
+
                 for index_pair in index_pairs:
                     if index_pair == [part.head_token_1.index,
                                       part.head_token_2.index]:
