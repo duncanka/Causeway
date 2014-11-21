@@ -201,7 +201,8 @@ class StandoffReader(Reader):
 
         for line in lines:
             try:
-                line_parts = line.strip().split('\t')
+                stripped = line.strip()
+                line_parts = stripped.split('\t')
                 if len(line_parts) < 2:
                     raise UserWarning(
                         "Ignoring line not formatted as ID, tab, content")
@@ -225,10 +226,10 @@ class StandoffReader(Reader):
                 elif line_id[0] == '#': # skip annotator notes lines silently
                     continue
                 else:
-                    logging.info("Ignoring annotation line: %s" % line.strip())
+                    logging.info("Ignoring annotation line: %s" % stripped)
 
             except UserWarning as e:
-                logging.warn('%s (Line: %s)' % (e.message, line))
+                logging.warn('%s (Line: %s)' % (e.message, stripped))
                 return
 
         # There is no possibility of cyclical relationships in our annotation
@@ -264,7 +265,7 @@ class StandoffReader(Reader):
 
         self.__raise_warning_if(
             ' ' not in type_and_indices_str,
-            'Skipping annotanion span line with no space in type/index string')
+            'Skipping annotation span line with no space in type/index string')
         first_space_idx = type_and_indices_str.index(' ')
         indices_str = type_and_indices_str[first_space_idx + 1:]
         annotation_offsets = []
@@ -287,7 +288,7 @@ class StandoffReader(Reader):
 
         # Create the instance if necessary.
         annotation_type = type_and_indices_str[:first_space_idx]
-        if annotation_type != 'Argument':
+        if annotation_type != 'Argument' and annotation_type != 'Note':
             self.__raise_warning_if(
                 annotation_type not in CausationInstance.CausationTypes,
                 "Skipping text annotation with invalid causation type")

@@ -160,7 +160,7 @@ class CausalityMetrics(object):
 
         def log_missing(instance, number):
             print(property_type_name,
-                  (' property not set in Annotation %d;' % number),
+                  ('property not set in Annotation %d;' % number),
                   'not including in analysis (sentence: "',
                   get_truncated_sentence(instance_1) + '")',
                   file=sys.stderr)
