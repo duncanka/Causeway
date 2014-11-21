@@ -98,7 +98,8 @@ class CausalityMetrics(object):
             matches, CausationInstance.Degrees, 'degree', gold)
         self.causation_type_matrix = self._compute_agreement_matrix(
             matches, CausationInstance.CausationTypes, 'type', gold)
-        self.arg_metrics, self.arg_label_matrix = self._match_arguments(matches)
+        self.arg_metrics, self.arg_label_matrix = self._match_arguments(
+            matches, gold)
 
     def __get_causations(self, sentence):
         causations = []
@@ -150,10 +151,10 @@ class CausalityMetrics(object):
 
         if self.save_differences:
             self.gold_only_instances = [
-                (gold.index(i.source_sentence), i) 
+                (gold.index(i.source_sentence) + 1, i) 
                 for i in gold_only_instances]
             self.predicted_only_instances = [
-                (predicted.index(i.source_sentence), i) 
+                (predicted.index(i.source_sentence) + 1, i) 
                 for i in predicted_only_instances]
 
         return (connective_metrics, matching_instances)
@@ -183,14 +184,15 @@ class CausalityMetrics(object):
             else:
                 labels_1.append(property_1)
                 labels_2.append(property_2)
-                sentence_num = gold_sentences.index(instance_1.source_sentence)
+                sentence_num = (
+                    gold_sentences.index(instance_1.source_sentence) + 1)
                 if property_1 != property_2 and self.save_differences:
                     self.property_differences.append(
                         (instance_1, instance_2, labels_enum, sentence_num))
 
         return ConfusionMatrix(labels_1, labels_2)
 
-    def _match_arguments(self, matches):
+    def _match_arguments(self, matches, gold):
         # Initially, we assume every argument was unique. We'll update this
         # incrementally as we find matches.
         gold_only_args = predicted_only_args = 2 * len(matches)
@@ -202,6 +204,7 @@ class CausalityMetrics(object):
         for instance_1, instance_2 in matches:
             gold_args = (instance_1.cause, instance_1.effect)
             predicted_args = (instance_2.cause, instance_2.effect)
+            sentence_num = gold.index(instance_1.source_sentence) + 1
 
             predicted_args_matched = [False, False]
             for i in range(len(gold_args)):
@@ -225,7 +228,8 @@ class CausalityMetrics(object):
                         predicted_labels.append(self.ArgTypes[j])
                         if self.save_differences and i != j:
                             self.property_differences.append(
-                                (instance_1, instance_2, self.ArgTypes))
+                                (instance_1, instance_2, self.ArgTypes,
+                                 sentence_num))
                         predicted_args_matched[j] = True
                         gold_only_args -= 1
                         predicted_only_args -= 1
