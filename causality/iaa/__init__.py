@@ -95,9 +95,9 @@ class CausalityMetrics(object):
         self.connective_metrics, matches = self._match_connectives(
             gold, predicted)
         self.degree_matrix = self._compute_agreement_matrix(
-            matches, CausationInstance.Degrees, 'degree')
+            matches, CausationInstance.Degrees, 'degree', gold)
         self.causation_type_matrix = self._compute_agreement_matrix(
-            matches, CausationInstance.CausationTypes, 'type')
+            matches, CausationInstance.CausationTypes, 'type', gold)
         self.arg_metrics, self.arg_label_matrix = self._match_arguments(matches)
 
     def __get_causations(self, sentence):
@@ -149,12 +149,17 @@ class CausalityMetrics(object):
                 len(gold_only_instances))
 
         if self.save_differences:
-            self.gold_only_instances = gold_only_instances
-            self.predicted_only_instances = predicted_only_instances
+            self.gold_only_instances = [
+                (gold.index(i.source_sentence), i) 
+                for i in gold_only_instances]
+            self.predicted_only_instances = [
+                (predicted.index(i.source_sentence), i) 
+                for i in predicted_only_instances]
 
         return (connective_metrics, matching_instances)
 
-    def _compute_agreement_matrix(self, matches, labels_enum, property_name):
+    def _compute_agreement_matrix(self, matches, labels_enum, property_name,
+                                  gold_sentences):
         labels_1 = []
         labels_2 = []
 
@@ -178,9 +183,10 @@ class CausalityMetrics(object):
             else:
                 labels_1.append(property_1)
                 labels_2.append(property_2)
+                sentence_num = gold_sentences.index(instance_1.source_sentence)
                 if property_1 != property_2 and self.save_differences:
                     self.property_differences.append(
-                        (instance_1, instance_2, labels_enum))
+                        (instance_1, instance_2, labels_enum, sentence_num))
 
         return ConfusionMatrix(labels_1, labels_2)
 
@@ -248,10 +254,12 @@ class CausalityMetrics(object):
 
         if log_differences:
             print_indented(indent, 'Annotation differences:')
-            for instance in self.gold_only_instances:
-                self._log_unique_instance(instance, 1, indent + 1)
-            for instance in self.predicted_only_instances:
-                self._log_unique_instance(instance, 2, indent + 1)
+            for sentence_num, instance in self.gold_only_instances:
+                self._log_unique_instance(instance, sentence_num, 1, 
+                                          indent + 1)
+            for sentence_num, instance in self.predicted_only_instances:
+                self._log_unique_instance(instance, sentence_num, 2,
+                                           indent + 1)
             self._log_property_differences(CausationInstance.CausationTypes,
                                            indent + 1)
             self._log_property_differences(CausationInstance.Degrees,
@@ -291,12 +299,13 @@ class CausalityMetrics(object):
 
 
     @staticmethod
-    def _log_unique_instance(instance, annotator_num, indent):
+    def _log_unique_instance(instance, sentence_num, annotator_num, indent):
         connective_text = ParsedSentence.get_annotation_text(
             instance.connective)
         print_indented(indent, "Annotation", annotator_num,
                        'only: "%s"' % connective_text,
-                       '(sentence: "%s")' % get_truncated_sentence(instance))
+                       '(sentence #%d: "%s")' 
+                       % (sentence_num, get_truncated_sentence(instance)))
 
     def _log_property_differences(self, property_enum, indent):
         if property_enum is self.ArgTypes:
@@ -312,7 +321,7 @@ class CausalityMetrics(object):
 
         filtered_differences = [x for x in self.property_differences
                                 if x[2] is property_enum]
-        for instance_1, instance_2, _ in filtered_differences:
+        for instance_1, instance_2, _, sentence_num in filtered_differences:
             if value_extractor:
                 values = (value_extractor(instance_1),
                           value_extractor(instance_2))
@@ -321,5 +330,5 @@ class CausalityMetrics(object):
                 ParsedSentence.get_annotation_text(instance_1.connective),
                 '" differ',
                 (': %s vs. %s' % values if value_extractor else ''),
-                ' (sentence: "', get_truncated_sentence(instance_1), '")',
-                sep='')
+                ' (sentence #', sentence_num, ': "', 
+                get_truncated_sentence(instance_1), '")', sep='')
