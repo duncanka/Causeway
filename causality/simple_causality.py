@@ -175,7 +175,7 @@ class PhrasePairModel(ClassifierModel):
         # TODO: Figure out tree transformations to get rid of dumb things like
         #       conjunctions that introduce spurious differences btw patterns?
         patterns = set()
-        causations_seen = set()
+        sentences_seen = set()
 
         def get_connective_arg_pattern(connective, arg, arg_name):
             parent_sentence = connective.parent_sentence
@@ -214,11 +214,11 @@ class PhrasePairModel(ClassifierModel):
 
         for part in parts:
             parent_sentence = part.head_token_1.parent_sentence
-            for instance in parent_sentence.causation_instances:
-                if instance in causations_seen:
-                    continue
-                causations_seen.add(instance)
+            if parent_sentence in sentences_seen:
+                continue
+            sentences_seen.add(parent_sentence)
 
+            for instance in parent_sentence.causation_instances:
                 if (len(instance.connective) == 1 and instance.cause is not None
                     and instance.effect is not None):
                     connective = instance.connective[0]
