@@ -10,7 +10,8 @@ from data.readers import *
 from pipeline import *
 from pipeline.models import ClassBalancingModelWrapper
 from simple_causality import SimpleCausalityStage
-from util import metrics, print_indented
+from util import print_indented
+from util.metrics import ClassificationMetrics
 
 try:
     gflags.DEFINE_enum('classifier_model', 'svm',
@@ -20,6 +21,9 @@ try:
     gflags.DEFINE_float(
         'rebalance_ratio', 1.0,
         'The maximum ratio by which to rebalance classes for training')
+    gflags.DEFINE_bool('eval_with_cv', False,
+                       'Evaluate with cross-validation. Overrides --evaluate'
+                       ' flag, and causes both train and test to be combined.')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -55,17 +59,26 @@ if __name__ == '__main__':
         SimpleCausalityStage(classifier),
         DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
-    if FLAGS.train_paths:
-        causality_pipeline.train()
-
-    if FLAGS.evaluate:
-        eval_results = causality_pipeline.evaluate()
+    def print_eval(eval_results):
         stage_names = [p.name for p in causality_pipeline.stages]
         for stage_name, result in zip(stage_names, eval_results):
             print "Evaluation for stage %s:" % stage_name
             print_indented(1, result)
-    elif FLAGS.test_paths:
-        causality_pipeline.test()
+
+    if FLAGS.eval_with_cv:
+        print "Evaluating with %d-fold cross-validation" % FLAGS.cv_folds
+        eval_results = causality_pipeline.cross_validate(
+            stage_aggregators=[ClassificationMetrics.average])
+        print_eval(eval_results)
+    else:
+        if FLAGS.train_paths:
+            causality_pipeline.train()
+
+        if FLAGS.evaluate:
+            eval_results = causality_pipeline.evaluate()
+            print_eval(eval_results)
+        elif FLAGS.test_paths:
+            causality_pipeline.test()
 
 #if __name__ == '__main__':
 #    main(sys.argv)

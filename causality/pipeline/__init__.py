@@ -1,9 +1,12 @@
 """ Define basic pipeline functionality. """
 
 from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
+from copy import deepcopy
+import itertools
 import logging
+import random
 
-from util import listify
+from util import listify, partition
 from util.metrics import ClassificationMetrics
 
 # Define pipeline-related flags.
@@ -17,8 +20,11 @@ try:
     DEFINE_list('test_output_paths', [],
                 "Paths at which to place the test results."
                 " Defaults to test_paths. If this is a single path, it is used"
-                " for all test paths. If multiple paths are provided, they must"
-                " correspond one-to-one with the test paths provided.")
+                " for all test paths. If multiple paths are provided, they"
+                " must correspond one-to-one with the test paths provided.")
+    DEFINE_integer('cv_folds', 10,
+                   'How many folds to split data into for cross-validation.')
+    DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
     #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts"
     #               " (TP, agreement, etc.) for evaluation or IAA metrics.")
 except DuplicateFlagError as e:
@@ -32,27 +38,70 @@ class Pipeline(object):
         self.writer = writer
         self.eval_results = None
 
-    def train(self):
-        # TODO: set this up to do cross-validation or grid search or whatever.
-        # (It should be relatively straightforward using the instances argument
-        # to self.test().)
+    def _read_instances(self, paths=None):
         print "Creating instances..."
         instances = []
-        for path in FLAGS.train_paths:
-            print 'Reading training data from', path
+        for path in paths:
+            logging.info('Reading instances from %s' % path)
             self.reader.open(path)
             instances.extend(self.reader.get_all())
         self.reader.close()
-        print len(instances), "instances found"
+        return instances
+
+    def cross_validate(self, num_folds=None, stage_aggregators=None):
+        '''
+        Returns a list of results, organized by stage. If stage_aggregators is
+        provided, each list item is an aggregate result for the corresponding
+        stage. Otherwise, each list item is a list of the results achieved on
+        each fold.
+
+        stage_aggregators is a list of functions, each of which takes a list of
+        results for the corresponding pipeline stage (one result per fold) and
+        aggregates them into a single result for the stage.
+        '''
+        assert len(stage_aggregators) == len(self.stages)
+        if num_folds is None:
+            num_folds = FLAGS.cv_folds
+
+        instances = self._read_instances(FLAGS.train_paths + FLAGS.test_paths)
+        random.shuffle(instances)
+        folds = partition(instances, num_folds)
+        results = [[] for _ in self.stages]
+
+        for i, fold in enumerate(folds):
+            print "Beginning fold", i + 1
+            testing = fold
+            training = list(itertools.chain(
+                *[f for f in folds if f is not fold]))
+            self.train(training)
+            # Copy testing data so we don't overwrite original causation
+            # instances.
+            fold_results = self.evaluate(deepcopy(testing))
+            for stage_results, current_stage_result in zip(
+                results, fold_results):
+                stage_results.append(current_stage_result)
+
+        if stage_aggregators:
+            results = [aggregator(stage_results)
+                       for aggregator, stage_results
+                        in zip(stage_aggregators, results)]
+        return results
+
+    def train(self, instances=None):
+        if instances is None:
+            instances = self._read_instances(FLAGS.train_paths)
+            logging.info("%d instances found" % len(instances))
+        else:
+            logging.info("Training on %d instances" % len(instances))
 
         for stage in self.stages:
             print "Training stage %s..." % stage.name
             stage.train(instances)
             print "Finished training stage", stage.name
 
-    def evaluate(self):
+    def evaluate(self, instances=FLAGS.test_batch_size):
         self.eval_results = []
-        self.test()
+        self.test(instances)
         results = self.eval_results
         self.eval_results = None
         return results
@@ -104,7 +153,7 @@ class Pipeline(object):
         if self.writer:
             self.writer.close()
 
-    def test(self, instances=1024):
+    def test(self, instances=FLAGS.test_batch_size):
         """
         If instances is an integer, instances are read from the files specified
         in the test_path flags, and the parameter is interpreted as the number
