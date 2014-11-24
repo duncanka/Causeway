@@ -25,6 +25,8 @@ class Model(object):
     def test(self, destination_path):
         raise NotImplementedError
 
+# TODO: Make abstract FeatureExtractor class that can also do normal extraction
+
 class TrainableFeatureExtractor(object):
     def __init__(self, feature_training_data_extractor,
                  feature_extractor_creator):
@@ -58,6 +60,9 @@ class FeaturizedModel(Model):
                 self.names_to_ids[entry] = len(self.names_to_ids)
                 self.ids_to_names.append(entry)
 
+        def clear(self):
+            self.__init__()
+
         def __getitem__(self, entry):
             if isinstance(entry, int):
                 return self.ids_to_names[entry]
@@ -89,8 +94,12 @@ class FeaturizedModel(Model):
         self.feature_training_data = {}
 
     def train(self, parts):
-        # Build feature name dictionary. (Unfortunately, this means we featurize
-        # most things twice, but I can't think of a cleverer way.)
+        # Reset state in case we've been previously trained.
+        self.feature_name_dictionary.clear()
+        self.feature_training_data = {}
+
+        # Build feature name dictionary. (Unfortunately, this means we
+        # featurize most things twice, but I can't think of a cleverer way.)
         logging.info("Registering features...")
 
         feature_values = {}
