@@ -1,6 +1,7 @@
 import copy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
+import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
 
@@ -53,6 +54,16 @@ class ClassificationMetrics(object):
                     'F1: %g') % (
                         self.accuracy, self.precision, self.recall, self.f1)
 
+    @staticmethod
+    def average(metrics_list):
+        avg = ClassificationMetrics(0,0,0)
+        property_names = ['tp', 'fp', 'tn', 'fn', 'accuracy', 'precision',
+                          'recall', 'f1']
+        for property_name in property_names:
+            setattr(avg, property_name,
+                    sum([getattr(m, property_name) for m in metrics_list])
+                    / float(len(metrics_list)))
+        return avg
 
 def diff_binary_vectors(predicted, gold):
     # Make sure np.where works properly
