@@ -37,6 +37,14 @@ def truncated_string(string, truncate_to=25):
         truncated += '...'
     return truncated
 
+def partition(some_list, num_partitions):
+    ''' From http://stackoverflow.com/a/2660034/4044809 '''
+    division = len(some_list) / float(num_partitions)
+    partitions = [some_list[int(round(division * i)):
+                            int(round(division * (i + 1)))]
+                  for i in xrange(num_partitions)]
+    return partitions
+
 def print_indented(indent_level, *args, **kwargs):
     single_indent_str = kwargs.pop('single_indent_str', '    ')
 
