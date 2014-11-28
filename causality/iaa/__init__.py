@@ -1,6 +1,8 @@
 from __future__ import print_function
+from collections import defaultdict
 from gflags import *
 import logging
+import os
 import sys
 
 from data import *
@@ -139,8 +141,8 @@ class CausalityMetrics(object):
                 FLAGS.iaa_given_connective_ids), (
                     "Didn't find all expected given connectives! Perhaps"
                     " annotators re-annotated spans with different IDs?")
-            # Leave connective_metrics as None to indicate that there aren't any
-            # interesting values here. (Everything should be perfect.)
+            # Leave connective_metrics as None to indicate that there aren't
+            # any interesting values here. (Everything should be perfect.)
             connective_metrics = None
         elif self.ids_considered == CausalityMetrics.IDsConsidered.Both:
             connective_metrics = None
@@ -150,11 +152,24 @@ class CausalityMetrics(object):
                 len(gold_only_instances))
 
         if self.save_differences:
+            def sentences_by_file(sentences):
+                by_file = defaultdict(list)
+                for sentence in sentences:
+                    filename = os.path.split(sentence.source_file_path)[-1]
+                    by_file[filename].append(sentence)
+                return by_file
+            gold_by_file = sentences_by_file(gold)
+            predicted_by_file = sentences_by_file(predicted)
+
             self.gold_only_instances = [
-                (gold.index(i.source_sentence) + 1, i) 
+                (gold_by_file[os.path.split(
+                    i.source_sentence.source_file_path)[-1]]
+                 .index(i.source_sentence) + 1, i)
                 for i in gold_only_instances]
             self.predicted_only_instances = [
-                (predicted.index(i.source_sentence) + 1, i) 
+                (predicted_by_file[os.path.split(
+                    i.source_sentence.source_file_path)[-1]]
+                 .index(i.source_sentence) + 1, i)
                 for i in predicted_only_instances]
 
         return (connective_metrics, matching_instances)
@@ -259,7 +274,7 @@ class CausalityMetrics(object):
         if log_differences:
             print_indented(indent, 'Annotation differences:')
             for sentence_num, instance in self.gold_only_instances:
-                self._log_unique_instance(instance, sentence_num, 1, 
+                self._log_unique_instance(instance, sentence_num, 1,
                                           indent + 1)
             for sentence_num, instance in self.predicted_only_instances:
                 self._log_unique_instance(instance, sentence_num, 2,
@@ -306,10 +321,11 @@ class CausalityMetrics(object):
     def _log_unique_instance(instance, sentence_num, annotator_num, indent):
         connective_text = ParsedSentence.get_annotation_text(
             instance.connective)
-        print_indented(indent, "Annotation", annotator_num,
-                       'only: "%s"' % connective_text,
-                       '(sentence #%d: "%s")' 
-                       % (sentence_num, get_truncated_sentence(instance)))
+        filename = os.path.split(instance.source_sentence.source_file_path)[-1]
+        print_indented(
+            indent, "Annotation", annotator_num,
+            'only: "%s"' % connective_text, '(%s:%d: "%s")'
+            % (filename, sentence_num, get_truncated_sentence(instance)))
 
     def _log_property_differences(self, property_enum, indent):
         if property_enum is self.ArgTypes:
@@ -329,10 +345,12 @@ class CausalityMetrics(object):
             if value_extractor:
                 values = (value_extractor(instance_1),
                           value_extractor(instance_2))
+            filename = os.path.split(
+                instance_1.source_sentence.source_file_path)[-1]
             print_indented(
                 indent, property_name, 's for connective "',
                 ParsedSentence.get_annotation_text(instance_1.connective),
                 '" differ',
                 (': %s vs. %s' % values if value_extractor else ''),
-                ' (sentence #', sentence_num, ': "', 
+                ' (', filename, ':', sentence_num, ': "',
                 get_truncated_sentence(instance_1), '")', sep='')

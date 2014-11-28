@@ -41,7 +41,7 @@ def read_stream_until(stream, delimiter, case_insensitive, accumulate=True):
             accumulator += next_char
         # found_delimiter_until < len(delimiter), so what follows is safe.
         if next_char == delimiter[found_delimiter_until] or (
-                case_insensitive and next_char.lower() == 
+                case_insensitive and next_char.lower() ==
                 delimiter[found_delimiter_until].lower()):
             found_delimiter_until += 1
             if found_delimiter_until == len(delimiter):
