@@ -36,7 +36,7 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     unique_inverse : ndarray, optional
         The indices to reconstruct the (flattened) original array from the
         unique array. Only provided if `return_inverse` is True.
-        
+
         Note that, because the matrix is sparse, the full array of indices is
         not returned. Instead, an array i is returned such that, given an empty
         sparse matrix m with the same number of columns as there were elements
@@ -55,13 +55,14 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     # thing we need, and which is stored in sorted order of rows -> columns.
     # This means that np.unique returns the indices and inverse in terms of a
     # sensibly linearized mat. (The nonzero indices are also returned in
-    # row -> column order, which is useful for the return_inverse and 
+    # row -> column order, which is useful for the return_inverse and
     # return_index options.) Also, CSR is fairly memory-efficient and quick to
     # convert to from other formats.
     mat = mat.tocsr()
     size = mat.shape[0] * mat.shape[1] # mat.size just gives nnz
 
-    unique_data = np.unique(mat.data, return_index, return_inverse, return_counts)
+    unique_data = np.unique(mat.data, return_index, return_inverse,
+                            return_counts)
 
     # If there are no zeros, we can just pretend we're operating on a normal
     # dense array. All we have to do then is check whether we need to adapt the
@@ -82,7 +83,7 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
         # list of unique values.
         return np.insert(unique_data, 0, 0.0)
 
-    # If more values were requested, process other return values in the tuple 
+    # If more values were requested, process other return values in the tuple
     # as necessary.
     unique_data = list(reversed(unique_data))
     unique_values = unique_data.pop()
@@ -95,21 +96,21 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
             indices = unique_data.pop()
         if return_inverse:
             inverse = unique_data.pop()
-            
+
             # We're going to use inverse[0] as the array indices at which
             # values in the original matrix reside, and inverse[1] as the
             # indices in the unique array from which to draw those values.
             # We must add 1 to inverse[1] to account for the 0 in the initial
-            # position. 
-            
-            # The indices for the inverse matrix aren't accounting for the 
+            # position.
+
+            # The indices for the inverse matrix aren't accounting for the
             # presence of a zero value at the start of the list.
             inverse_unique_indices = inverse + 1
             # Initialize positions in original matrix to the values' current
-            # positions in the unique array. As we detect 0 values in the 
+            # positions in the unique array. As we detect 0 values in the
             # original matrix, we'll increase these indices accordingly.
             # (Again, we're using unique_values.size-1 because unique_values
-            # has that pesky zero at the start.) 
+            # has that pesky zero at the start.)
             inverse_orig_pos_indices = np.array(range(unique_values.size - 1))
 
         first_zero = None
@@ -132,19 +133,19 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
                         np.where(inverse_orig_pos_indices >= offset_i)
                         ] += difference
                 offset += difference
-        
+
         if return_index:
             ret += (indices,)
-        
+
         if return_inverse:
             inverse = np.vstack((inverse_orig_pos_indices,
                                  inverse_unique_indices))
             ret += (inverse,)
-            
+
     # Add counts for 0 value.
     if return_counts:
         counts = unique_data.pop()
         counts = np.insert(counts, 0, size - mat.nnz)
         ret += (counts,)
-        
+
     return ret
