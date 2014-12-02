@@ -252,9 +252,10 @@ class ClassBalancingModelWrapper(object):
         label_set, label_indices, label_counts = np.unique(
             labels, return_inverse=True, return_counts=True)
         max_count = label_counts.max()
-        counts_to_add = [min(max_count - current_count, ratio * current_count)
+        counts_to_add = [int(min(max_count - current_count,
+                             # -1 is to account for what we already have.
+                                (ratio - 1) * current_count))
                          for current_count in label_counts]
-        counts_to_add = [int(round(count)) for count in counts_to_add]
         rows_to_add = np.sum(counts_to_add)
         rebalanced_data = np.empty((rows_to_add, data.shape[1]), data.dtype)
         rebalanced_labels = np.empty((rows_to_add,), labels.dtype)
