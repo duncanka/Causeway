@@ -1,3 +1,4 @@
+from itertools import izip
 import numpy as np
 
 # See https://github.com/numpy/numpy/blob/master/numpy/lib/arraysetops.py#L96.
@@ -13,8 +14,8 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     Parameters
     ----------
     mat : sparse matrix
-        Input matrix. This will be flattened if it is not already 1-D, and
-        converted to a LIL matrix.
+        Input matrix. This will be converted to the CSR representation
+        internally.
     return_index : bool, optional
         If True, also return the indices of `mat` that result in the unique
         array.
@@ -37,10 +38,10 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
         unique array. Only provided if `return_inverse` is True.
         
         Note that, because the matrix is sparse, the full array of indices is
-        not returned. Instead, an array i is returned such that, given a sparse
-        all-zero matrix m with the same number of columns as there were
-        elements in mat, setting m[0, i[0]] = unique[i[1]] will reproduce the
-        original matrix.
+        not returned. Instead, an array i is returned such that, given an empty
+        sparse matrix m with the same number of columns as there were elements
+        in mat, setting m[0, i[0]] = unique[i[1]] will reproduce the original
+        matrix.
     unique_counts : ndarray, optional
         The number of times each of the unique values comes up in the
         original array. Only provided if `return_counts` is True.
@@ -50,15 +51,28 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     numpy.lib.arraysetops.unique : Basis for this function, but only works for
                                    dense matrices/arrays.
     """
+    # Convert to CSR because this format has a .data matrix, which is the main
+    # thing we need, and which is stored in sorted order of rows -> columns.
+    # This means that np.unique returns the indices and inverse in terms of a
+    # sensibly linearized mat. (The nonzero indices are also returned in
+    # row -> column order, which is useful for the return_inverse and 
+    # return_index options.) Also, CSR is fairly memory-efficient and quick to
+    # convert to from other formats.
+    mat = mat.tocsr()
     size = mat.shape[0] * mat.shape[1] # mat.size just gives nnz
-    flattened = mat.tolil().reshape((1, size))
-    data = np.array(flattened.data[0])
 
-    unique_data = np.unique(data, return_index, return_inverse, return_counts)
+    unique_data = np.unique(mat.data, return_index, return_inverse, return_counts)
 
     # If there are no zeros, we can just pretend we're operating on a normal
-    # dense array, and return the result unchanged.
-    if flattened.nnz == size:
+    # dense array. All we have to do then is check whether we need to adapt the
+    # inverse return value to our special sparse inverse format.
+    if mat.nnz == size:
+        if return_inverse:
+            inv_index = (2 if return_index else 1)
+            inverse = np.vstack((range(size), unique_data[inv_index]))
+            unique_data = list(unique_data)
+            unique_data[inv_index] = inverse
+            unique_data = tuple(unique_data)
         return unique_data
 
     # OK, there are some zeros.
@@ -97,13 +111,16 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
             # (Again, we're using unique_values.size-1 because unique_values
             # has that pesky zero at the start.) 
             inverse_orig_pos_indices = np.array(range(unique_values.size - 1))
-            
+
         first_zero = None
         offset = 0
-        # Only care about column indices, since we've flattened to have 1 row.
-        for i, index in enumerate(flattened.nonzero()[1]):
+        mat.sort_indices()
+        nonzero = mat.nonzero()
+
+        for i, (row, col) in enumerate(izip(nonzero[0], nonzero[1])):
             offset_i = i + offset
-            difference = index - offset_i
+            flattened_index = row * mat.shape[1] + col
+            difference = flattened_index - offset_i
             if difference > 0: # We've found one or more zero entries!
                 if return_index:
                     indices[np.where(indices >= offset_i)] += difference
