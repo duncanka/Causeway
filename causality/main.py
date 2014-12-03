@@ -6,8 +6,8 @@ import logging
 import sys
 FLAGS = gflags.FLAGS
 
-from data.readers import *
-from pipeline import *
+from data.readers import DirectoryReader, StandoffReader
+from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
 from simple_causality import SimpleCausalityStage
 from util import print_indented

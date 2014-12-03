@@ -3,6 +3,8 @@
 import gflags
 import logging
 import numpy as np
+from scipy.sparse import csr_matrix, lil_matrix, vstack
+import time
 
 from util import Enum
 from util.metrics import diff_binary_vectors
@@ -198,11 +200,21 @@ class ClassifierModel(FeaturizedModel):
         logging.info('Featurizing...')
         relevant_parts = [part for part in parts if isinstance(part,
                                                                self.part_type)]
-        features = np.zeros((len(relevant_parts),
-                             len(self.feature_name_dictionary)))
-        labels = np.array([part.label for part in relevant_parts])
+        features = lil_matrix(
+            (len(relevant_parts), len(self.feature_name_dictionary)),
+            dtype=np.float32) # TODO: Make this configurable?
+        labels = np.fromiter((part.label for part in relevant_parts),
+                             int, len(relevant_parts))
 
-        for part, row_ref in zip(relevant_parts, features):
+        last_printed_time = time.time()
+        for row_index, part in enumerate(relevant_parts):
+            if row_index % 100 == 0:
+                current_time = time.time()
+                if current_time - last_printed_time > 5:
+                    logging.info(
+                        "%d%% featurized" %
+                        (row_index / float(len(relevant_parts)) * 100))
+                    last_printed_time = current_time
             for feature_name in self.selected_features:
                 feature_type, extractor = (
                     self.feature_extractor_map[feature_name])
@@ -214,8 +226,9 @@ class ClassifierModel(FeaturizedModel):
                             feature_name, feature_value)
                         feature_value = 1.0
                     try:
-                        row_ref[self.feature_name_dictionary[feature_name]
-                                ] = feature_value
+                        features[row_index,
+                                 self.feature_name_dictionary[feature_name]
+                            ] = feature_value
                     except KeyError:
                         logging.debug('Ignoring unknown feature: %s' % feature_name)
 
@@ -226,6 +239,7 @@ class ClassifierModel(FeaturizedModel):
                 else:
                     insert_value(feature_name, extractor)
 
+        features = features.tocsr()
         logging.info('Done featurizing.')
         return features, labels
 
@@ -242,8 +256,9 @@ class ClassBalancingModelWrapper(object):
     @staticmethod
     def rebalance(data, labels, ratio=float('inf')):
         """
-        ratio indicates the maximum ratio by which any class is allowed to
-        increase.
+        data is a sparse matrix; labels is array-like.
+        ratio indicates the maximum ratio of its current count to which any
+        class is allowed to increase.
         """
         if ratio <= 1.0: # No increase
             return data, labels
@@ -251,13 +266,21 @@ class ClassBalancingModelWrapper(object):
         # Based on http://stackoverflow.com/a/23392678/4044809
         label_set, label_indices, label_counts = np.unique(
             labels, return_inverse=True, return_counts=True)
+
         max_count = label_counts.max()
-        counts_to_add = [int(min(max_count - current_count,
-                             # -1 is to account for what we already have.
-                                (ratio - 1) * current_count))
-                         for current_count in label_counts]
+        counts_to_add = [
+            # -1 adjusts for the current_count we already have
+            int(min(max_count - current_count, (ratio - 1) * current_count))
+            for current_count in label_counts]
         rows_to_add = np.sum(counts_to_add)
-        rebalanced_data = np.empty((rows_to_add, data.shape[1]), data.dtype)
+        if rows_to_add == 0:
+            # This is essential not just for efficiency, but because scipy's
+            # vstack apparently doesn't know how to vstack a 0-row matrix.
+            return data, labels
+
+        # Use lil_matrix to support slicing.
+        rebalanced_data = lil_matrix((rows_to_add, data.shape[1]),
+                                     dtype=data.dtype)
         rebalanced_labels = np.empty((rows_to_add,), labels.dtype)
 
         slices = np.concatenate(([0], np.cumsum(counts_to_add)))
@@ -274,10 +297,11 @@ class ClassBalancingModelWrapper(object):
                     indices = np.concatenate(indices,
                                              label_row_indices[:still_needed])
 
-            if label_indices.shape[0]: # only bother if there are > 0 indices
+            # Only bother to actually rebalance if there are changes to be made
+            if indices.shape[0]:
                 rebalanced_data[slices[j]:slices[j+1]] = data[indices]
                 rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
-        rebalanced_data = np.vstack((data, rebalanced_data))
+        rebalanced_data = vstack((data, rebalanced_data))
         rebalanced_labels = np.concatenate((labels, rebalanced_labels))
         return (rebalanced_data, rebalanced_labels)
 
