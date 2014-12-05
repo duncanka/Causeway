@@ -106,12 +106,10 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
             # The indices for the inverse matrix aren't accounting for the
             # presence of a zero value at the start of the list.
             inverse_unique_indices = inverse + 1
-            # Initialize positions in original matrix to the values' current
-            # positions in the unique array. As we detect 0 values in the
+            # Initialize positions in original matrix to values' current
+            # positions in the inverse array. As we detect 0 values in the
             # original matrix, we'll increase these indices accordingly.
-            # (Again, we're using unique_values.size-1 because unique_values
-            # has that pesky zero at the start.)
-            inverse_orig_pos_indices = np.array(range(unique_values.size - 1))
+            inverse_orig_pos_indices = np.array(range(len(inverse)))
 
         first_zero = None
         offset = 0
