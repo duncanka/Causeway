@@ -64,7 +64,8 @@ def make_annotation_comparator(allow_partial):
                 overlap_end = min(larger_offset[1], smaller_offset[1])
                 overlap_size = overlap_end - overlap_start
                 if overlap_size > 0:
-                    fraction_of_larger_overlapping += overlap_size / larger_length
+                    fraction_of_larger_overlapping += (
+                        overlap_size / larger_length
 
         return fraction_of_larger_overlapping > min_partial_overlap
 
@@ -72,7 +73,8 @@ def make_annotation_comparator(allow_partial):
 
 
 def get_truncated_sentence(instance):
-    return truncated_string(instance.source_sentence.original_text)
+    return truncated_string(
+        instance.source_sentence.original_text.replace('\n', ' '))
 
 class CausalityMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
