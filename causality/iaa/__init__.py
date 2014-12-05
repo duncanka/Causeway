@@ -146,7 +146,10 @@ class CausalityMetrics(object):
             # Leave connective_metrics as None to indicate that there aren't
             # any interesting values here. (Everything should be perfect.)
             connective_metrics = None
-        elif self.ids_considered == CausalityMetrics.IDsConsidered.Both:
+        # "Both" will only affect the connective stats if there are actually
+        # some given connectives.
+        elif (self.ids_considered == CausalityMetrics.IDsConsidered.Both
+              and FLAGS.iaa_given_connective_ids):
             connective_metrics = None
         else:
             connective_metrics = ClassificationMetrics(
@@ -294,7 +297,6 @@ class CausalityMetrics(object):
         if self.connective_metrics:
             if log_stats:
                 print_indented(indent + 1, self.connective_metrics)
-
         if log_stats or log_confusion:
             self._log_property_metrics('Degrees', self.degree_matrix,
                                        indent + 1, log_confusion, log_stats)
