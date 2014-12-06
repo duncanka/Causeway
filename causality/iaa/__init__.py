@@ -202,8 +202,8 @@ class CausalityMetrics(object):
             elif property_2 >= len(labels_enum):
                 log_missing(instance_2, 2)
             else:
-                labels_1.append(property_1)
-                labels_2.append(property_2)
+                labels_1.append(labels_enum[property_1])
+                labels_2.append(labels_enum[property_2])
                 sentence_num = (
                     gold_sentences.index(instance_1.source_sentence) + 1)
                 if property_1 != property_2 and self.save_differences:
@@ -292,11 +292,11 @@ class CausalityMetrics(object):
 
         # Ignore connective-related metrics if we have nothing interesting to
         # show there.
-        if log_stats or log_confusion or self.connective_metrics:
+        printing_connective_metrics = (log_stats and self.connective_metrics)
+        if printing_connective_metrics or log_confusion:
             print_indented(indent, 'Connectives:')
-        if self.connective_metrics:
-            if log_stats:
-                print_indented(indent + 1, self.connective_metrics)
+        if printing_connective_metrics:
+            print_indented(indent + 1, self.connective_metrics)
         if log_stats or log_confusion:
             self._log_property_metrics('Degrees', self.degree_matrix,
                                        indent + 1, log_confusion, log_stats)

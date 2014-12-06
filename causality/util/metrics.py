@@ -125,8 +125,12 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         Accepts a 'metrics' keyword argument (or fifth positional argument)
         indicating whether to print the agreement metrics, as well.
         """
+        try:
+            log_metrics = kwargs.pop('metrics')
+        except KeyError:
+            log_metrics = False
         pp = super(ConfusionMatrix, self).pp(*args, **kwargs)
-        if (len(args) > 4 and args[4] == True) or kwargs.get('metrics', False):
+        if (len(args) > 4 and args[4] == True) or log_metrics:
             pp += self.pp_metrics()
         return pp
 
