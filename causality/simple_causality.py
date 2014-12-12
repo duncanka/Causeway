@@ -22,6 +22,9 @@ try:
                   '/home/jesse/Documents/Work/Research/'
                   'stanford-tregex-2014-10-26/tregex.sh',
                   'Command to run TRegex')
+    DEFINE_bool('sc_print_test_instances', False,
+                'Whether to print true positive, false positive, and false'
+                ' negative instances after testing')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -402,6 +405,10 @@ class SimpleCausalityStage(ClassifierStage):
     def _begin_evaluation(self):
         super(SimpleCausalityStage, self)._begin_evaluation()
         self.tn = None
+        if FLAGS.sc_print_test_instances:
+            self.tp_instances = []
+            self.fn_instances = []
+            self.fp_instances = []
 
     def _prepare_for_evaluation(self, sentences):
         self._expected_causations = [set(sentence.causation_instances)
@@ -446,13 +453,32 @@ class SimpleCausalityStage(ClassifierStage):
                         break
                 if matching_expected_causation:
                     expected_causation_set.remove(matching_expected_causation)
+                    if FLAGS.sc_print_test_instances:
+                        self.tp_instances.append(causation_instance)
                 else:
-                    #print 'No match found for %s (cause: %s, effect: %s)' % (
-                    #    causation_instance.source_sentence.original_text,
-                    #    causation_instance.cause.original_text,
-                    #    causation_instance.effect.original_text)
                     self.fp += 1
+                    if FLAGS.sc_print_test_instances:
+                        self.fp_instances.append(causation_instance)
 
+            if FLAGS.sc_print_test_instances:
+                self.fn_instances.extend(expected_causation_set)
             self.fn += len(expected_causation_set)
 
         self._expected_causations = []
+
+    def _complete_evaluation(self, results):
+        super(SimpleCausalityStage, self)._complete_evaluation(results)
+        if not FLAGS.sc_print_test_instances:
+            return
+
+        for instances, inst_type in zip(
+            [self.tp_instances, self.fp_instances, self.fn_instances],
+            ['True positives', 'False positives', 'False negatives']):
+            print inst_type + ':'
+            for instance in instances:
+                print "    %s (cause: %s, effect: %s)" % (
+                    instance.source_sentence.original_text.replace('\n', ' '),
+                    instance.source_sentence.get_annotation_text(instance.cause),
+                    instance.source_sentence.get_annotation_text(instance.effect))
+
+            print '\n'

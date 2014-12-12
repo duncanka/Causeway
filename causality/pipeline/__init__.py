@@ -24,6 +24,8 @@ try:
                 " must correspond one-to-one with the test paths provided.")
     DEFINE_integer('cv_folds', 10,
                    'How many folds to split data into for cross-validation.')
+    DEFINE_integer('cv_debug_stop_after', None,
+                   'Number of CV rounds to stop after (for debugging)')
     DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
     #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts"
     #               " (TP, agreement, etc.) for evaluation or IAA metrics.")
@@ -80,6 +82,10 @@ class Pipeline(object):
             for stage_results, current_stage_result in zip(
                 results, fold_results):
                 stage_results.append(current_stage_result)
+
+            if (FLAGS.cv_debug_stop_after is not None 
+                and i + 1 >= FLAGS.cv_debug_stop_after):
+                break 
 
         if stage_aggregators:
             results = [aggregator(stage_results)

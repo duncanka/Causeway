@@ -91,7 +91,10 @@ class ParsedSentence(object):
 
     @staticmethod
     def get_annotation_text(annotation_tokens):
-        return ' '.join([token.original_text for token in annotation_tokens])
+        try:
+            return ' '.join([token.original_text for token in annotation_tokens])
+        except TypeError: # Happens if None is passed
+            return ''
 
     def __init__(self, tokenized_text, tagged_lemmas, edges, document_text):
         self.tokens = []
