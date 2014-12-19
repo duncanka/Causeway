@@ -5,7 +5,8 @@ import logging
 
 from data import *
 from pipeline import ClassifierStage
-from pipeline.models import *
+from pipeline.models import ClassifierPart, ClassifierModel
+from pipeline.feature_extractors import KnownValuesFeatureExtractor, TrainableFeatureExtractor, FeatureExtractor
 from util import Enum
 
 try:
@@ -326,31 +327,40 @@ class PhrasePairModel(ClassifierModel):
             PhrasePairModel.FEATURE_EXTRACTOR_MAP.copy(),
             FLAGS.sc_features, classifier)
 
-Categorical = PhrasePairModel.FeatureTypes.Categorical
-Numerical = PhrasePairModel.FeatureTypes.Numerical
-PhrasePairModel.FEATURE_EXTRACTOR_MAP = {
-    'pos1': (Categorical, lambda part: part.head_token_1.pos),
-    'pos2': (Categorical, lambda part: part.head_token_2.pos),
+Numerical = FeatureExtractor.FeatureTypes.Numerical
+FEATURE_EXTRACTORS = [
+    KnownValuesFeatureExtractor('pos1', lambda part: part.head_token_1.pos,
+                                Token.ALL_POS_TAGS),
+    KnownValuesFeatureExtractor('pos2', lambda part: part.head_token_2.pos,
+                                Token.ALL_POS_TAGS),
     # Generalized POS tags don't seem to be that useful.
-    'pos1gen': (Categorical, lambda part: part.head_token_1.get_gen_pos()),
-    'pos2gen': (Categorical, lambda part: part.head_token_2.get_gen_pos()),
-    'wordsbtw': (Numerical, PhrasePairModel.words_btw_heads),
-    'deppath': (Categorical, PhrasePairModel.extract_dep_path),
-    'deplen': (Numerical,
-               lambda part: len(part.instance.extract_dependency_path(
-                   part.head_token_1, part.head_token_2))),
-    'connectives': (Categorical, TrainableFeatureExtractor(
-            PhrasePairModel.extract_connective_patterns,
-            PhrasePairModel.make_connective_feature_extractors)),
-    'tenses': (Categorical, lambda part: '/'.join(
-        [PhrasePairModel.extract_tense(head)
-         for head in part.head_token_1, part.head_token_2])),
+    KnownValuesFeatureExtractor(
+        'pos1gen', lambda part: part.head_token_1.get_gen_pos(),
+        Token.ALL_POS_TAGS),
+    KnownValuesFeatureExtractor(
+        'pos2gen', lambda part: part.head_token_2.get_gen_pos(),
+        Token.ALL_POS_TAGS),
+    FeatureExtractor('wordsbtw', PhrasePairModel.words_btw_heads, Numerical),
+    FeatureExtractor('deppath', PhrasePairModel.extract_dep_path),
+    FeatureExtractor('deplen',
+                     lambda part: len(part.instance.extract_dependency_path(
+                        part.head_token_1, part.head_token_2))),
+    TrainableFeatureExtractor(
+        'connectives', PhrasePairModel.extract_connective_patterns,
+        PhrasePairModel.make_connective_feature_extractors),
+    FeatureExtractor('tenses',
+                     lambda part: '/'.join(
+                        [PhrasePairModel.extract_tense(head)
+                         for head in part.head_token_1, part.head_token_2])),
     # The tregexes feature is numerical in the sense that for each pattern it
     # extracts, the subfeature for that pattern is binary (present or not).
-    'tregexes' : (Numerical, TrainableFeatureExtractor(
-            PhrasePairModel.extract_tregex_patterns,
-            PhrasePairModel.make_tregex_extractors))
-}
+    TrainableFeatureExtractor(
+        'tregexes', PhrasePairModel.extract_tregex_patterns,
+        PhrasePairModel.make_tregex_extractors, Numerical)
+]
+
+PhrasePairModel.FEATURE_EXTRACTOR_MAP = {extractor.name: extractor
+                                         for extractor in FEATURE_EXTRACTORS}
 
 
 class SimpleCausalityStage(ClassifierStage):

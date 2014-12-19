@@ -31,6 +31,7 @@ class Token(object):
     ADJECTIVE_TAGS = ["JJ", "JJR", "JJS"]
     DET_TAGS = ["DT", "EX", "PDT"]
     POS_GENERAL = {} # created for real below
+    ALL_POS_TAGS = [] # created for real below
 
     def __init__(self, index, parent_sentence, original_text, pos, lemma,
                  start_offset=None, end_offset=None, is_absent=False,
@@ -60,6 +61,9 @@ Token.POS_GENERAL = merge_dicts(
      {tag: 'VB' for tag in Token.VERB_TAGS},
      {tag: 'ADV' for tag in Token.ADVERB_TAGS},
      {tag: 'RB' for tag in Token.ADJECTIVE_TAGS}])
+
+Token.ALL_POS_TAGS = (Token.NOUN_TAGS + Token.VERB_TAGS + Token.ADVERB_TAGS +
+                      Token.ADJECTIVE_TAGS + ["IN"])
 
 class DependencyPath(list):
     def __str__(self):

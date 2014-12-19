@@ -26,7 +26,7 @@ def listify(arg):
     return [arg]
 
 def merge_dicts(dictionaries):
-    d = dictionaries[0]
+    d = dictionaries[0].copy()
     for next_dict in dictionaries[1:]:
         d.update(next_dict)
     return d

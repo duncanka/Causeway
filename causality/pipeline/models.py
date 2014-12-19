@@ -3,10 +3,9 @@
 import gflags
 import logging
 import numpy as np
-from scipy.sparse import csr_matrix, lil_matrix, vstack
+from scipy.sparse import lil_matrix, vstack
 import time
 
-from util import Enum
 from util.metrics import diff_binary_vectors
 
 try:
@@ -27,31 +26,8 @@ class Model(object):
     def test(self, destination_path):
         raise NotImplementedError
 
-# TODO: Make abstract FeatureExtractor class that can also do normal extraction
-
-class TrainableFeatureExtractor(object):
-    def __init__(self, feature_training_data_extractor,
-                 feature_extractor_creator):
-        self.feature_training_data_extractor = feature_training_data_extractor
-        self.feature_extractor_creator = feature_extractor_creator
-        self.subfeature_extractor_map = None
-
-    def train(self, parts, feature_name):
-        extracted_data = self.feature_training_data_extractor(parts)
-        subfeature_extractors = self.feature_extractor_creator(extracted_data)
-        self.subfeature_extractor_map = dict(
-            (self._get_full_feature_name(feature_name, subfeature_name),
-             subfeature_extractor)
-            for subfeature_name, subfeature_extractor in subfeature_extractors)
-        return extracted_data
-
-    @staticmethod
-    def _get_full_feature_name(feature_name, subfeature_name):
-        return '%s:%s' % (feature_name, subfeature_name)
 
 class FeaturizedModel(Model):
-    FeatureTypes = Enum(['Categorical', 'Numerical'])
-
     class NameDictionary(object):
         def __init__(self):
             self.names_to_ids = {}
@@ -77,71 +53,41 @@ class FeaturizedModel(Model):
         def __contains__(self, entry):
             return self.names_to_ids.has_key(entry)
 
-    @staticmethod
-    def get_categorical_feature_name(base_name, value):
-        return '%s=%s' % (base_name, value)
-
     def __init__(self, part_type, feature_extractor_map, selected_features):
         """
         part_type is the class object corresponding to the part type this model
         is for.
         feature_extractor_map is a map from feature names to
-        (variable_type, feature_extractor_function) tuples.
+        `pipeline.feature_extractors.FeatureExtractor` objects.
         selected_features is a list of names of features to extract.
         """
         super(FeaturizedModel, self).__init__(part_type)
         self.selected_features = selected_features
         self.feature_name_dictionary = FeaturizedModel.NameDictionary()
         self.feature_extractor_map = feature_extractor_map
-        self.feature_training_data = {}
+        self.feature_training_data = None
 
     def train(self, parts):
         # Reset state in case we've been previously trained.
         self.feature_name_dictionary.clear()
-        self.feature_training_data = {}
+        self.feature_training_data = None
 
         # Build feature name dictionary. (Unfortunately, this means we
-        # featurize most things twice, but I can't think of a cleverer way.)
+        # featurize many things twice, but I can't think of a cleverer way to
+        # discover the possible values of a feature.)
         logging.info("Registering features...")
-
-        feature_values = {}
-        def insert_names(feature_name, feature_type, feature_extractor):
-            if feature_type == self.FeatureTypes.Categorical:
-                value_set = set([feature_extractor(part) for part in parts])
-                feature_values[feature_name] = value_set
-                num_values = len(value_set)
-            else: # feature_type == Numerical
-                self.feature_name_dictionary.insert(feature_name)
-                num_values = 1
-            return num_values
 
         for feature_name in self.selected_features:
             logging.debug('Registering feature "%s"' % feature_name)
-            num_values = 0
-
-            feature_type, extractor = (
-                self.feature_extractor_map[feature_name])
-            if isinstance(extractor, TrainableFeatureExtractor):
-                self.feature_training_data[feature_name] = (
-                    extractor.train(parts, feature_name))
-                for subfeature_name, subfeature_extractor in (
-                    extractor.subfeature_extractor_map.iteritems()):
-                    num_values += insert_names(subfeature_name, feature_type,
-                                               subfeature_extractor)
-            else:
-                num_values = insert_names(
-                    feature_name, feature_type, extractor)
-
+            extractor = self.feature_extractor_map[feature_name]
+            self.feature_training_data = extractor.train(parts)
+            subfeature_names = extractor.extract_subfeature_names(parts)
+            for subfeature_name in subfeature_names:
+                self.feature_name_dictionary.insert(subfeature_name)
             logging.debug("%d features registered in map for '%s'" % (
-                            num_values, feature_name))
-        logging.info('Done registering features.')
+                            len(subfeature_names), feature_name))
 
-        # All the ones we logged feature values for were the boolean ones.
-        # Now we register all the corresponding feature names.
-        for base_name, value_set in feature_values.iteritems():
-            for value in value_set:
-                self.feature_name_dictionary.insert(
-                    self.get_categorical_feature_name(base_name, value))
+        logging.info('Done registering features.')
 
         self._featurized_train(parts)
 
@@ -184,7 +130,8 @@ class ClassifierModel(FeaturizedModel):
         logging.debug('Raw classifier performance:')
         logging.debug('\n' + str(diff_binary_vectors(labels, old_labels)))
         '''
-        for part, label, old_label in zip(parts[:1000], labels[:1000], old_labels[:1000]):
+        for part, label, old_label in zip(
+            parts[:1000], labels[:1000], old_labels[:1000]):
             if label != old_label:
                 heads = (part.head_token_1, part.head_token_2)
                 if label and not old_label:
@@ -198,6 +145,8 @@ class ClassifierModel(FeaturizedModel):
 
     def _featurize(self, parts):
         logging.info('Featurizing...')
+        start_time = time.time()
+
         relevant_parts = [part for part in parts if isinstance(part,
                                                                self.part_type)]
         features = lil_matrix(
@@ -206,47 +155,40 @@ class ClassifierModel(FeaturizedModel):
         labels = np.fromiter((part.label for part in relevant_parts),
                              int, len(relevant_parts))
 
-        last_printed_time = time.time()
+        last_printed_time = start_time
         for row_index, part in enumerate(relevant_parts):
-            if row_index % 100 == 0:
+            if row_index % 300 == 0:
                 current_time = time.time()
                 if current_time - last_printed_time > 5:
                     logging.info(
                         "%d%% featurized" %
                         (row_index / float(len(relevant_parts)) * 100))
                     last_printed_time = current_time
+
             for feature_name in self.selected_features:
-                feature_type, extractor = (
-                    self.feature_extractor_map[feature_name])
-
-                def insert_value(feature_name, feature_extractor):
-                    feature_value = feature_extractor(part)
-                    if feature_type == self.FeatureTypes.Categorical:
-                        feature_name = self.get_categorical_feature_name(
-                            feature_name, feature_value)
-                        feature_value = 1.0
+                extractor = self.feature_extractor_map[feature_name]
+                subfeature_values = extractor.extract(part)
+                for subfeature_name, subfeature_value in (
+                    subfeature_values.iteritems()):
                     try:
-                        features[row_index,
-                                 self.feature_name_dictionary[feature_name]
-                            ] = feature_value
+                        feature_index = self.feature_name_dictionary[
+                            subfeature_name]
+                        features[row_index, feature_index] = subfeature_value
                     except KeyError:
-                        logging.debug('Ignoring unknown feature: %s' % feature_name)
-
-                if isinstance(extractor, TrainableFeatureExtractor):
-                    for subfeature_name, subfeature_extractor in (
-                        extractor.subfeature_extractor_map.iteritems()):
-                        insert_value(subfeature_name, subfeature_extractor)
-                else:
-                    insert_value(feature_name, extractor)
+                        logging.debug('Ignoring unknown subfeature: %s'
+                                      % subfeature_name)
 
         features = features.tocsr()
-        logging.info('Done featurizing.')
+        elapsed_seconds = time.time() - start_time
+        logging.info('Done featurizing in %0.2f seconds' % elapsed_seconds)
         return features, labels
+
 
 class ClassifierPart(object):
     def __init__(self, instance, label):
         self.label = int(label)
         self.instance = instance
+
 
 class ClassBalancingModelWrapper(object):
     def __init__(self, classifier, ratio=float('inf')):
@@ -290,7 +232,8 @@ class ClassBalancingModelWrapper(object):
                 indices = np.random.choice(label_row_indices,
                                            counts_to_add[j])
             else:
-                full_repetitions = counts_to_add[j] / label_row_indices.shape[0]
+                full_repetitions = (
+                    counts_to_add[j] / label_row_indices.shape[0])
                 indices = np.tile(label_row_indices, (full_repetitions,))
                 still_needed = indices.shape[0] - counts_to_add[j]
                 if still_needed:
