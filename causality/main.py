@@ -14,10 +14,10 @@ from util import print_indented
 from util.metrics import ClassificationMetrics
 
 try:
-    gflags.DEFINE_enum('classifier_model', 'svm',
+    gflags.DEFINE_enum('sc_classifier_model', 'svm',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
-                       'Which type of machine learning model to use as the'
-                       ' underlying classifier')
+                       'What type of machine learning model to use as the'
+                       ' underlying simple causality classifier')
     gflags.DEFINE_float(
         'rebalance_ratio', 1.0,
         'The maximum ratio by which to rebalance classes for training')
@@ -42,21 +42,22 @@ if __name__ == '__main__':
         level=logging.INFO)
     logging.captureWarnings(True)
 
-    if FLAGS.classifier_model == 'tree':
-        classifier = tree.DecisionTreeClassifier()
-    elif FLAGS.classifier_model == 'knn':
-        classifier = neighbors.KNeighborsClassifier()
-    elif FLAGS.classifier_model == 'logistic':
-        classifier = linear_model.LogisticRegression()
-    elif FLAGS.classifier_model == 'svm':
-        classifier = svm.SVC()
-    elif FLAGS.classifier_model == 'forest':
-        classifier = ensemble.RandomForestClassifier(n_jobs=-1)
+    if FLAGS.sc_classifier_model == 'tree':
+        sc_classifier = tree.DecisionTreeClassifier()
+    elif FLAGS.sc_classifier_model == 'knn':
+        sc_classifier = neighbors.KNeighborsClassifier()
+    elif FLAGS.sc_classifier_model == 'logistic':
+        sc_classifier = linear_model.LogisticRegression()
+    elif FLAGS.sc_classifier_model == 'svm':
+        sc_classifier = svm.SVC()
+    elif FLAGS.sc_classifier_model == 'forest':
+        sc_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
 
-    classifier = ClassBalancingModelWrapper(classifier, FLAGS.rebalance_ratio)
+    sc_classifier = ClassBalancingModelWrapper(sc_classifier,
+                                               FLAGS.rebalance_ratio)
 
     causality_pipeline = Pipeline(
-        SimpleCausalityStage(classifier),
+        SimpleCausalityStage(sc_classifier),
         DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
     def print_eval(eval_results):
