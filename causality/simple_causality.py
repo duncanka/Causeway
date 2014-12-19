@@ -1,9 +1,10 @@
-from gflags import *
+from gflags import DEFINE_list, DEFINE_integer, DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError
+
 import itertools
 import pexpect
 import logging
 
-from data import *
+from data import Token, CausationInstance, Annotation
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, TrainableFeatureExtractor, FeatureExtractor
