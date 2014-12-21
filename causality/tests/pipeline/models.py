@@ -5,18 +5,20 @@ Created on Dec 1, 2014
 '''
 from collections import defaultdict
 import numpy as np
-from scipy.sparse import lil_matrix
+from scipy.sparse import lil_matrix, vstack
 import unittest
 
 from pipeline.models import ClassBalancingModelWrapper
 
 
 class SmallClassBalancingTest(unittest.TestCase):
+    ZERO_ROW_VALS = [7, 8, 9]
+
     def setUp(self):
         self.data = lil_matrix(
             [[1, 2, 3],
              [4, 5, 6],
-             [7, 8, 9],
+             SmallClassBalancingTest.ZERO_ROW_VALS,
              [10, 11, 12]], dtype='float')
         self.labels = np.array([1, 1, 0, 1])
 
@@ -36,7 +38,7 @@ class SmallClassBalancingTest(unittest.TestCase):
 
     def _test_for_count(self, data, labels, count):
         # NOTE: This method relies on the values in the data matrix being
-        # unique.
+        # unique, or at least having consistent labels for row values.
         original_labels_by_row_val = {}
         for row, label in zip(self.as_list_of_lists(self.data), labels):
             original_labels_by_row_val[tuple(row)] = label
@@ -52,8 +54,8 @@ class SmallClassBalancingTest(unittest.TestCase):
 
         self.assertEqual(counts_by_row_val[(1.,2.,3.)], 1)
         self.assertEqual(counts_by_row_val[(4.,5.,6.)], 1)
-        self.assertEqual(counts_by_row_val[(7.,8.,9.)], count)
-        self.assertEqual(counts_by_row_val[(10,11,12)], 1)
+        self.assertEqual(counts_by_row_val[tuple(self.ZERO_ROW_VALS)], count)
+        self.assertEqual(counts_by_row_val[(10.,11.,12.)], 1)
 
     def test_unlimited_balancing(self):
         data, labels = ClassBalancingModelWrapper.rebalance(
@@ -71,3 +73,18 @@ class SmallClassBalancingTest(unittest.TestCase):
             data, labels = ClassBalancingModelWrapper.rebalance(
                 self.data, self.labels, ratio)
             self._test_for_count(data, labels, int(ratio))
+
+    def test_balancing_with_uneven_multiples(self):
+        # Add two new 0 rows, and 5 new 1 rows. Now the existing ratio of
+        # labels is 3:8. This will force rebalancing to have 2 leftover rows
+        # when it tries doing full replications. This makes this a good test
+        # case for the regression of making the difference negative.
+        self.data = vstack(
+            [self.data, self.ZERO_ROW_VALS, self.ZERO_ROW_VALS]
+                + ([[13, 13, 13]] * 5),
+            format='lil')
+        self.labels = np.append(self.labels, [0, 0] + [1] * 5)
+        data, labels = ClassBalancingModelWrapper.rebalance(
+            self.data, self.labels, 10)
+        # Rebalancing should have added 5 copies of the zero row, for a total of 8.
+        self._test_for_count(data, labels, 8)

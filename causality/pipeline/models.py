@@ -20,10 +20,10 @@ class Model(object):
     def __init__(self, part_type):
         self.part_type = part_type
 
-    def train(self, destination_path):
+    def train(self, parts):
         raise NotImplementedError
 
-    def test(self, destination_path):
+    def test(self, parts):
         raise NotImplementedError
 
 
@@ -235,10 +235,10 @@ class ClassBalancingModelWrapper(object):
                 full_repetitions = (
                     counts_to_add[j] / label_row_indices.shape[0])
                 indices = np.tile(label_row_indices, (full_repetitions,))
-                still_needed = indices.shape[0] - counts_to_add[j]
+                still_needed = counts_to_add[j] - indices.shape[0]
                 if still_needed:
-                    indices = np.concatenate(indices,
-                                             label_row_indices[:still_needed])
+                    indices = np.concatenate(
+                        (indices, label_row_indices[:still_needed]))
 
             # Only bother to actually rebalance if there are changes to be made
             if indices.shape[0]:
