@@ -1,6 +1,8 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
+import threading
 import logging
 import pexpect
+import time
 
 from data import ParsedSentence
 from util.metrics import ClassificationMetrics
@@ -19,7 +21,7 @@ except DuplicateFlagError as e:
 
 
 class PossibleCausation(object):
-    def __init__(self, arg1, arg2, matching_pattern, correct=None):
+    def __init__(self, arg1, arg2, matching_pattern, correct):
         self.arg1 = arg1
         self.arg2 = arg2
         self.matching_pattern = matching_pattern
@@ -108,45 +110,99 @@ class ConnectiveModel(Model):
         self.test(sentences)
 
     def test(self, sentences):
+        logging.info('Tagging possible connectives...')
         # TODO: Somehow allow persisting the TRegex processes across test
         # batches? Perhaps by allowing framework to send an indication that a
         # particular batch is the last one?
         self._spawn_processes()
 
-        for i, sentence in enumerate(sentences):
-            ptb_string = sentence.to_ptb_tree_string()
+        # Interacting with the TRegex processes is heavily I/O-bound, so we use
+        # threads to parallelize it a bit -- one thread per TRegex.
+
+        # First, do sentence pre-processing that's common across all TRegexes.
+        ptb_strings = []
+        true_causation_pairs_by_sentence = []
+        for sentence in sentences:
             sentence.possible_causations = []
+            ptb_strings.append(sentence.to_ptb_tree_string())
             true_causation_pairs = [
                 normalize_order(instance.get_cause_and_effect_heads())
                 for instance in sentence.causation_instances]
-            true_causations = set(
+            true_causation_pairs_by_sentence.append(set(
                 [(arg_1.index, arg_2.index)
                  for arg_1, arg_2 in true_causation_pairs
-                 if arg_1 is not None and arg_2 is not None])
+                 if arg_1 is not None and arg_2 is not None]))
 
-            for pattern, tregex_process in zip(self.tregex_patterns,
-                                               self.tregex_processes):
-                # Interact with TRegex.
-                tregex_process.sendline(ptb_string)
-                tregex_process.expect("\r\n\r\n") # look for the double newline
-                lines = tregex_process.before.split()[1:] # skip tree num line
+        # Define the function that each thread will perform: iterate over
+        # sentences and modify them according to their results.
+        class TregexProcessorThread(threading.Thread):
+            def __init__(self, pattern, tregex_process, *args, **kwargs):
+                super(TregexProcessorThread, self).__init__(*args, **kwargs)
+                self.pattern = pattern
+                self.tregex_process = tregex_process
+                self.progress = 0
 
-                # Parse TRegex output.
-                line_pairs = zip(lines[0::2], lines[1::2])
-                for line_pair in line_pairs:
-                    index_pair = [int(line.split("_")[-1])
-                                  for line in line_pair]
-                    index_pair = tuple(sorted(index_pair))
+            def run(self):
+                for sentence, ptb_string, true_causation_pairs in zip(
+                    sentences, ptb_strings, true_causation_pairs_by_sentence):
+                    # Interact with TRegex.
+                    self.tregex_process.sendline(ptb_string)
+                    # look for the double newline
+                    self.tregex_process.expect("\r\n\r\n")
+                    # skip tree num line
+                    lines = self.tregex_process.before.split()[1:]
 
-                    # Mark sentence if possible causal connective is present.
-                    t1_index, t2_index = index_pair
-                    possible = PossibleCausation(
-                        sentence.tokens[t1_index], sentence.tokens[t2_index],
-                        pattern, index_pair in true_causations)
-                    sentence.possible_causations.append(possible)
-            logging.debug("%d/%d sentences labeled" % (i+1, len(sentences)))
+                    # Parse TRegex output.
+                    line_pairs = zip(lines[0::2], lines[1::2])
+                    for line_pair in line_pairs:
+                        index_pair = [int(line.split("_")[-1])
+                                      for line in line_pair]
+                        index_pair = tuple(sorted(index_pair))
+
+                        # Mark sentence if possible connective is present.
+                        t1_index, t2_index = index_pair
+                        in_gold = index_pair in true_causation_pairs
+                        possible = PossibleCausation(
+                            sentence.tokens[t1_index],
+                            sentence.tokens[t2_index], pattern, in_gold)
+
+                        # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
+                        # It is thread-safe, because lists are thread-safe, and
+                        # we never reassign sentence.possible_causations.
+                        sentence.possible_causations.append(possible)
+
+                    self.progress += 1
+
+        # Start the threads.
+        threads = []
+
+        all_threads_done = False
+        def report_progress_repeatedly():
+            while(True):
+                time.sleep(3)
+                # This will be a slightly imprecise estimate, because progress
+                # numbers are being grabbed in a non-threadsafe way. Whatever.
+                progress = (sum([t.progress for t in threads])
+                            / float(len(threads) * len(sentences)))
+                if not all_threads_done:
+                    logging.info("Tagging connectives: %1.0f%% complete"
+                                 % (progress * 100))
+                else:
+                    break
+        progress_reporter = threading.Thread(target=report_progress_repeatedly)
+        progress_reporter.start()
+
+        for pattern, tregex_process in zip(self.tregex_patterns,
+                                           self.tregex_processes):
+            new_thread = TregexProcessorThread(pattern, tregex_process)
+            threads.append(new_thread)
+            new_thread.start()
+        for thread in threads:
+            thread.join()
+        all_threads_done = True
 
         self._kill_processes()
+        logging.info("Done tagging possible connectives.")
 
     def _spawn_processes(self):
         for pattern in self.tregex_patterns:
@@ -160,6 +216,9 @@ class ConnectiveModel(Model):
             tregex_process.delaybeforesend = 0
             tregex_process.setecho(False)
             self.tregex_processes.append(tregex_process)
+        logging.debug("Spawned %d TRegex processes"
+                      % len(self.tregex_patterns))
+
 
     def _kill_processes(self):
         for process in self.tregex_processes:
