@@ -8,8 +8,7 @@ from data import ParsedSentence
 from util.metrics import ClassificationMetrics
 from pipeline import Stage
 from pipeline.models import Model
-from stages import match_causation_pairs, print_instances_by_eval_result,\
-    normalize_order
+from stages import match_causation_pairs, print_instances_by_eval_result, normalize_order
 
 try:
     DEFINE_string('tregex_command',
@@ -76,7 +75,7 @@ class ConnectiveModel(Model):
         tregex_patterns = set()
         for sentence in sentences:
             for instance in sentence.causation_instances:
-                if (len(instance.connective) == 1 and instance.cause is not None
+                if (len(instance.connective) == 1 and instance.cause != None
                     and instance.effect is not None):
                     connective = instance.connective[0]
                     cause_head = sentence.get_head(instance.cause)
@@ -93,8 +92,9 @@ class ConnectiveModel(Model):
                         connective_pattern, cause_pattern, effect_pattern)
 
                     #if pattern not in tregex_patterns:
-                    #    logging.debug('Adding pattern:\n\t%s\n\tSentence: %s\n' % (
-                    #        pattern, sentence.original_text))
+                    #    logging.debug(
+                    #        'Adding pattern:\n\t%s\n\tSentence: %s\n'
+                    #        % (pattern, sentence.original_text))
                     tregex_patterns.add(pattern)
 
         self.tregex_patterns = list(tregex_patterns)
@@ -258,6 +258,7 @@ class ConnectiveStage(Stage):
     def _complete_evaluation(self):
         results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
         if FLAGS.sc_print_test_instances:
-            print_instances_by_eval_result(self.tp_pairs, self.fn_pairs, self.fp_pairs)
+            print_instances_by_eval_result(self.tp_pairs, self.fn_pairs,
+                                           self.fp_pairs)
             self.tp_pairs, self.fn_pairs, self.fp_pairs = [], [], []
         return results
