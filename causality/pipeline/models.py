@@ -129,19 +129,6 @@ class ClassifierModel(FeaturizedModel):
         logging.debug('%d data points' % len(old_labels))
         logging.debug('Raw classifier performance:')
         logging.debug('\n' + str(diff_binary_vectors(labels, old_labels)))
-        '''
-        for part, label, old_label in zip(
-            parts[:1000], labels[:1000], old_labels[:1000]):
-            if label != old_label:
-                heads = (part.head_token_1, part.head_token_2)
-                if label and not old_label:
-                    print 'False positive: %s (%s)' % (
-                        heads, part.instance.original_text)
-                elif old_label and not label:
-                    print 'False negative: %s (%s)' % (
-                        heads, part.instance.original_text)
-        #'''
-
 
     def _featurize(self, parts):
         logging.info('Featurizing...')
@@ -186,8 +173,8 @@ class ClassifierModel(FeaturizedModel):
 
 class ClassifierPart(object):
     def __init__(self, instance, label):
-        self.label = int(label)
         self.instance = instance
+        self.label = int(label)
 
 
 class ClassBalancingModelWrapper(object):
@@ -234,6 +221,8 @@ class ClassBalancingModelWrapper(object):
             else:
                 full_repetitions = (
                     counts_to_add[j] / label_row_indices.shape[0])
+                logging.debug("Increasing count for label %d by %d+"
+                              % (j, full_repetitions))
                 indices = np.tile(label_row_indices, (full_repetitions,))
                 still_needed = counts_to_add[j] - indices.shape[0]
                 if still_needed:

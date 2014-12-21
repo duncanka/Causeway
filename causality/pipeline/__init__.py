@@ -76,8 +76,7 @@ class Pipeline(object):
             training = list(itertools.chain(
                 *[f for f in folds if f is not fold]))
             self.train(training)
-            # Copy testing data so we don't overwrite original causation
-            # instances.
+            # Copy testing data so we don't overwrite original instances.
             fold_results = self.evaluate(deepcopy(testing))
             for stage_results, current_stage_result in zip(
                 results, fold_results):
@@ -91,6 +90,7 @@ class Pipeline(object):
             results = [aggregator(stage_results)
                        for aggregator, stage_results
                         in zip(stage_aggregators, results)]
+        self.eval_results = results
         return results
 
     def train(self, instances=None):
@@ -180,7 +180,7 @@ class Pipeline(object):
 
         if self.eval_results is not None:
             for stage in self.stages:
-                stage._complete_evaluation(self.eval_results)
+                self.eval_results.append(stage._complete_evaluation())
 
 
 class Stage(object):
@@ -220,6 +220,20 @@ class Stage(object):
                 instance, all_parts[parts_processed:next_parts_processed])
             parts_processed = next_parts_processed
 
+    def get_produced_attributes(self):
+        '''
+        Returns a list of attributes the stage adds to instances. Override if
+        a stage adds any attributes.
+        '''
+        return []
+
+    def get_consumed_attributes(self):
+        '''
+        Returns a list of attributes the stage removes from instances. Override
+        if a stage removes any attributes.
+        '''
+        return []
+
     def _evaluate(self, instances):
         raise NotImplementedError
 
@@ -227,12 +241,12 @@ class Stage(object):
         raise NotImplementedError
 
     def _decode_labeled_parts(self, instance, labeled_parts):
-        raise NotImplementedError
+        pass
 
     def _begin_evaluation(self):
         pass
 
-    def _complete_evaluation(self, results):
+    def _complete_evaluation(self):
         pass
 
     def _prepare_for_evaluation(self, instances):
@@ -252,6 +266,5 @@ class ClassifierStage(Stage):
         self.fp = 0
         self.fn = 0
 
-    def _complete_evaluation(self, results):
-        results.append(
-            ClassificationMetrics(self.tp, self.fp, self.fn, self.tn))
+    def _complete_evaluation(self):
+        return ClassificationMetrics(self.tp, self.fp, self.fn, self.tn)

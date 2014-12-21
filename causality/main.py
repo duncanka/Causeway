@@ -9,7 +9,8 @@ FLAGS = gflags.FLAGS
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from simple_causality import SimpleCausalityStage
+from stages.simple_causality import SimpleCausalityStage
+from stages.connective_stage import ConnectiveStage
 from util import print_indented
 from util.metrics import ClassificationMetrics
 
@@ -39,7 +40,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=logging.INFO)
+        level=logging.DEBUG)
     logging.captureWarnings(True)
 
     if FLAGS.sc_classifier_model == 'tree':
@@ -56,8 +57,10 @@ if __name__ == '__main__':
     sc_classifier = ClassBalancingModelWrapper(sc_classifier,
                                                FLAGS.rebalance_ratio)
 
+    connective_stage = ConnectiveStage('Connectives')
+    sc_stage = SimpleCausalityStage(sc_classifier)
     causality_pipeline = Pipeline(
-        SimpleCausalityStage(sc_classifier),
+        [connective_stage, sc_stage],
         DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
     def print_eval(eval_results):
@@ -69,7 +72,7 @@ if __name__ == '__main__':
     if FLAGS.eval_with_cv:
         print "Evaluating with %d-fold cross-validation" % FLAGS.cv_folds
         eval_results = causality_pipeline.cross_validate(
-            stage_aggregators=[ClassificationMetrics.average])
+            stage_aggregators=[ClassificationMetrics.average] * 2)
         print_eval(eval_results)
     else:
         if FLAGS.train_paths:
