@@ -3,6 +3,7 @@ import threading
 import logging
 import subprocess
 import tempfile
+import time
 
 from data import ParsedSentence
 from util.metrics import ClassificationMetrics
@@ -121,6 +122,7 @@ class ConnectiveModel(Model):
                     + [self.pattern, self.trees_file_path])
                 subprocess.call(full_tregex_command, stdout=tregex_output,
                                 stderr=self.dev_null)
+                self.progress += 2 * len(self.sentences)
                 tregex_output.seek(0)
 
                 # For each sentence, we leave the file positioned at the next
@@ -186,19 +188,45 @@ class ConnectiveModel(Model):
                  for arg_1, arg_2 in true_causation_pairs
                  if arg_1 is not None and arg_2 is not None]))
 
+        # Set up progress reporter
         threads = []
-        with tempfile.NamedTemporaryFile('w') as trees_file:
-            trees_file.writelines(ptb_strings)
+        all_threads_done = False
+        def report_progress_repeatedly():
+            while(True):
+                time.sleep(3)
+                # Each thread gets 3 * len(sentences) of progress points: two
+                # rounds for executing the TRegex processes and one for
+                # processing the results.
+                # This will be a slightly imprecise estimate, because progress
+                # numbers are being grabbed in a non-threadsafe way. Whatever.
+                progress = (sum([t.progress for t in threads])
+                            / float(len(threads) * 3 * len(sentences)))
+                if not all_threads_done:
+                    logging.info("Tagging connectives: %1.0f%% complete"
+                                 % (progress * 100))
+                else:
+                    break
+        progress_reporter = threading.Thread(target=report_progress_repeatedly)
+        progress_reporter.daemon = True
 
-            # Start the threads.
-            for pattern in self.tregex_patterns:
-                new_thread = self.TregexProcessorThread(
-                    pattern, trees_file.name, sentences,
-                    true_causation_pairs_by_sentence)
-                threads.append(new_thread)
-                new_thread.start()
-            for thread in threads:
-                thread.join()
+        try:
+            progress_reporter.start()
+
+            with tempfile.NamedTemporaryFile('w') as trees_file:
+                trees_file.writelines(ptb_strings)
+
+                # Start the threads.
+                for pattern in self.tregex_patterns:
+                    new_thread = self.TregexProcessorThread(
+                        pattern, trees_file.name, sentences,
+                        true_causation_pairs_by_sentence)
+                    threads.append(new_thread)
+                    new_thread.start()
+                for thread in threads:
+                    thread.join()
+        finally:
+            # Make sure progress reporter exits
+            all_threads_done = True
 
         logging.info("Done tagging possible connectives.")
 
