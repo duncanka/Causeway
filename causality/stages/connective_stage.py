@@ -1,8 +1,8 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
 import threading
 import logging
-import pexpect
-import time
+import subprocess
+import tempfile
 
 from data import ParsedSentence
 from util.metrics import ClassificationMetrics
@@ -30,7 +30,6 @@ class ConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
         super(ConnectiveModel, self).__init__(*args, **kwargs)
         self.tregex_patterns = []
-        self.tregex_processes = []
 
     @staticmethod
     def get_pattern_for_arg(connective, arg, arg_name):
@@ -99,58 +98,42 @@ class ConnectiveModel(Model):
 
         self.tregex_patterns = list(tregex_patterns)
 
-    def train(self, sentences):
-        self._extract_patterns(sentences)
-        # Now that we have all the patterns, we also need to make sure all the
-        # instances we pass along to the next stage have input matching what
-        # will be passed along at test time. That means we need false negatives
-        # in exactly the same places that they'll be at test time, so we just
-        # run test() to find all the correct and spurious matches.
-        logging.debug("Running test to generate input for next stage")
-        self.test(sentences)
+    class TregexProcessorThread(threading.Thread):
+        def __init__(self, pattern, trees_file_path, sentences,
+                     true_causation_pairs_by_sentence, *args, **kwargs):
+            super(ConnectiveModel.TregexProcessorThread, self).__init__(
+                *args, **kwargs)
+            self.pattern = pattern
+            self.progress = 0
+            self.trees_file_path = trees_file_path
+            self.sentences = sentences
+            self.true_causation_pairs_by_sentence = (
+                true_causation_pairs_by_sentence)
 
-    def test(self, sentences):
-        logging.info('Tagging possible connectives...')
-        # TODO: Somehow allow persisting the TRegex processes across test
-        # batches? Perhaps by allowing framework to send an indication that a
-        # particular batch is the last one?
-        self._spawn_processes()
+        dev_null = open('/dev/null', 'w')
+        tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
 
-        # Interacting with the TRegex processes is heavily I/O-bound, so we use
-        # threads to parallelize it a bit -- one thread per TRegex.
+        def run(self):
+            # Create input and output files
+            with tempfile.NamedTemporaryFile('w+b') as tregex_output:
+                full_tregex_command = (
+                    [FLAGS.tregex_command] + self.tregex_args
+                    + [self.pattern, self.trees_file_path])
+                subprocess.call(full_tregex_command, stdout=tregex_output,
+                                stderr=self.dev_null)
+                tregex_output.seek(0)
 
-        # First, do sentence pre-processing that's common across all TRegexes.
-        ptb_strings = []
-        true_causation_pairs_by_sentence = []
-        for sentence in sentences:
-            sentence.possible_causations = []
-            ptb_strings.append(sentence.to_ptb_tree_string())
-            true_causation_pairs = [
-                normalize_order(instance.get_cause_and_effect_heads())
-                for instance in sentence.causation_instances]
-            true_causation_pairs_by_sentence.append(set(
-                [(arg_1.index, arg_2.index)
-                 for arg_1, arg_2 in true_causation_pairs
-                 if arg_1 is not None and arg_2 is not None]))
-
-        # Define the function that each thread will perform: iterate over
-        # sentences and modify them according to their results.
-        class TregexProcessorThread(threading.Thread):
-            def __init__(self, pattern, tregex_process, *args, **kwargs):
-                super(TregexProcessorThread, self).__init__(*args, **kwargs)
-                self.pattern = pattern
-                self.tregex_process = tregex_process
-                self.progress = 0
-
-            def run(self):
-                for sentence, ptb_string, true_causation_pairs in zip(
-                    sentences, ptb_strings, true_causation_pairs_by_sentence):
-                    # Interact with TRegex.
-                    self.tregex_process.sendline(ptb_string)
-                    # look for the double newline
-                    self.tregex_process.expect("\r\n\r\n")
-                    # skip tree num line
-                    lines = self.tregex_process.before.split()[1:]
+                # For each sentence, we leave the file positioned at the next
+                # tree number line.
+                for sentence, true_causation_pairs in zip(
+                    self.sentences, self.true_causation_pairs_by_sentence):
+                    # Read TRegex output for the sentence.
+                    tregex_output.readline() # skip tree num line
+                    next_line = tregex_output.readline().strip()
+                    lines = []
+                    while next_line:
+                        lines.append(next_line)
+                        next_line = tregex_output.readline().strip()
 
                     # Parse TRegex output.
                     line_pairs = zip(lines[0::2], lines[1::2])
@@ -164,7 +147,7 @@ class ConnectiveModel(Model):
                         in_gold = index_pair in true_causation_pairs
                         possible = PossibleCausation(
                             sentence.tokens[t1_index],
-                            sentence.tokens[t2_index], pattern, in_gold)
+                            sentence.tokens[t2_index], self.pattern, in_gold)
 
                         # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
                         # It is thread-safe, because lists are thread-safe, and
@@ -173,57 +156,51 @@ class ConnectiveModel(Model):
 
                     self.progress += 1
 
-        # Start the threads.
+    def train(self, sentences):
+        self._extract_patterns(sentences)
+        # Now that we have all the patterns, we also need to make sure all the
+        # instances we pass along to the next stage have input matching what
+        # will be passed along at test time. That means we need false negatives
+        # in exactly the same places that they'll be at test time, so we just
+        # run test() to find all the correct and spurious matches.
+        logging.debug("Running test to generate input for next stage")
+        self.test(sentences)
+
+    def test(self, sentences):
+        logging.info('Tagging possible connectives...')
+        # Interacting with the TRegex processes is heavily I/O-bound, so we use
+        # threads to parallelize it a bit -- one thread per TRegex.
+
+        # First, do sentence pre-processing that's common across all TRegexes.
+        ptb_strings = []
+        true_causation_pairs_by_sentence = []
+        for sentence in sentences:
+            sentence.possible_causations = []
+            # Add newlines for writing to file later.
+            ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
+            true_causation_pairs = [
+                normalize_order(instance.get_cause_and_effect_heads())
+                for instance in sentence.causation_instances]
+            true_causation_pairs_by_sentence.append(set(
+                [(arg_1.index, arg_2.index)
+                 for arg_1, arg_2 in true_causation_pairs
+                 if arg_1 is not None and arg_2 is not None]))
+
         threads = []
+        with tempfile.NamedTemporaryFile('w') as trees_file:
+            trees_file.writelines(ptb_strings)
 
-        all_threads_done = False
-        def report_progress_repeatedly():
-            while(True):
-                time.sleep(3)
-                # This will be a slightly imprecise estimate, because progress
-                # numbers are being grabbed in a non-threadsafe way. Whatever.
-                progress = (sum([t.progress for t in threads])
-                            / float(len(threads) * len(sentences)))
-                if not all_threads_done:
-                    logging.info("Tagging connectives: %1.0f%% complete"
-                                 % (progress * 100))
-                else:
-                    break
-        progress_reporter = threading.Thread(target=report_progress_repeatedly)
-        progress_reporter.start()
+            # Start the threads.
+            for pattern in self.tregex_patterns:
+                new_thread = self.TregexProcessorThread(
+                    pattern, trees_file.name, sentences,
+                    true_causation_pairs_by_sentence)
+                threads.append(new_thread)
+                new_thread.start()
+            for thread in threads:
+                thread.join()
 
-        for pattern, tregex_process in zip(self.tregex_patterns,
-                                           self.tregex_processes):
-            new_thread = TregexProcessorThread(pattern, tregex_process)
-            threads.append(new_thread)
-            new_thread.start()
-        for thread in threads:
-            thread.join()
-        all_threads_done = True
-
-        self._kill_processes()
         logging.info("Done tagging possible connectives.")
-
-    def _spawn_processes(self):
-        for pattern in self.tregex_patterns:
-            # To get rid of stderr junk, we need to redirect, which requires
-            # spawning a shell.
-            # TODO: see if we can redirect stderr to /dev/null in another way.
-            tregex_process = pexpect.spawn(
-                'sh',
-                ['-c', '%s -u -s -o -l -N -h cause -h effect -filter "" "%s"'
-                 ' 2> /dev/null' % (FLAGS.tregex_command, pattern)])
-            tregex_process.delaybeforesend = 0
-            tregex_process.setecho(False)
-            self.tregex_processes.append(tregex_process)
-        logging.debug("Spawned %d TRegex processes"
-                      % len(self.tregex_patterns))
-
-
-    def _kill_processes(self):
-        for process in self.tregex_processes:
-            process.kill(9)
-        self.tregex_processes = []
 
 class ConnectiveStage(Stage):
     def __init__(self, name):
