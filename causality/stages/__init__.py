@@ -22,15 +22,15 @@ def normalize_order(token_pair):
     else:
         return (token_pair[1], token_pair[0])
 
-def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fn_pairs,
-                          fp_pairs):
+def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fp_pairs,
+                          fn_pairs):
     '''
     Match expected and predicted cause/effect pairs from a single sentence.
     expected_pairs and found_pairs are lists of Token tuples.
     *_instances are all lists in which to record the pairs of various sorts for
     later examination (ignored if FLAGS.sc_print_test_instances == False).
     '''
-    tp, fn, fp = 0, 0, 0
+    tp, fp, fn = 0, 0, 0
     found_pairs = [normalize_order(pair) for pair in found_pairs]
     expected_pairs = [normalize_order(pair) for pair in expected_pairs]
 
@@ -49,15 +49,16 @@ def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fn_pairs,
         fn_pairs.extend(expected_pairs)
     fn += len(expected_pairs)
 
-    return tp, fn, fp
+    return tp, fp, fn
 
-def print_instances_by_eval_result(tp_pairs, fn_pairs, fp_pairs):
+def print_instances_by_eval_result(tp_pairs, fp_pairs, fn_pairs):
     for pairs, pair_type in zip(
         [tp_pairs, fp_pairs, fn_pairs],
         ['True positives', 'False positives', 'False negatives']):
         print pair_type + ':'
         for pair in pairs:
-            sentence = pair[0].parent_sentence
+            sentence = (pair[0].parent_sentence if pair[0]
+                        else pair[1].parent_sentence)
             print '    %s ("%s" / "%s")' % (
                 sentence.original_text.replace('\n', ' '),
                 pair[0].original_text if pair[0] else None,

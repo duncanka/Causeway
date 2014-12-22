@@ -242,9 +242,9 @@ class ConnectiveStage(Stage):
         return [sentence]
 
     def _begin_evaluation(self):
-        self.tp, self.fn, self.fp = 0, 0, 0
+        self.tp, self.fp, self.fn = 0, 0, 0
         if FLAGS.sc_print_test_instances:
-            self.tp_pairs, self.fn_pairs, self.fp_pairs = [], [], []
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
 
     def _evaluate(self, sentences):
         for sentence in sentences:
@@ -252,18 +252,18 @@ class ConnectiveStage(Stage):
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
-            tp, fn, fp = match_causation_pairs(
-                expected_pairs, predicted_pairs, self.tp_pairs, self.fn_pairs,
-                self.fp_pairs)
+            tp, fp, fn = match_causation_pairs(
+                expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
+                self.fn_pairs)
 
             self.tp += tp
-            self.fn += fn
             self.fp += fp
+            self.fn += fn
 
     def _complete_evaluation(self):
         results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
         if FLAGS.sc_print_test_instances:
-            print_instances_by_eval_result(self.tp_pairs, self.fn_pairs,
-                                           self.fp_pairs)
-            self.tp_pairs, self.fn_pairs, self.fp_pairs = [], [], []
+            print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
+                                           self.fn_pairs)
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
         return results

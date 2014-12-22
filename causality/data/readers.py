@@ -179,7 +179,8 @@ class StandoffReader(Reader):
 
         lines = self._file_stream.readlines()
         if not lines:
-            logging.warn("No annotations found")
+            logging.warn("No annotations found in file %s"
+                         % self._file_stream.name)
             # Don't close the reader: we still want to return the sentences,
             # even if they have no causality annotations.
         else:
@@ -223,13 +224,15 @@ class StandoffReader(Reader):
                         line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess, ids_to_reprocess,
                         ids_needed_to_reprocess)
-                elif line_id[0] == '#': # skip annotator notes lines silently
+                # skip annotator notes and coref lines silently
+                elif line_id[0] == '#' or line_parts[1].startswith('Coref'):
                     continue
                 else:
                     logging.info("Ignoring annotation line: %s" % stripped)
 
             except UserWarning as e:
-                logging.warn('%s (Line: %s)' % (e.message, stripped))
+                logging.warn('%s (File: %s; Line: %s)'
+                             % (e.message, self._file_stream.name, stripped))
                 return
 
         # There is no possibility of cyclical relationships in our annotation
@@ -332,7 +335,7 @@ class StandoffReader(Reader):
         line_id = line_parts[0]
         args = line_parts[1].split(' ')
         self.__raise_warning_if(
-            len(args) < 1,
+            len(args) < 2,
             'Skipping event line that does not have at least 1 arg')
         split_args = [arg.split(':') for arg in args]
         self.__raise_warning_if(

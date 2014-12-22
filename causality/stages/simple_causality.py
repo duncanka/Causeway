@@ -190,7 +190,7 @@ class SimpleCausalityStage(ClassifierStage):
         super(SimpleCausalityStage, self)._begin_evaluation()
         self.tn = None
         if FLAGS.sc_print_test_instances:
-            self.tp_pairs, self.fn_pairs, self.fp_pairs = [], [], []
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
 
     def _prepare_for_evaluation(self, sentences):
         self._expected_causations = [set(sentence.causation_instances)
@@ -203,9 +203,9 @@ class SimpleCausalityStage(ClassifierStage):
                                             i in sentence.causation_instances]
             expected_cause_effect_pairs = [i.get_cause_and_effect_heads() for
                                            i in expected_causation_set]
-            tp, fn, fp = match_causation_pairs(
+            tp, fp, fn = match_causation_pairs(
                 expected_cause_effect_pairs, predicted_cause_effect_pairs,
-                self.tp_pairs, self.fn_pairs, self.fp_pairs)
+                self.tp_pairs, self.fp_pairs, self.fn_pairs)
 
             self.tp += tp
             self.fn += fn
@@ -216,7 +216,7 @@ class SimpleCausalityStage(ClassifierStage):
     def _complete_evaluation(self):
         results = super(SimpleCausalityStage, self)._complete_evaluation()
         if FLAGS.sc_print_test_instances:
-            print_instances_by_eval_result(self.tp_pairs, self.fn_pairs,
-                                           self.fp_pairs)
-            self.tp_pairs, self.fn_pairs, self.fp_pairs = [], [], []
+            print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
+                                           self.fn_pairs)
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
         return results
