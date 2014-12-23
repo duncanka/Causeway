@@ -57,11 +57,11 @@ def print_instances_by_eval_result(tp_pairs, fp_pairs, fn_pairs):
         ['True positives', 'False positives', 'False negatives']):
         print pair_type + ':'
         for pair in pairs:
-            sentence = (pair[0].parent_sentence if pair[0]
-                        else pair[1].parent_sentence)
+            # If only one argument is present, it'll be in position 0.
+            sentence = pair[0].parent_sentence
             print '    %s ("%s" / "%s")' % (
                 sentence.original_text.replace('\n', ' '),
-                pair[0].original_text if pair[0] else None,
+                pair[0].original_text,
                 pair[1].original_text if pair[1] else None)
 
         print '\n'

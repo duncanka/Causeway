@@ -186,7 +186,9 @@ class StandoffReader(Reader):
         else:
             ids_to_annotations = {}
             ids_to_instances = {}
-            self.__process_lines(lines, ids_to_annotations, ids_to_instances)
+            unused_arg_ids = set()
+            self.__process_lines(lines, ids_to_annotations, ids_to_instances,
+                                 unused_arg_ids)
 
         self.iterator = iter(self.instances)
 
@@ -195,7 +197,8 @@ class StandoffReader(Reader):
         if condition:
             raise UserWarning(message)
 
-    def __process_lines(self, lines, ids_to_annotations, ids_to_instances):
+    def __process_lines(self, lines, ids_to_annotations, ids_to_instances,
+                        unused_arg_ids):
         lines_to_reprocess = []
         ids_to_reprocess = set()
         ids_needed_to_reprocess = set()
@@ -204,17 +207,17 @@ class StandoffReader(Reader):
             try:
                 stripped = line.strip()
                 line_parts = stripped.split('\t')
-                if len(line_parts) < 2:
-                    raise UserWarning(
-                        "Ignoring line not formatted as ID, tab, content")
+                self.__raise_warning_if(
+                    len(line_parts) < 2,
+                    "Ignoring line not formatted as ID, tab, content")
 
                 line_id = line_parts[0]
                 if line_id[0] == 'T': # it's an annotation span
                     self.__process_text_annotation(
                         line, line_parts, ids_to_annotations, ids_to_instances,
                         lines_to_reprocess, ids_to_reprocess,
-                        ids_needed_to_reprocess)
-                elif line_id[0] == 'A': # it's an attribute of an event (degree)
+                        ids_needed_to_reprocess, unused_arg_ids)
+                elif line_id[0] == 'A': # it's an event attribute (degree)
                     self.__process_attribute(
                         line, line_parts, ids_to_annotations, ids_to_instances,
                         lines_to_reprocess, ids_to_reprocess,
@@ -223,12 +226,12 @@ class StandoffReader(Reader):
                     self.__process_event(
                         line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess, ids_to_reprocess,
-                        ids_needed_to_reprocess)
+                        ids_needed_to_reprocess, unused_arg_ids)
                 # skip annotator notes and coref lines silently
                 elif line_id[0] == '#' or line_parts[1].startswith('Coref'):
                     continue
                 else:
-                    logging.info("Ignoring annotation line: %s" % stripped)
+                    raise UserWarning("Ignoring unrecognized annotation line")
 
             except UserWarning as e:
                 logging.warn('%s (File: %s; Line: %s)'
@@ -236,29 +239,37 @@ class StandoffReader(Reader):
                 return
 
         # There is no possibility of cyclical relationships in our annotation
-        # scheme, so it's OK to just assume that with each pass we'll reduce the
-        # set of IDs that need to be added.
+        # scheme, so it's OK to just assume that with each pass we'll reduce
+        # the set of IDs that need to be added.
+        recurse = False
         if lines_to_reprocess:
-            recurse = True
             for id_needed in ids_needed_to_reprocess:
                 # Any ID that was referenced before being defined must be
                 # defined somewhere -- either we've seen a definition since
                 # then, or it's something we're intending to define on the next
                 # pass.
-                if (not ids_to_annotations.has_key(id_needed) and
-                    not ids_to_instances.has_key(id_needed) and
-                    id_needed not in ids_to_reprocess):
+                if (ids_to_annotations.has_key(id_needed) or
+                    ids_to_instances.has_key(id_needed) or
+                    id_needed in ids_to_reprocess):
+                    recurse = True
+                else:
                     logging.warn(
                         "ID %s is referenced, but is not defined anywhere. "
-                        "Ignoring all lines that depend on it." % id_needed)
-                    recurse = False
-            if recurse:
-                self.__process_lines(lines_to_reprocess, ids_to_annotations,
-                                     ids_to_instances)
+                        "Ignoring all lines that depend on it. (File: %s)"
+                        % (id_needed, self._file_stream.name))
+        if recurse:
+            self.__process_lines(lines_to_reprocess, ids_to_annotations,
+                                 ids_to_instances, unused_arg_ids)
+        else:
+            for arg_id in unused_arg_ids:
+                logging.warn('Unused argument: %s: "%s" (file: %s)'
+                             % (arg_id, ids_to_annotations[arg_id].text,
+                                self._file_stream.name))
 
     def __process_text_annotation(self, line, line_parts, ids_to_annotations,
                                   ids_to_instances, lines_to_reprocess,
-                                  ids_to_reprocess, ids_needed_to_reprocess):
+                                  ids_to_reprocess, ids_needed_to_reprocess,
+                                  unused_arg_ids):
         try:
             line_id, type_and_indices_str, text_str = line_parts
         except ValueError:
@@ -300,6 +311,8 @@ class StandoffReader(Reader):
             instance.connective = (
                 containing_sentence.find_tokens_for_annotation(annotation))
             containing_sentence.add_causation_instance(instance)
+        elif annotation_type == 'Argument':
+            unused_arg_ids.add(line_id)
 
     def __process_attribute(self, line, line_parts, ids_to_annotations,
                             ids_to_instances, lines_to_reprocess,
@@ -329,7 +342,8 @@ class StandoffReader(Reader):
 
     def __process_event(self, line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess,
-                        ids_to_reprocess, ids_needed_to_reprocess):
+                        ids_to_reprocess, ids_needed_to_reprocess,
+                        unused_arg_ids):
         self.__raise_warning_if(len(line_parts) != 2,
             "Skipping event line that does not have 2 tab-separated entries")
         line_id = line_parts[0]
@@ -383,6 +397,13 @@ class StandoffReader(Reader):
                     instance.effect = annotation_tokens
                 else:
                     raise UserWarning('Skipping event with invalid arg types')
+
+                try:
+                    unused_arg_ids.remove(arg_id)
+                except KeyError:
+                    # Don't worry about this -- just means the argument was
+                    # used twice, so it already got removed.
+                    pass
 
             instance.type = causation_type_index
             instance.id = line_id
