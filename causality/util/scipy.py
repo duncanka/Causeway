@@ -155,9 +155,12 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
 
 
 # Steiner tree finding.
-def steiner_tree(graph, terminals, method='dreyfus-wagner', *args, **kwargs):
+def steiner_tree(graph, terminals, *args, **kwargs):
+    method = kwargs.pop('method', 'dreyfus-wagner')
     if method == 'dreyfus-wagner':
         return dreyfus_wagner(graph, terminals, *args, **kwargs)
+    else:
+        raise NotImplementedError
 
 # Based on http://paal.mimuw.edu.pl/dreyfus__wagner_8hpp_source.html.
 def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
@@ -237,7 +240,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
 
         # Use the memoized version if possible
         try:
-            return best_candidates[(vertex, remaining.tostring())]
+            return best_candidates[(vertex, remaining.tostring())][0]
         except KeyError:
             best = split_vertex(vertex, remaining)
             candidate_vertex = vertex
