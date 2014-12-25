@@ -1,5 +1,10 @@
+from __future__ import absolute_import
 from itertools import izip
 import numpy as np
+from scipy.sparse import lil_matrix
+from scipy.sparse.csgraph import shortest_path
+
+from util import pairwise
 
 # See https://github.com/numpy/numpy/blob/master/numpy/lib/arraysetops.py#L96.
 def unique(mat, return_index=False, return_inverse=False, return_counts=False):
@@ -54,7 +59,7 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     # Convert to CSR because this format has a .data matrix, which is the main
     # thing we need, and which is stored in sorted order of rows -> columns.
     # This means that np.unique returns the indices and inverse in terms of a
-    # sensibly linearized mat. (The nonzero indices are also returned in
+    # sensibly linearized matrix. (The nonzero indices are also returned in
     # row -> column order, which is useful for the return_inverse and
     # return_index options.) Also, CSR is fairly memory-efficient and quick to
     # convert to from other formats.
@@ -147,3 +152,193 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
         ret += (counts,)
 
     return ret
+
+
+# Steiner tree finding.
+def steiner_tree(graph, terminals, method='dreyfus-wagner', *args, **kwargs):
+    if method == 'dreyfus-wagner':
+        return dreyfus_wagner(graph, terminals, *args, **kwargs)
+
+# Based on http://paal.mimuw.edu.pl/dreyfus__wagner_8hpp_source.html.
+def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
+                   shortest_path_predecessors=None, start=0):
+    '''
+    The Dreyfus-Wagner algorithm assumes a fully connected graph. We simulate
+    that by precomputing all shortest paths, or by having them supplied, and
+    using the shortest path cost between two nodes as its edge weight. Of
+    course, this means we need to do some extra work at the end to reconstruct
+    the solution in the original graph.
+    '''
+    if shortest_path_predecessors is None or shortest_path_costs is None:
+        shortest_path_costs, shortest_path_predecessors = shortest_path(
+            graph, return_predecessors=True)
+
+    n = graph.shape[0]
+    non_terminals = list(set(range(n)) - set(terminals))
+    terminal_positions = {} # maps vertex indices to positions in terminals
+    for i, terminal in enumerate(terminals):
+        terminal_positions[terminal] = i
+
+    steiner_edges = []
+    # For the keys in these dicts, we need to convert the Numpy arrays to
+    # strings to make them hashable. Apparently this is the fastest way to get
+    # a hashable array.
+    best_candidates = {} # maps (vertex, remaining) to (cost, vertex)
+    best_splits = {} # maps (vertex, remaining) to best cost
+
+    def get_edge_weight(w, v):
+        return shortest_path_costs[w, v]
+
+    def best_split(vertex, remaining, subset, index):
+        if index == len(terminals):
+            complement = remaining ^ subset
+            if subset.any() and complement.any():
+                dist = (connect_vertex(vertex, subset)
+                        + connect_vertex(vertex, complement))
+                return (dist, subset)
+            else:
+                return (-1, np.empty(n, dtype=np.bool))
+        else:
+            ret1 = best_split(vertex, remaining, subset, index + 1)
+            if remaining[index]:
+                # Flip the bit at index
+                subset = subset.copy() # copy 1st to prevent messing w/ caller
+                subset[index] ^= True
+                ret2 = best_split(vertex, remaining, subset, index + 1)
+                if ret1[0] < 0 or ret1[0] > ret2[0]:
+                    ret1 = ret2
+            return ret1
+
+    def split_vertex(vertex, remaining):
+        # TODO: optimize away this counting step by passing arg?
+        if np.count_nonzero(remaining) < 2:
+            return 0
+        # Use the memoized version if possible.
+        try:
+            return best_splits[(vertex, remaining.tostring())][0]
+        except KeyError:
+            # Optimization, to avoid checking subset twice.
+            index = np.where(remaining == True)[0][0] + 1
+            best = best_split(vertex, remaining, remaining, index)
+            best_splits[(vertex, remaining.tostring())] = best
+            return best[0]
+
+    def connect_vertex(vertex, remaining):
+        n_remaining = np.count_nonzero(remaining)
+        # Base cases: 0 or 1 remaining nodes
+        if n_remaining == 0:
+            return 0
+        elif n_remaining == 1:
+            index = np.where(remaining == True)[0][0]
+            cost = get_edge_weight(vertex, terminals[index])
+            best_candidates[(vertex, remaining.tostring())] = (
+                cost, terminals[index])
+            return cost
+
+        # Use the memoized version if possible
+        try:
+            return best_candidates[(vertex, remaining.tostring())]
+        except KeyError:
+            best = split_vertex(vertex, remaining)
+            candidate_vertex = vertex
+
+            finished_terminals = [
+                t for (t, t_pos) in terminal_positions.iteritems()
+                if not remaining[t_pos]]
+            vertices_to_try = non_terminals + finished_terminals
+
+            for vertex_to_try in vertices_to_try:
+                dist = split_vertex(vertex_to_try, remaining)
+                dist += get_edge_weight(vertex, vertex_to_try)
+                if best < 0 or dist < best:
+                    best = dist
+                    candidate_vertex = vertex_to_try
+
+            remaining = remaining.copy() # Prevent damage to caller state
+            for terminal, terminal_position in terminal_positions.iteritems():
+                if not remaining[terminal_position]:
+                    continue
+                remaining[terminal_position] = False
+                dist = connect_vertex(terminal, remaining)
+                dist += get_edge_weight(vertex, terminal)
+                remaining[terminal_position] = True
+
+                if best < 0 or dist < best:
+                    best = dist
+                    candidate_vertex = terminal
+
+            best_candidates[(vertex, remaining.tostring())] = (
+                best, candidate_vertex)
+            return best
+
+    def retrieve_solution_connect(vertex, remaining):
+        if not remaining.any():
+            return
+        next_vertex = best_candidates[(vertex, remaining.tostring())][1]
+
+        if vertex == next_vertex: # called wagner directly from dreyfus (?)
+            retrieve_solution_split(next_vertex, remaining)
+        else:
+            steiner_edges.append((vertex, next_vertex))
+            # Case 1: Non-terminal or terminal that is not remaining
+            if (next_vertex not in terminal_positions) or (
+                not remaining[terminal_positions[next_vertex]]):
+                retrieve_solution_split(next_vertex, remaining)
+            # Case 2: terminal that is remaining
+            else:
+                terminal_position = terminal_positions[next_vertex]
+                # Copy to prevent damage to caller state
+                remaining = remaining.copy()
+                remaining[terminal_position] ^= 1
+                retrieve_solution_connect(vertex, remaining)
+
+    def retrieve_solution_split(vertex, remaining):
+        # TODO: is this check actually necessary?
+        if not remaining.any():
+            return
+        split = best_splits[(vertex, remaining.tostring())][1]
+        retrieve_solution_connect(vertex, split)
+        retrieve_solution_connect(vertex, remaining ^ split)
+
+    num_terminals = len(terminals)
+    start = min(start, num_terminals - 1)
+    # set all terminals except 'start' to 1
+    remaining = np.ones(num_terminals, dtype=np.bool)
+    remaining[start] = False
+
+    connect_vertex(terminals[start], remaining)
+    retrieve_solution_connect(terminals[start], remaining)
+
+    # Now we need to reconstruct the solution *without* pretending that all
+    # nodes are connected via an edge with the weight of their shortest path.
+    def reconstruct_path(w, v):
+        predecessor = shortest_path_predecessors[w, v]
+        if predecessor == w:
+            return [v]
+        else:
+            return reconstruct_path(w, predecessor) + [v]
+
+    steiner_nodes = set()
+    steiner_tree = lil_matrix((n, n), dtype=graph.dtype)
+    for start, end in steiner_edges:
+        real_path = [start] + reconstruct_path(start, end)
+        for vertex in real_path:
+            if vertex not in terminal_positions:
+                steiner_nodes.add(vertex)
+        for real_start, real_end in pairwise(real_path):
+            # Check whether we have a forward path in the original graph.
+            edge_weight = graph[real_start, real_end]
+            reverse_edge_weight = graph[real_end, real_start]
+            # If so, and that edge is in fact the smaller of the two, just
+            # include it in the output path.
+            if edge_weight != 0 and (reverse_edge_weight == 0 or
+                                     edge_weight < reverse_edge_weight):
+                steiner_tree[real_start, real_end] = edge_weight
+            # Otherwise, the predecessors graph must have been generated in
+            # an undirected way, and the reverse edge is either the only edge
+            # or the smaller of the two. Include the reverse edge instead.
+            else:
+                steiner_tree[real_end, real_start] = reverse_edge_weight
+
+    steiner_tree = steiner_tree.tocsr()
+    return list(steiner_nodes), steiner_tree

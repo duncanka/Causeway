@@ -1,4 +1,5 @@
 from __future__ import print_function
+from itertools import tee, izip
 import os
 
 def recursively_list_files(path):
@@ -60,3 +61,10 @@ def print_indented(indent_level, *args, **kwargs):
         for line in result_str.split('\n'):
             print(prefix, **prefix_kwargs)
             print(line, **kwargs)
+
+# From http://stackoverflow.com/a/5434936/4044809
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    a, b = tee(iterable)
+    next(b, None)
+    return izip(a, b)
