@@ -115,7 +115,8 @@ class ParsedSentence(object):
         self.document_char_offset = 0
         self.original_text = ''
         self.__depths = np.array([])
-        self.__path_predecessors = np.array([[]])
+        self.path_predecessors = np.array([[]])
+        self.path_costs = np.array([[]])
 
         token_strings = tokenized_text.split(' ')
         tag_strings = tagged_lemmas.split(' ')
@@ -161,7 +162,7 @@ class ParsedSentence(object):
         Returns a tuple (e, p), p is the parent of the given token along the
         shortest path to root, and e is the label of the edge from p to token.
         '''
-        parent_index = self.__path_predecessors[0, token.index]
+        parent_index = self.path_predecessors[0, token.index]
         edge_label = self.edge_labels[(parent_index, token.index)]
         return (edge_label, self.tokens[parent_index])
 
@@ -206,7 +207,7 @@ class ParsedSentence(object):
     def extract_dependency_path(self, source, target):
         edges = []
         while target is not source:
-            predecessor_index = self.__path_predecessors[source.index,
+            predecessor_index = self.path_predecessors[source.index,
                                                          target.index]
             if predecessor_index == -9999:
                 raise DependencyPathError(source, target)
@@ -448,7 +449,7 @@ class ParsedSentence(object):
         shortest_distances = csgraph.shortest_path(self.edge_graph,
                                                    unweighted=True)
         self.__depths = shortest_distances[0]
-        _, self.__path_predecessors = csgraph.shortest_path(
+        self.path_costs, self.path_predecessors = csgraph.shortest_path(
             self.edge_graph, unweighted=True, return_predecessors=True,
             directed=False)
 
