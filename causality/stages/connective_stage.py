@@ -76,9 +76,9 @@ class ConnectiveModel(Model):
                 ConnectiveModel._get_non_connective_token_pattern(
                     token, node_name, node_names))
 
-        required_token_indices = (
+        required_token_indices = list(set( # Eliminate potential duplicates
             [cause_head.index, effect_head.index]
-            + [token.index for token in connective])
+            + [token.index for token in connective]))
         steiner_nodes, steiner_graph = steiner_tree(
             sentence.edge_graph, required_token_indices,
             sentence.path_costs, sentence.path_predecessors)
@@ -149,7 +149,7 @@ class ConnectiveModel(Model):
         tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
 
         def run(self):
-            # Create input and output files
+            # Create output file
             with tempfile.NamedTemporaryFile('w+b') as tregex_output:
                 full_tregex_command = (
                     [FLAGS.tregex_command] + self.tregex_args
@@ -244,18 +244,23 @@ class ConnectiveModel(Model):
         progress_reporter.daemon = True
 
         try:
-            progress_reporter.start()
-
             with tempfile.NamedTemporaryFile('w') as trees_file:
                 trees_file.writelines(ptb_strings)
+                # Make sure the file is synced for threads to access
+                trees_file.flush()
 
                 # Start the threads.
+                logging.debug('Starting threads...')
                 for pattern, node_labels in self.tregex_patterns:
                     new_thread = self.TregexProcessorThread(
                         pattern, node_labels, trees_file.name, sentences,
                         true_causation_pairs_by_sentence)
                     threads.append(new_thread)
                     new_thread.start()
+                logging.debug('%d TRegex threads started' % len(threads))
+
+                progress_reporter.start()
+                
                 for thread in threads:
                     thread.join()
         finally:

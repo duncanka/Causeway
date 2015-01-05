@@ -1,8 +1,3 @@
-'''
-Created on Dec 1, 2014
-
-@author: jesse
-'''
 from collections import defaultdict
 import numpy as np
 from scipy.sparse import lil_matrix, vstack
