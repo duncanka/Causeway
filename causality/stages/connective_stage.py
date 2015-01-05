@@ -1,6 +1,7 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer
 import threading
 import logging
+import Queue
 import subprocess
 import tempfile
 import time
@@ -20,6 +21,8 @@ try:
     DEFINE_integer(
         'tregex_max_steiners', 4,
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
+    DEFINE_integer('tregex_max_threads', 50,
+                   'Max number of TRegex processor threads')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -131,29 +134,38 @@ class ConnectiveModel(Model):
                         self.tregex_patterns.append((pattern, node_names))
 
     class TregexProcessorThread(threading.Thread):
-        def __init__(self, pattern, node_labels, trees_file_path, sentences,
+        def __init__(self, trees_file_path, sentences, queue,
                      true_causation_pairs_by_sentence, *args, **kwargs):
             super(ConnectiveModel.TregexProcessorThread, self).__init__(
                 *args, **kwargs)
-            self.pattern = pattern
-            self.node_labels = node_labels
-            self.progress = 0
             self.trees_file_path = trees_file_path
             self.sentences = sentences
             self.true_causation_pairs_by_sentence = (
                 true_causation_pairs_by_sentence)
+            self.queue = queue
+            self.progress = 0
 
-        # TODO: Make this use the node labels to also retrieve the possible
-        # connective tokens.
         dev_null = open('/dev/null', 'w')
-        tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
 
         def run(self):
+            try:
+                while(True):
+                    pattern = self.queue.get_nowait()
+                    self._process_pattern(pattern)
+                    self.queue.task_done()
+            except Queue.Empty: # no more items in queue
+                return
+
+        def _process_pattern(self, pattern):
             # Create output file
             with tempfile.NamedTemporaryFile('w+b') as tregex_output:
+                #print "Processing", pattern, "to", tregex_output.name
+                # TODO: Make this use the node labels to also retrieve the
+                # possible connective tokens.
+                tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
                 full_tregex_command = (
-                    [FLAGS.tregex_command] + self.tregex_args
-                    + [self.pattern, self.trees_file_path])
+                    [FLAGS.tregex_command] + tregex_args
+                    + [pattern, self.trees_file_path])
                 subprocess.call(full_tregex_command, stdout=tregex_output,
                                 stderr=self.dev_null)
                 self.progress += 2 * len(self.sentences)
@@ -183,7 +195,7 @@ class ConnectiveModel(Model):
                         in_gold = index_pair in true_causation_pairs
                         possible = PossibleCausation(
                             sentence.tokens[t1_index],
-                            sentence.tokens[t2_index], self.pattern, in_gold)
+                            sentence.tokens[t2_index], pattern, in_gold)
 
                         # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
                         # It is thread-safe, because lists are thread-safe, and
@@ -204,6 +216,7 @@ class ConnectiveModel(Model):
 
     def test(self, sentences):
         logging.info('Tagging possible connectives...')
+        start_time = time.time()
         # Interacting with the TRegex processes is heavily I/O-bound, so we use
         # threads to parallelize it a bit -- one thread per TRegex.
 
@@ -225,22 +238,25 @@ class ConnectiveModel(Model):
         # Set up progress reporter
         threads = []
         all_threads_done = False
-        def report_progress_repeatedly():
+        def report_progress_loop():
+            total_points = float(
+                len(self.tregex_patterns) * 3 * len(sentences))
             while(True):
                 time.sleep(3)
-                # Each thread gets 3 * len(sentences) of progress points: two
+                # Each pattern gets 3 * len(sentences) of progress points: two
                 # rounds for executing the TRegex processes and one for
-                # processing the results.
-                # This will be a slightly imprecise estimate, because progress
-                # numbers are being grabbed in a non-threadsafe way. Whatever.
-                progress = (sum([t.progress for t in threads])
-                            / float(len(threads) * 3 * len(sentences)))
+                # processing the results. Threads store the cumulative number
+                # of progress points they've processed.
+                # This will be a slightly imprecise estimate (an underestimate,
+                # specifically), because progress numbers are being grabbed in
+                # a non-threadsafe way. Whatever.
+                progress = (sum([t.progress for t in threads]) / total_points)
                 if not all_threads_done:
                     logging.info("Tagging connectives: %1.0f%% complete"
                                  % (progress * 100))
                 else:
                     break
-        progress_reporter = threading.Thread(target=report_progress_repeatedly)
+        progress_reporter = threading.Thread(target=report_progress_loop)
         progress_reporter.daemon = True
 
         try:
@@ -249,25 +265,26 @@ class ConnectiveModel(Model):
                 # Make sure the file is synced for threads to access
                 trees_file.flush()
 
-                # Start the threads.
-                logging.debug('Starting threads...')
+                progress_reporter.start()
+
+                # Queue up the patterns and start the threads chewing on them.
+                queue = Queue.Queue()
                 for pattern, node_labels in self.tregex_patterns:
+                    queue.put_nowait(pattern)
+                for _ in range(FLAGS.tregex_max_threads):
                     new_thread = self.TregexProcessorThread(
-                        pattern, node_labels, trees_file.name, sentences,
+                        trees_file.name, sentences, queue,
                         true_causation_pairs_by_sentence)
                     threads.append(new_thread)
                     new_thread.start()
-                logging.debug('%d TRegex threads started' % len(threads))
-
-                progress_reporter.start()
-                
-                for thread in threads:
-                    thread.join()
+                queue.join()
         finally:
             # Make sure progress reporter exits
             all_threads_done = True
 
-        logging.info("Done tagging possible connectives.")
+        elapsed_seconds = time.time() - start_time
+        logging.info("Done tagging possible connectives in %0.2f seconds"
+                     % elapsed_seconds)
 
 class ConnectiveStage(Stage):
     def __init__(self, name):
@@ -282,8 +299,8 @@ class ConnectiveStage(Stage):
 
     def _begin_evaluation(self):
         self.tp, self.fp, self.fn = 0, 0, 0
-        if FLAGS.sc_print_test_instances:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        print self.tp_pairs
 
     def _evaluate(self, sentences):
         for sentence in sentences:

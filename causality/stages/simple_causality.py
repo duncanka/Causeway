@@ -189,8 +189,7 @@ class SimpleCausalityStage(ClassifierStage):
     def _begin_evaluation(self):
         super(SimpleCausalityStage, self)._begin_evaluation()
         self.tn = None
-        if FLAGS.sc_print_test_instances:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
 
     def _prepare_for_evaluation(self, sentences):
         self._expected_causations = [set(sentence.causation_instances)
