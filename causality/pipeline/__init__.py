@@ -6,7 +6,7 @@ import itertools
 import logging
 import random
 
-from util import listify, partition
+from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
 
 # Define pipeline-related flags.
@@ -27,6 +27,8 @@ try:
     DEFINE_integer('cv_debug_stop_after', None,
                    'Number of CV rounds to stop after (for debugging)')
     DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
+    DEFINE_boolean('cv_print_fold_results', True,
+                   "Whether to print each fold's results as they are computed")
     #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts"
     #               " (TP, agreement, etc.) for evaluation or IAA metrics.")
 except DuplicateFlagError as e:
@@ -76,11 +78,19 @@ class Pipeline(object):
             training = list(itertools.chain(
                 *[f for f in folds if f is not fold]))
             self.train(training)
+
             # Copy testing data so we don't overwrite original instances.
             fold_results = self.evaluate(deepcopy(testing))
-            for stage_results, current_stage_result in zip(
-                results, fold_results):
+            
+            if FLAGS.cv_print_fold_results:
+                print "Fold", i + 1, "results:"
+
+            for stage, stage_results, current_stage_result in zip(
+                self.stages, results, fold_results):
                 stage_results.append(current_stage_result)
+                if FLAGS.cv_print_fold_results:
+                    print_indented(1, 'Stage', stage.name, 'results:')
+                    print_indented(2, current_stage_result)
 
             if (FLAGS.cv_debug_stop_after is not None 
                 and i + 1 >= FLAGS.cv_debug_stop_after):
