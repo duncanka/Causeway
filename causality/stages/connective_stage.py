@@ -1,6 +1,7 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer
 import threading
 import logging
+from math import log10
 import Queue
 import subprocess
 import tempfile
@@ -143,7 +144,8 @@ class ConnectiveModel(Model):
             self.true_causation_pairs_by_sentence = (
                 true_causation_pairs_by_sentence)
             self.queue = queue
-            self.progress = 0
+            self.output_file = None
+            self.total_bytes_output = 0
 
         dev_null = open('/dev/null', 'w')
 
@@ -158,7 +160,7 @@ class ConnectiveModel(Model):
 
         def _process_pattern(self, pattern):
             # Create output file
-            with tempfile.NamedTemporaryFile('w+b') as tregex_output:
+            with tempfile.NamedTemporaryFile('w+b') as self.output_file:
                 #print "Processing", pattern, "to", tregex_output.name
                 # TODO: Make this use the node labels to also retrieve the
                 # possible connective tokens.
@@ -166,22 +168,21 @@ class ConnectiveModel(Model):
                 full_tregex_command = (
                     [FLAGS.tregex_command] + tregex_args
                     + [pattern, self.trees_file_path])
-                subprocess.call(full_tregex_command, stdout=tregex_output,
+                subprocess.call(full_tregex_command, stdout=self.output_file,
                                 stderr=self.dev_null)
-                self.progress += 2 * len(self.sentences)
-                tregex_output.seek(0)
+                self.output_file.seek(0)
 
                 # For each sentence, we leave the file positioned at the next
                 # tree number line.
                 for sentence, true_causation_pairs in zip(
                     self.sentences, self.true_causation_pairs_by_sentence):
                     # Read TRegex output for the sentence.
-                    tregex_output.readline() # skip tree num line
-                    next_line = tregex_output.readline().strip()
+                    self.output_file.readline() # skip tree num line
+                    next_line = self.output_file.readline().strip()
                     lines = []
                     while next_line:
                         lines.append(next_line)
-                        next_line = tregex_output.readline().strip()
+                        next_line = self.output_file.readline().strip()
 
                     # Parse TRegex output.
                     line_pairs = zip(lines[0::2], lines[1::2])
@@ -202,7 +203,9 @@ class ConnectiveModel(Model):
                         # we never reassign sentence.possible_causations.
                         sentence.possible_causations.append(possible)
 
-                    self.progress += 1
+                self.total_bytes_output += self.output_file.tell()
+                self.output_file = None
+
 
     def train(self, sentences):
         self._extract_patterns(sentences)
@@ -239,18 +242,22 @@ class ConnectiveModel(Model):
         threads = []
         all_threads_done = False
         def report_progress_loop():
-            total_points = float(
-                len(self.tregex_patterns) * 3 * len(sentences))
+            # Start with a size estimate of each file where its max size is
+            # 1.3x the size of a file where no sentences have matched.
+            estimated_sentence_sizes = [1.3 * (int(log10(i+1)) + 3)
+                                        for i in range(len(sentences))]
+            total_bytes = (len(self.tregex_patterns) *
+                           sum(estimated_sentence_sizes))
             while(True):
-                time.sleep(3)
-                # Each pattern gets 3 * len(sentences) of progress points: two
-                # rounds for executing the TRegex processes and one for
-                # processing the results. Threads store the cumulative number
-                # of progress points they've processed.
-                # This will be a slightly imprecise estimate (an underestimate,
-                # specifically), because progress numbers are being grabbed in
-                # a non-threadsafe way. Whatever.
-                progress = (sum([t.progress for t in threads]) / total_points)
+                time.sleep(4)
+                bytes_output = sum([t.total_bytes_output + t.output_file.tell()
+                                    if t.output_file else t.total_bytes_output
+                                    for t in threads])
+                # Never allow > 99% completion as long as we're still running.
+                # (This could theoretically happen if our estimated max sizes
+                # turned out to be way off.)
+                progress = min(bytes_output / float(total_bytes), 0.99)
+
                 if not all_threads_done:
                     logging.info("Tagging connectives: %1.0f%% complete"
                                  % (progress * 100))

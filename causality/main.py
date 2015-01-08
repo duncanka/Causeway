@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=logging.DEBUG)
+        level=logging.INFO)
     logging.captureWarnings(True)
 
     if FLAGS.sc_classifier_model == 'tree':
