@@ -3,6 +3,7 @@ import threading
 import logging
 from math import log10
 import Queue
+import re
 import subprocess
 import tempfile
 import time
@@ -135,12 +136,12 @@ class ConnectiveModel(Model):
                         self.tregex_patterns.append((pattern, node_names))
 
     class TregexProcessorThread(threading.Thread):
-        def __init__(self, trees_file_path, sentences, queue,
+        def __init__(self, sentences, ptb_strings, queue,
                      true_causation_pairs_by_sentence, *args, **kwargs):
             super(ConnectiveModel.TregexProcessorThread, self).__init__(
                 *args, **kwargs)
-            self.trees_file_path = trees_file_path
             self.sentences = sentences
+            self.ptb_strings = ptb_strings
             self.true_causation_pairs_by_sentence = (
                 true_causation_pairs_by_sentence)
             self.queue = queue
@@ -152,13 +153,33 @@ class ConnectiveModel(Model):
         def run(self):
             try:
                 while(True):
-                    pattern = self.queue.get_nowait()
-                    self._process_pattern(pattern)
-                    self.queue.task_done()
+                    (pattern, node_labels, possible_sentence_indices) = (
+                        self.queue.get_nowait())
+                    if not possible_sentence_indices: # no sentences to scan
+                        self.queue.task_done()
+                        continue
+
+                    possible_trees = [self.ptb_strings[i]
+                                      for i in possible_sentence_indices]
+                    possible_sentences = [self.sentences[i]
+                                          for i in possible_sentence_indices]
+                    possible_true_causation_pairs = [
+                        self.true_causation_pairs_by_sentence[i]
+                        for i in possible_sentence_indices]
+
+                    with tempfile.NamedTemporaryFile('w+b') as tree_file:
+                        tree_file.writelines(possible_trees)
+                        # Make sure the file is synced for threads to access
+                        tree_file.flush()
+                        self._process_pattern(
+                            pattern, possible_sentences, tree_file.name,
+                            possible_true_causation_pairs)
+                        self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
 
-        def _process_pattern(self, pattern):
+        def _process_pattern(self, pattern, possible_sentences, tree_file_path,
+                             possible_true_causation_pairs):
             # Create output file
             with tempfile.NamedTemporaryFile('w+b') as self.output_file:
                 #print "Processing", pattern, "to", tregex_output.name
@@ -167,7 +188,7 @@ class ConnectiveModel(Model):
                 tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
                 full_tregex_command = (
                     [FLAGS.tregex_command] + tregex_args
-                    + [pattern, self.trees_file_path])
+                    + [pattern, tree_file_path])
                 subprocess.call(full_tregex_command, stdout=self.output_file,
                                 stderr=self.dev_null)
                 self.output_file.seek(0)
@@ -175,7 +196,7 @@ class ConnectiveModel(Model):
                 # For each sentence, we leave the file positioned at the next
                 # tree number line.
                 for sentence, true_causation_pairs in zip(
-                    self.sentences, self.true_causation_pairs_by_sentence):
+                    possible_sentences, possible_true_causation_pairs):
                     # Read TRegex output for the sentence.
                     self.output_file.readline() # skip tree num line
                     next_line = self.output_file.readline().strip()
@@ -203,9 +224,21 @@ class ConnectiveModel(Model):
                         # we never reassign sentence.possible_causations.
                         sentence.possible_causations.append(possible)
 
+                # Tell the progress reporter how far we've gotten, so that it
+                # will know progress for patterns that have already finished.
                 self.total_bytes_output += self.output_file.tell()
-                self.output_file = None
 
+            self.output_file = None
+
+        def get_progress(self):
+            try:
+                return self.total_bytes_output + self.output_file.tell()
+            except (AttributeError, IOError):
+                # AttributeError indicates that self.output_file was None.
+                # IOError indicates that we managed to ask for file size
+                # just after the file was closed. Either way, that means
+                # that now the total number of bytes has been recorded.
+                return self.total_bytes_output
 
     def train(self, sentences):
         self._extract_patterns(sentences)
@@ -241,22 +274,16 @@ class ConnectiveModel(Model):
         # Set up progress reporter
         threads = []
         all_threads_done = False
+        total_estimated_bytes = 0
         def report_progress_loop():
-            # Start with a size estimate of each file where its max size is
-            # 1.3x the size of a file where no sentences have matched.
-            estimated_sentence_sizes = [1.3 * (int(log10(i+1)) + 3)
-                                        for i in range(len(sentences))]
-            total_bytes = (len(self.tregex_patterns) *
-                           sum(estimated_sentence_sizes))
             while(True):
                 time.sleep(4)
-                bytes_output = sum([t.total_bytes_output + t.output_file.tell()
-                                    if t.output_file else t.total_bytes_output
-                                    for t in threads])
+                bytes_output = sum([t.get_progress() for t in threads])
                 # Never allow > 99% completion as long as we're still running.
                 # (This could theoretically happen if our estimated max sizes
                 # turned out to be way off.)
-                progress = min(bytes_output / float(total_bytes), 0.99)
+                progress = min(bytes_output / float(total_estimated_bytes),
+                               0.99)
 
                 if not all_threads_done:
                     logging.info("Tagging connectives: %1.0f%% complete"
@@ -267,24 +294,28 @@ class ConnectiveModel(Model):
         progress_reporter.daemon = True
 
         try:
-            with tempfile.NamedTemporaryFile('w') as trees_file:
-                trees_file.writelines(ptb_strings)
-                # Make sure the file is synced for threads to access
-                trees_file.flush()
-
-                progress_reporter.start()
-
-                # Queue up the patterns and start the threads chewing on them.
-                queue = Queue.Queue()
-                for pattern, node_labels in self.tregex_patterns:
-                    queue.put_nowait(pattern)
-                for _ in range(FLAGS.tregex_max_threads):
-                    new_thread = self.TregexProcessorThread(
-                        trees_file.name, sentences, queue,
-                        true_causation_pairs_by_sentence)
-                    threads.append(new_thread)
-                    new_thread.start()
-                queue.join()
+            # Queue up the patterns and start the threads chewing on them.
+            queue = Queue.Queue()
+            for pattern, node_labels in self.tregex_patterns:
+                possible_sentence_indices = self._filter_sentences_for_pattern(
+                    sentences, pattern, node_labels)
+                queue.put_nowait((pattern, node_labels,
+                                  possible_sentence_indices))
+                # Estimate total output file size for this pattern: each
+                # sentence has sentence #, + 3 bytes for : and newlines.
+                # As a very rough estimate, matching node names increase the
+                # bytes used by ~1.5x.
+                total_estimated_bytes += sum(
+                    1.5 * (int(log10(i + 1)) + 3)
+                    for i in range(len(possible_sentence_indices)))
+            for _ in range(FLAGS.tregex_max_threads):
+                new_thread = self.TregexProcessorThread(
+                    sentences, ptb_strings, queue,
+                    true_causation_pairs_by_sentence)
+                threads.append(new_thread)
+                new_thread.start()
+            progress_reporter.start()
+            queue.join()
         finally:
             # Make sure progress reporter exits
             all_threads_done = True
@@ -292,6 +323,34 @@ class ConnectiveModel(Model):
         elapsed_seconds = time.time() - start_time
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
+
+    CONNECTIVE_TEXT_PATTERN = re.compile(r'/\^(.*)_\[0-9\]\+\$/')
+    @staticmethod
+    def _filter_sentences_for_pattern(sentences, pattern, node_labels):
+        # TODO: Is there a less hacky way to do this than to split apart
+        # the pattern again and regex-match it to find the required token
+        # texts?
+        pattern_parts = pattern.split(' : ')
+        required_tokens = []
+        for pattern_part in pattern_parts:
+            # Only examine the pattern parts that define connective nodes.
+            # The connective nodes are always the first few defined by the
+            # pattern.
+            if '=connective' not in pattern_part:
+                break
+            match = ConnectiveModel.CONNECTIVE_TEXT_PATTERN.search(
+                pattern_part)
+            required_tokens.append(match.group(1))
+
+        possible_sentence_indices = []
+        for i, sentence in enumerate(sentences):
+            token_texts = sentence.token_texts()
+            if (all([required_token in token_texts
+                    for required_token in required_tokens])
+                and len(token_texts) >= len(node_labels)):
+                possible_sentence_indices.append(i)
+
+        return possible_sentence_indices
 
 class ConnectiveStage(Stage):
     def __init__(self, name):
@@ -307,7 +366,6 @@ class ConnectiveStage(Stage):
     def _begin_evaluation(self):
         self.tp, self.fp, self.fn = 0, 0, 0
         self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
-        print self.tp_pairs
 
     def _evaluate(self, sentences):
         for sentence in sentences:
