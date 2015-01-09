@@ -250,13 +250,9 @@ class ConnectiveModel(Model):
         logging.debug("Running test to generate input for next stage")
         self.test(sentences)
 
-    def test(self, sentences):
-        logging.info('Tagging possible connectives...')
-        start_time = time.time()
-        # Interacting with the TRegex processes is heavily I/O-bound, so we use
-        # threads to parallelize it a bit -- one thread per TRegex.
 
-        # First, do sentence pre-processing that's common across all TRegexes.
+    @staticmethod
+    def _preprocess_sentences(sentences):
         ptb_strings = []
         true_causation_pairs_by_sentence = []
         for sentence in sentences:
@@ -266,15 +262,16 @@ class ConnectiveModel(Model):
             true_causation_pairs = [
                 normalize_order(instance.get_cause_and_effect_heads())
                 for instance in sentence.causation_instances]
-            true_causation_pairs_by_sentence.append(set(
-                [(arg_1.index, arg_2.index)
-                 for arg_1, arg_2 in true_causation_pairs
-                 if arg_1 is not None and arg_2 is not None]))
+            true_causation_pairs_by_sentence.append(
+                set([(arg_1.index, arg_2.index)
+                     for (arg_1, arg_2) in true_causation_pairs
+                     if arg_1 is not None and arg_2 is not None]))
 
-        # Set up progress reporter
-        threads = []
-        all_threads_done = False
-        total_estimated_bytes = 0
+        return ptb_strings, true_causation_pairs_by_sentence
+
+    @staticmethod
+    def _make_progress_reporter(threads, total_estimated_bytes,
+                                    all_threads_done):
         def report_progress_loop():
             while(True):
                 time.sleep(4)
@@ -284,45 +281,15 @@ class ConnectiveModel(Model):
                 # turned out to be way off.)
                 progress = min(bytes_output / float(total_estimated_bytes),
                                0.99)
-
-                if not all_threads_done:
+                if not all_threads_done[0]:
                     logging.info("Tagging connectives: %1.0f%% complete"
                                  % (progress * 100))
                 else:
                     break
+
         progress_reporter = threading.Thread(target=report_progress_loop)
         progress_reporter.daemon = True
-
-        try:
-            # Queue up the patterns and start the threads chewing on them.
-            queue = Queue.Queue()
-            for pattern, node_labels in self.tregex_patterns:
-                possible_sentence_indices = self._filter_sentences_for_pattern(
-                    sentences, pattern, node_labels)
-                queue.put_nowait((pattern, node_labels,
-                                  possible_sentence_indices))
-                # Estimate total output file size for this pattern: each
-                # sentence has sentence #, + 3 bytes for : and newlines.
-                # As a very rough estimate, matching node names increase the
-                # bytes used by ~1.5x.
-                total_estimated_bytes += sum(
-                    1.5 * (int(log10(i + 1)) + 3)
-                    for i in range(len(possible_sentence_indices)))
-            for _ in range(FLAGS.tregex_max_threads):
-                new_thread = self.TregexProcessorThread(
-                    sentences, ptb_strings, queue,
-                    true_causation_pairs_by_sentence)
-                threads.append(new_thread)
-                new_thread.start()
-            progress_reporter.start()
-            queue.join()
-        finally:
-            # Make sure progress reporter exits
-            all_threads_done = True
-
-        elapsed_seconds = time.time() - start_time
-        logging.info("Done tagging possible connectives in %0.2f seconds"
-                     % elapsed_seconds)
+        return progress_reporter
 
     CONNECTIVE_TEXT_PATTERN = re.compile(r'/\^(.*)_\[0-9\]\+\$/')
     @staticmethod
@@ -351,6 +318,57 @@ class ConnectiveModel(Model):
                 possible_sentence_indices.append(i)
 
         return possible_sentence_indices
+
+    def test(self, sentences):
+        logging.info('Tagging possible connectives...')
+        start_time = time.time()
+
+        ptb_strings, true_causation_pairs_by_sentence = (
+            self._preprocess_sentences(sentences))
+
+        # Interacting with the TRegex processes is heavily I/O-bound, plus we
+        # really want multiple TRegex processes running in parallel, so we farm
+        # out patterns to worker threads.
+
+        # Queue up the patterns
+        total_estimated_bytes = 0
+        queue = Queue.Queue()
+        for pattern, node_labels in self.tregex_patterns:
+            possible_sentence_indices = self._filter_sentences_for_pattern(
+                sentences, pattern, node_labels)
+            queue.put_nowait((pattern, node_labels,
+                              possible_sentence_indices))
+            # Estimate total output file size for this pattern: each
+            # sentence has sentence #, + 3 bytes for : and newlines.
+            # As a very rough estimate, matching node names increase the
+            # bytes used by ~1.8x.
+            total_estimated_bytes += sum(
+                1.8 * (int(log10(i + 1)) + 3)
+                for i in range(len(possible_sentence_indices)))
+
+        # Start the threads
+        threads = []
+        for _ in range(FLAGS.tregex_max_threads):
+            new_thread = self.TregexProcessorThread(
+                sentences, ptb_strings, queue,
+                true_causation_pairs_by_sentence)
+            threads.append(new_thread)
+            new_thread.start()
+
+        # Set up progress reporter and wait for threads to finish.
+        all_threads_done = [False] # use a list for passing by ref
+        progress_reporter = self._make_progress_reporter(
+            threads, total_estimated_bytes, all_threads_done)
+        try:
+            progress_reporter.start()
+            queue.join()
+        finally:
+            # Make sure progress reporter exits
+            all_threads_done[0] = True
+
+        elapsed_seconds = time.time() - start_time
+        logging.info("Done tagging possible connectives in %0.2f seconds"
+                     % elapsed_seconds)
 
 class ConnectiveStage(Stage):
     def __init__(self, name):
