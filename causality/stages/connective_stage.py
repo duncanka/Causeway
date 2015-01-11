@@ -3,17 +3,17 @@ import threading
 import logging
 from math import log10
 import Queue
-import re
 import subprocess
 import tempfile
 import time
 
 from data import ParsedSentence
-from util.metrics import ClassificationMetrics
 from pipeline import Stage
 from pipeline.models import Model
 from stages import match_causation_pairs, print_instances_by_eval_result, normalize_order
-from util.scipy import steiner_tree
+from util import pairwise
+from util.metrics import ClassificationMetrics
+from util.scipy import steiner_tree, longest_path_in_tree
 
 try:
     DEFINE_string('tregex_command',
@@ -21,9 +21,9 @@ try:
                   'stanford-tregex-2014-10-26/tregex.sh',
                   'Command to run TRegex')
     DEFINE_integer(
-        'tregex_max_steiners', 4,
+        'tregex_max_steiners', 6,
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
-    DEFINE_integer('tregex_max_threads', 50,
+    DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -47,7 +47,7 @@ class ConnectiveModel(Model):
         node_names[token.index] = node_name
 
         return (
-            '(/^%s_[0-9]+$/=%s <2 /^%s.*/)' % (
+            '/^%s_[0-9]+$/=%s <2 /^%s.*/' % (
             token.lemma, node_name, token.get_gen_pos()))
 
     @staticmethod
@@ -60,7 +60,7 @@ class ConnectiveModel(Model):
         else:
             pos_pattern = ('<2 /^%s.*/' % token.get_gen_pos())
 
-        return '(__=%s %s)' % (node_name, pos_pattern)
+        return '__=%s %s' % (node_name, pos_pattern)
 
     @staticmethod
     def _get_steiner_pattern(token, steiner_index, node_names):
@@ -68,22 +68,29 @@ class ConnectiveModel(Model):
             token, 'steiner_%d' % steiner_index, node_names)
 
     @staticmethod
+    def _get_node_pattern(sentence, node, node_names, connective_nodes,
+                          steiner_nodes, cause_head, effect_head):
+        token = sentence.tokens[node]
+        try:
+            connective_index = connective_nodes.index(node)
+            return ConnectiveModel._get_connective_token_pattern(
+                token, connective_index, node_names)
+        except ValueError: # It's not a connective node
+            try:
+                steiner_index = steiner_nodes.index(node)
+                return ConnectiveModel._get_steiner_pattern(
+                    token, steiner_index, node_names)
+            except ValueError:  # It's an argument node
+                node_name = ['cause', 'effect'][
+                    token.index == effect_head.index]
+                return ConnectiveModel._get_non_connective_token_pattern(
+                    token, node_name, node_names)
+
+    @staticmethod
     def _get_pattern_for_instance(sentence, connective, cause_head, effect_head):
-        node_names = {}
-        sub_patterns = [
-            ConnectiveModel._get_connective_token_pattern(token, i,
-                                                          node_names)
-            for i, token in enumerate(connective)]
-
-        for token, node_name in zip([cause_head, effect_head],
-                                    ['cause', 'effect']):
-            sub_patterns.append(
-                ConnectiveModel._get_non_connective_token_pattern(
-                    token, node_name, node_names))
-
-        required_token_indices = list(set( # Eliminate potential duplicates
-            [cause_head.index, effect_head.index]
-            + [token.index for token in connective]))
+        connective_nodes = [token.index for token in connective]
+        required_token_indices = list(set(# Eliminate potential duplicates
+            [cause_head.index, effect_head.index] + connective_nodes))
         steiner_nodes, steiner_graph = steiner_tree(
             sentence.edge_graph, required_token_indices,
             sentence.path_costs, sentence.path_predecessors)
@@ -94,21 +101,58 @@ class ConnectiveModel(Model):
                 % sentence.original_text)
             return (None, None)
 
-        for i, token_index in enumerate(steiner_nodes):
-            sub_patterns.append(ConnectiveModel._get_steiner_pattern(
-                sentence.tokens[token_index], i, node_names))
+        # To generate the pattern, we start by generating one long string that
+        # can be checked easily by TRegex. That'll be the biggest chunk of the
+        # pattern. It consists of the longest path through the Steiner tree
+        # edges.
+        # Start the longest path search from a node we know is actually in the
+        # tree we're looking for.
+        longest_path = longest_path_in_tree(steiner_graph, connective_nodes[0])
+        pattern = ''
+        node_names = {}
+        edges = [(None, longest_path[0])] + list(pairwise(longest_path))
+        for edge_start, edge_end in edges:
+            end_pattern = ConnectiveModel._get_node_pattern(
+                sentence, edge_end, node_names, connective_nodes,
+                steiner_nodes, cause_head, effect_head)
+            if edge_start is not None:
+                if steiner_graph[edge_start, edge_end]: # forward edge
+                    relation = '<'
+                    edge_label = sentence.edge_labels[(edge_start, edge_end)]
+                    pattern = '%s %s (%s <1 %s' % (pattern, relation,
+                                                   end_pattern, edge_label)
+                else: # back edge
+                    relation = '>'
+                    edge_label = sentence.edge_labels[(edge_end, edge_start)]
+                    pattern = '%s <1 %s %s (%s' % (pattern, edge_label,
+                                                   relation, end_pattern)
+
+            else:
+                pattern = '%s(%s' % (pattern, end_pattern)
+        pattern += ')' * len(edges)
+
+        # Next, we need to make sure all the edges that weren't included in the
+        # longest path get incorporated into the pattern. For this, it's OK to
+        # have a few colon-separated pattern segments.
+        def get_named_node_pattern(node):
+            try:
+                return '=' + node_names[node]
+            except KeyError:  # Node hasn't been named and given a pattern yet
+                return '(%s)' % ConnectiveModel._get_node_pattern(
+                    sentence, node, node_names, connective_nodes,
+                    steiner_nodes, cause_head, effect_head)
 
         for edge_start, edge_end in zip(*steiner_graph.nonzero()):
-            start_name, end_name = [node_names[index]
-                                    for index in [edge_start, edge_end]]
-            edge_label = sentence.edge_labels[(edge_start, edge_end)]
-            edge_pattern = '(=%s < (=%s <1 %s))' % (start_name, end_name,
-                                                    edge_label)
-            sub_patterns.append(edge_pattern)
+            if ((edge_start, edge_end) in edges
+                or (edge_end, edge_start) in edges):
+                continue
+            start_pattern = get_named_node_pattern(edge_start)
+            end_pattern = get_named_node_pattern(edge_end)
+            pattern = '%s : (%s < %s)' % (pattern, start_pattern, end_pattern)
 
-        node_names_to_print = tuple(v for v in node_names.values()
-                                    if not v.startswith('steiner'))
-        return (' : '.join(sub_patterns), node_names_to_print)
+        node_names_to_print = [name for name in node_names
+                               if name not in ['cause', 'effect']]
+        return pattern, node_names_to_print
 
     def _extract_patterns(self, sentences):
         # TODO: Extend this to work with cases of missing arguments.
@@ -133,7 +177,9 @@ class ConnectiveModel(Model):
                         #    'Adding pattern:\n\t%s\n\tSentence: %s\n'
                         #    % (pattern, sentence.original_text))
                         patterns_seen.add(pattern)
-                        self.tregex_patterns.append((pattern, node_names))
+                        connective_lemmas = [t.lemma for t in connective]
+                        self.tregex_patterns.append((pattern, node_names,
+                                                     connective_lemmas))
 
     class TregexProcessorThread(threading.Thread):
         def __init__(self, sentences, ptb_strings, queue,
@@ -291,30 +337,15 @@ class ConnectiveModel(Model):
         progress_reporter.daemon = True
         return progress_reporter
 
-    CONNECTIVE_TEXT_PATTERN = re.compile(r'/\^(.*)_\[0-9\]\+\$/')
     @staticmethod
-    def _filter_sentences_for_pattern(sentences, pattern, node_labels):
-        # TODO: Is there a less hacky way to do this than to split apart
-        # the pattern again and regex-match it to find the required token
-        # texts?
-        pattern_parts = pattern.split(' : ')
-        required_tokens = []
-        for pattern_part in pattern_parts:
-            # Only examine the pattern parts that define connective nodes.
-            # The connective nodes are always the first few defined by the
-            # pattern.
-            if '=connective' not in pattern_part:
-                break
-            match = ConnectiveModel.CONNECTIVE_TEXT_PATTERN.search(
-                pattern_part)
-            required_tokens.append(match.group(1))
-
+    def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
         possible_sentence_indices = []
         for i, sentence in enumerate(sentences):
             token_texts = sentence.token_texts()
-            if (all([required_token in token_texts
-                    for required_token in required_tokens])
-                and len(token_texts) >= len(node_labels)):
+            # TODO: Should we filter here by whether there are enough tokens in
+            # the sentence to match the rest of the pattern, too?
+            if all([connective_lemma in token_texts
+                    for connective_lemma in connective_lemmas]):
                 possible_sentence_indices.append(i)
 
         return possible_sentence_indices
@@ -333,17 +364,17 @@ class ConnectiveModel(Model):
         # Queue up the patterns
         total_estimated_bytes = 0
         queue = Queue.Queue()
-        for pattern, node_labels in self.tregex_patterns:
+        for pattern, node_labels, connective_lemmas in self.tregex_patterns:
             possible_sentence_indices = self._filter_sentences_for_pattern(
-                sentences, pattern, node_labels)
+                sentences, pattern, connective_lemmas)
             queue.put_nowait((pattern, node_labels,
                               possible_sentence_indices))
             # Estimate total output file size for this pattern: each
             # sentence has sentence #, + 3 bytes for : and newlines.
             # As a very rough estimate, matching node names increase the
-            # bytes used by ~1.8x.
+            # bytes used by ~1.6x.
             total_estimated_bytes += sum(
-                1.8 * (int(log10(i + 1)) + 3)
+                1.6 * (int(log10(i + 1)) + 3)
                 for i in range(len(possible_sentence_indices)))
 
         # Start the threads
