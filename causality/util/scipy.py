@@ -373,12 +373,13 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
     return list(steiner_nodes), steiner_tree
 
 
-def longest_path_in_tree(tree):
+def longest_path_in_tree(tree, start_from=0):
     '''
     Finds the longest *undirected* path in a tree using two searches.
 
     Algorithm:
-      1. Run BFS from an arbitrary node (node 0). Call the furthest node F1.
+      1. Run BFS from an arbitrary node (`start_from`). Call the furthest node
+         F1.
       2. Starting from F1, run another BFS. Find the furthest node F2.
       3. Return the path between F1 and F2.
 
@@ -386,6 +387,12 @@ def longest_path_in_tree(tree):
     ----------
     tree : sparse matrix
         Input matrix. Must represent a valid tree.
+    start_from : int
+        Node to start from. This is useful for cases where the graph *contains*
+        a tree, but may contain stranded nodes (or other connected components).
+        Specifying the start node allows you to determine what connected
+        component the algorithm finds the longest path in. (It still assumes
+        that that connected component is a valid tree.)
 
     Returns
     -------
@@ -393,7 +400,7 @@ def longest_path_in_tree(tree):
         The ordered list of nodes traversed in the longest path, including the
         start/end nodes.
     '''
-    furthest_node_1 = breadth_first_order(tree, 0, directed=False,
+    furthest_node_1 = breadth_first_order(tree, start_from, directed=False,
                                           return_predecessors=False)[-1]
     search_result, predecessors = breadth_first_order(tree, furthest_node_1,
                                                       directed=False)

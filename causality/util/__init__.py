@@ -62,7 +62,7 @@ def print_indented(indent_level, *args, **kwargs):
             print(prefix, **prefix_kwargs)
             print(line, **kwargs)
 
-# From http://stackoverflow.com/a/5434936/4044809
+# From https://docs.python.org/2/library/itertools.html
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     a, b = tee(iterable)
