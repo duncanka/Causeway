@@ -15,7 +15,7 @@ from util import print_indented
 from util.metrics import ClassificationMetrics
 
 try:
-    gflags.DEFINE_enum('sc_classifier_model', 'svm',
+    gflags.DEFINE_enum('sc_classifier_model', 'forest',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
@@ -25,11 +25,13 @@ try:
     gflags.DEFINE_bool('eval_with_cv', False,
                        'Evaluate with cross-validation. Overrides --evaluate'
                        ' flag, and causes both train and test to be combined.')
+    gflags.DEFINE_bool('debug', False,
+                       'Whether to print debug-level logging.')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-#def main(argv):
+# def main(argv):
 if __name__ == '__main__':
     argv = sys.argv
     try:
@@ -40,7 +42,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=logging.DEBUG)
+        level=[logging.INFO, logging.DEBUG][FLAGS.debug])
     logging.captureWarnings(True)
 
     if FLAGS.sc_classifier_model == 'tree':

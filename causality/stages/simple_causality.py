@@ -7,6 +7,7 @@ from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
 from stages import match_causation_pairs, print_instances_by_eval_result, normalize_order
+from util.metrics import ClassificationMetrics
 
 try:
     DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
@@ -187,8 +188,7 @@ class SimpleCausalityStage(ClassifierStage):
             sentence.causation_instances.append(causation)
 
     def _begin_evaluation(self):
-        super(SimpleCausalityStage, self)._begin_evaluation()
-        self.tn = None
+        self.tp, self.fp, self.fn = 0, 0, 0
         self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
 
     def _prepare_for_evaluation(self, sentences):
@@ -213,9 +213,9 @@ class SimpleCausalityStage(ClassifierStage):
         self._expected_causations = []
 
     def _complete_evaluation(self):
-        results = super(SimpleCausalityStage, self)._complete_evaluation()
+        results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
         if FLAGS.sc_print_test_instances:
             print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
                                            self.fn_pairs)
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
         return results
