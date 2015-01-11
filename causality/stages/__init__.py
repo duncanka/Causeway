@@ -1,5 +1,3 @@
-from gflags import FLAGS
-
 from data import CausationInstance
 
 # Define a bunch of shared functions that are used by various stages in the
@@ -28,7 +26,7 @@ def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fp_pairs,
     Match expected and predicted cause/effect pairs from a single sentence.
     expected_pairs and found_pairs are lists of Token tuples.
     *_instances are all lists in which to record the pairs of various sorts for
-    later examination (ignored if FLAGS.sc_print_test_instances == False).
+    later examination (ignored for any that are None).
     '''
     tp, fp, fn = 0, 0, 0
     found_pairs = [normalize_order(pair) for pair in found_pairs]
@@ -38,14 +36,14 @@ def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fp_pairs,
         try:
             expected_pairs.remove(found_pair)
             tp += 1
-            if FLAGS.sc_print_test_instances:
+            if tp_pairs is not None:
                 tp_pairs.append(found_pair)
         except ValueError: # found_pair wasn't in expected_pairs
             fp += 1
-            if FLAGS.sc_print_test_instances:
+            if fp_pairs is not None:
                 fp_pairs.append(found_pair)
 
-    if FLAGS.sc_print_test_instances:
+    if fn_pairs is not None:
         fn_pairs.extend(expected_pairs)
     fn += len(expected_pairs)
 

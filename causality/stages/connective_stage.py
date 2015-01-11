@@ -1,4 +1,4 @@
-from gflags import DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer
+from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer
 import threading
 import logging
 from math import log10
@@ -25,6 +25,10 @@ try:
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
+    DEFINE_bool('tregex_print_test_instances', False,
+                'Whether to print true positive, false positive, and false'
+                ' negative instances after testing')
+
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -414,7 +418,10 @@ class ConnectiveStage(Stage):
 
     def _begin_evaluation(self):
         self.tp, self.fp, self.fn = 0, 0, 0
-        self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        if FLAGS.tregex_print_test_instances:
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+        else:
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
 
     def _evaluate(self, sentences):
         for sentence in sentences:
@@ -432,8 +439,8 @@ class ConnectiveStage(Stage):
 
     def _complete_evaluation(self):
         results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
-        if FLAGS.sc_print_test_instances:
+        if FLAGS.tregex_print_test_instances:
             print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
                                            self.fn_pairs)
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
         return results
