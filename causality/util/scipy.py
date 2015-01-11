@@ -158,6 +158,9 @@ class UnconnectedNodesError(Exception):
     pass
 
 def reconstruct_predecessor_path_1d(predecessors, w, v):
+    if w == v:
+       return np.array([v])
+
     predecessor = predecessors[v]
     path = [v]
     while predecessor != w:

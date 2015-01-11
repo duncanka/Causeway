@@ -177,6 +177,11 @@ class LongestPathTestCase(ScipyTestCase):
         self.assertArraysEqualOrReversed(longest_path,
                                          np.array([3, 1, 0, 2, 5, 8, 9]))
 
+    def test_single_node(self):
+        graph = lil_matrix((1, 1), dtype='bool')
+        longest_path = longest_path_in_tree(graph)
+        self.assertArraysEqual(longest_path, np.array([0]))
+
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
