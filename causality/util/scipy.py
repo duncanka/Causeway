@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from itertools import izip
 import numpy as np
 from scipy.sparse import lil_matrix
-from scipy.sparse.csgraph import shortest_path
+from scipy.sparse.csgraph import shortest_path, breadth_first_order
 
 from util import pairwise
 
@@ -153,6 +153,35 @@ def unique(mat, return_index=False, return_inverse=False, return_counts=False):
 
     return ret
 
+
+class UnconnectedNodesError(Exception):
+    pass
+
+def reconstruct_predecessor_path_1d(predecessors, w, v):
+    predecessor = predecessors[v]
+    path = [v]
+    while predecessor != w:
+        if predecessor == -9999:
+            raise UnconnectedNodesError(
+                'No path between nodes %d and %d' % (w, v))
+        path = [predecessor] + path
+        predecessor = predecessors[predecessor]
+    return np.array([w] + path)
+
+def reconstruct_predecessor_path(predecessors, w, v):
+    if len(predecessors.shape) == 1:
+        return reconstruct_predecessor_path_1d(predecessors, w, v)
+
+    def helper(w, v):
+        predecessor = predecessors[w, v]
+        if predecessor == w:
+            return [v]
+        elif predecessor == -9999:
+            raise UnconnectedNodesError(
+                'No path between nodes %d and %d' % (w, v))
+        else:
+            return helper(w, predecessor) + [v]
+    return np.array([w] + helper(w, v))
 
 # Steiner tree finding.
 def steiner_tree(graph, terminals, *args, **kwargs):
@@ -314,17 +343,11 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
 
     # Now we need to reconstruct the solution *without* pretending that all
     # nodes are connected via an edge with the weight of their shortest path.
-    def reconstruct_path(w, v):
-        predecessor = shortest_path_predecessors[w, v]
-        if predecessor == w:
-            return [v]
-        else:
-            return reconstruct_path(w, predecessor) + [v]
-
     steiner_nodes = set()
     steiner_tree = lil_matrix((n, n), dtype=graph.dtype)
     for start, end in steiner_edges:
-        real_path = [start] + reconstruct_path(start, end)
+        real_path = reconstruct_predecessor_path(
+            shortest_path_predecessors, start, end)
         for vertex in real_path:
             if vertex not in terminal_positions:
                 steiner_nodes.add(vertex)
@@ -345,3 +368,37 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
 
     steiner_tree = steiner_tree.tocsr()
     return list(steiner_nodes), steiner_tree
+
+
+def longest_path_in_tree(tree):
+    '''
+    Finds the longest *undirected* path in a tree using two searches.
+
+    Algorithm:
+      1. Run BFS from an arbitrary node (node 0). Call the furthest node F1.
+      2. Starting from F1, run another BFS. Find the furthest node F2.
+      3. Return the path between F1 and F2.
+
+    Parameters
+    ----------
+    tree : sparse matrix
+        Input matrix. Must represent a valid tree.
+
+    Returns
+    -------
+    path : ndarray
+        The ordered list of nodes traversed in the longest path, including the
+        start/end nodes.
+    '''
+    furthest_node_1 = breadth_first_order(tree, 0, directed=False,
+                                          return_predecessors=False)[-1]
+    search_result, predecessors = breadth_first_order(tree, furthest_node_1,
+                                                      directed=False)
+    furthest_node_2 = search_result[-1]
+    path = reconstruct_predecessor_path(
+        predecessors, furthest_node_1, furthest_node_2)
+    # Because furthest_node_1 is furthest from 0, a path found from it will
+    # often go from a much higher number to 0. While this is technically valid,
+    # it's often more aesthetically appealing to have the path go the other
+    # direction, so we reverse what we get from tracing predecessors.
+    return path[::-1]

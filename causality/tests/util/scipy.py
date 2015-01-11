@@ -1,11 +1,40 @@
 from __future__ import absolute_import
+import numpy as np
 from scipy.sparse import lil_matrix
 from scipy.sparse.csgraph import shortest_path
 import unittest
 
-from util.scipy import dreyfus_wagner
+from util.scipy import dreyfus_wagner, longest_path_in_tree
 
-class DreyfusWagnerTestCase(unittest.TestCase):
+class ScipyTestCase(unittest.TestCase):
+    def assertArraysEqual(self, array1, array2):
+        self.assertEqual(
+            type(array1), np.ndarray,
+            'array1 is not an array (actual type: %s)' % type(array1))
+        self.assertEqual(
+            type(array2), np.ndarray,
+            'array2 is not an array (actual type: %s)' % type(array2))
+
+        self.assertEqual(array1.shape, array2.shape,
+                         'Array shapes do not match (%s vs %s)'
+                         % (array1.shape, array2.shape))
+
+        if not array1.dtype.isbuiltin or not array2.dtype.isbuiltin:
+            self.assertEqual(
+                array1.dtype, array2.dtype,
+                'Incompatible dtypes: %s vs %s' % (array1.dtype, array2.dtype))
+
+        comparison = (array1 == array2)
+        if comparison.all():
+            return
+        else:
+            num_differing = comparison.size - np.count_nonzero(comparison)
+            msg = ('Arrays differ at %d locations\n%s\n\nvs.\n\n%s'
+                   % (num_differing, array1, array2))
+            self.fail(msg)
+
+
+class DreyfusWagnerTestCase(ScipyTestCase):
     def _test_graph(self, terminals, correct_nodes, correct_graph):
         path_costs, path_predecessors = shortest_path(
             self.graph, unweighted=True, return_predecessors=True,
@@ -13,7 +42,8 @@ class DreyfusWagnerTestCase(unittest.TestCase):
         steiner_nodes, steiner_graph = dreyfus_wagner(
             self.graph, terminals, path_costs, path_predecessors)
         self.assertEqual(set(steiner_nodes), set(correct_nodes))
-        self.assertTrue((steiner_graph == correct_graph).toarray().all())
+        self.assertArraysEqual(steiner_graph.toarray(),
+                               correct_graph.toarray())
 
 
 class SmallGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
@@ -99,6 +129,53 @@ class LargerGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
         correct_graph[2, 6] = 0
         correct_graph[6, 2] = 2
         self._test_graph([6, 4], [2, 3], correct_graph)
+
+
+class LongestPathTestCase(ScipyTestCase):
+    def assertArraysEqualOrReversed(self, array1, array2):
+        try:
+            # Try reversed first. That way, if both fail, the error message
+            # show the original array.
+            self.assertArraysEqual(array1, array2[::-1])
+        except AssertionError:
+            self.assertArraysEqual(array1, array2)
+
+    def test_linear_tree(self):
+        graph = lil_matrix((5,5), dtype='bool')
+        for i in range(4):
+            graph[i, i+1] = True
+        longest_path = longest_path_in_tree(graph)
+        # Either order for the path is technically OK.
+        self.assertArraysEqualOrReversed(longest_path,
+                                         np.array([0, 1, 2, 3, 4]))
+
+    def test_complex_tree(self):
+        '''
+        Network topology:
+
+        0 -> 2 -> 5 -> 8
+        |    |
+        v    v
+        1    4 -> 7 -> 9
+        |    |
+        v    v
+        3    6
+        '''
+        graph = lil_matrix((10,10), dtype='bool')
+        edges = [(0,1), (1,3), (0,2), (2,4), (4,6), (4,7), (7,9), (2,5), (5,8)]
+        for source, target in edges:
+            graph[source, target] = True
+        longest_path = longest_path_in_tree(graph)
+        self.assertArraysEqualOrReversed(longest_path,
+                                         np.array([3, 1, 0, 2, 4, 7, 9]))
+
+        # Now move node 9 to be under node 8, instead of node 7. The path
+        # should change accordingly.
+        graph[7, 9] = False
+        graph[8, 9] = True
+        longest_path = longest_path_in_tree(graph)
+        self.assertArraysEqualOrReversed(longest_path,
+                                         np.array([3, 1, 0, 2, 5, 8, 9]))
 
 
 if __name__ == "__main__":
