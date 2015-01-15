@@ -3,6 +3,8 @@
 import gflags
 from sklearn import tree, neighbors, linear_model, svm, ensemble
 import logging
+import numpy as np
+import os
 import sys
 FLAGS = gflags.FLAGS
 
@@ -27,6 +29,7 @@ try:
                        ' flag, and causes both train and test to be combined.')
     gflags.DEFINE_bool('debug', False,
                        'Whether to print debug-level logging.')
+    gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -44,6 +47,12 @@ if __name__ == '__main__':
         format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
         level=[logging.INFO, logging.DEBUG][FLAGS.debug])
     logging.captureWarnings(True)
+
+    seed = FLAGS.seed
+    if seed is None:
+        seed = int(os.urandom(4).encode('hex'), 16)
+    np.random.seed(FLAGS.seed)
+    logging.info("Using seed: %d" % seed)
 
     if FLAGS.sc_classifier_model == 'tree':
         sc_classifier = tree.DecisionTreeClassifier()

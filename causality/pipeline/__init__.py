@@ -4,7 +4,7 @@ from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, Duplicate
 from copy import deepcopy
 import itertools
 import logging
-import random
+from numpy import random
 
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
