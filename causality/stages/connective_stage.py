@@ -325,16 +325,18 @@ class ConnectiveModel(Model):
         def report_progress_loop():
             while(True):
                 time.sleep(4)
+                if all_threads_done[0]:
+                    return
                 bytes_output = sum([t.get_progress() for t in threads])
                 # Never allow > 99% completion as long as we're still running.
                 # (This could theoretically happen if our estimated max sizes
-                # turned out to be way off.)
+                # turned out to be off.)
                 try:
-                    progress = min(bytes_output / float(total_estimated_bytes),
-                                   0.99)
+                    progress = min(
+                        bytes_output / float(total_estimated_bytes), 0.99)
                 except ZeroDivisionError:
                     progress = 0
-                if not all_threads_done[0]:
+                if not all_threads_done[0]: # Make sure we're still going
                     logging.info("Tagging connectives: %1.0f%% complete"
                                  % (progress * 100))
                 else:
