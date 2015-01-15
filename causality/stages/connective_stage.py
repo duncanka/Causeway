@@ -177,9 +177,9 @@ class ConnectiveModel(Model):
                         continue
 
                     if pattern not in patterns_seen:
-                        #logging.debug(
-                        #    'Adding pattern:\n\t%s\n\tSentence: %s\n'
-                        #    % (pattern, sentence.original_text))
+                        logging.debug(
+                            'Adding pattern:\n\t%s\n\tSentence: %s\n'
+                            % (pattern, sentence.original_text))
                         patterns_seen.add(pattern)
                         connective_lemmas = [t.lemma for t in connective]
                         self.tregex_patterns.append((pattern, node_names,
@@ -329,8 +329,11 @@ class ConnectiveModel(Model):
                 # Never allow > 99% completion as long as we're still running.
                 # (This could theoretically happen if our estimated max sizes
                 # turned out to be way off.)
-                progress = min(bytes_output / float(total_estimated_bytes),
-                               0.99)
+                try:
+                    progress = min(bytes_output / float(total_estimated_bytes),
+                                   0.99)
+                except ZeroDivisionError:
+                    progress = 0
                 if not all_threads_done[0]:
                     logging.info("Tagging connectives: %1.0f%% complete"
                                  % (progress * 100))

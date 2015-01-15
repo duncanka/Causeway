@@ -59,8 +59,8 @@ class Token(object):
 Token.POS_GENERAL = merge_dicts(
     [{tag: 'NN' for tag in Token.NOUN_TAGS},
      {tag: 'VB' for tag in Token.VERB_TAGS},
-     {tag: 'ADV' for tag in Token.ADVERB_TAGS},
-     {tag: 'RB' for tag in Token.ADJECTIVE_TAGS}])
+     {tag: 'JJ' for tag in Token.ADJECTIVE_TAGS},
+     {tag: 'RB' for tag in Token.ADVERB_TAGS}])
 
 Token.ALL_POS_TAGS = (Token.NOUN_TAGS + Token.VERB_TAGS + Token.ADVERB_TAGS +
                       Token.ADJECTIVE_TAGS + ["IN"])
