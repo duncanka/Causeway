@@ -1,3 +1,5 @@
+# TODO: Always allow 'dep'?
+
 from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer
 import threading
 import logging
@@ -154,7 +156,7 @@ class ConnectiveModel(Model):
             end_pattern = get_named_node_pattern(edge_end)
             pattern = '%s : (%s < %s)' % (pattern, start_pattern, end_pattern)
 
-        node_names_to_print = [name for name in node_names
+        node_names_to_print = [name for name in node_names.values()
                                if name not in ['cause', 'effect']]
         return pattern, node_names_to_print
 
