@@ -59,14 +59,16 @@ class ConnectiveModel(Model):
     @staticmethod
     def _get_non_connective_token_pattern(token, node_name, node_names):
         node_names[token.index] = node_name
-
+        return '/.*_[0-9+]/=%s' % node_name
+        '''
         parent_sentence = token.parent_sentence
         if parent_sentence.is_clause_head(token):
             pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
         else:
             pos_pattern = ('<2 /^%s.*/' % token.get_gen_pos())
 
-        return '__=%s %s' % (node_name, pos_pattern)
+        return '/.*_[0-9+]/=%s %s' % (node_name, pos_pattern)
+        '''
 
     @staticmethod
     def _get_steiner_pattern(token, steiner_index, node_names):
@@ -93,6 +95,16 @@ class ConnectiveModel(Model):
                     token, node_name, node_names)
 
     @staticmethod
+    def _get_edge_pattern(edge_start, edge_end, sentence):
+        edge_label = sentence.edge_labels[(edge_start, edge_end)]
+        if edge_label in ['nsubj', 'csubj']:
+            return '[<1 nsubj | <1 csubj]'
+        elif edge_label in ['nsubjpass', 'csubjpass']:
+            return '[<1 nsubjpass | <1 csubjpass]'
+        else:
+            return '<1 %s' % edge_label
+
+    @staticmethod
     def _get_pattern_for_instance(sentence, connective, cause_head, effect_head):
         connective_nodes = [token.index for token in connective]
         required_token_indices = list(set(# Eliminate potential duplicates
@@ -111,6 +123,7 @@ class ConnectiveModel(Model):
         # can be checked easily by TRegex. That'll be the biggest chunk of the
         # pattern. It consists of the longest path through the Steiner tree
         # edges.
+
         # Start the longest path search from a node we know is actually in the
         # tree we're looking for.
         longest_path = longest_path_in_tree(steiner_graph, connective_nodes[0])
@@ -124,14 +137,16 @@ class ConnectiveModel(Model):
             if edge_start is not None:
                 if steiner_graph[edge_start, edge_end]: # forward edge
                     relation = '<'
-                    edge_label = sentence.edge_labels[(edge_start, edge_end)]
-                    pattern = '%s %s (%s <1 %s' % (pattern, relation,
-                                                   end_pattern, edge_label)
+                    edge_pattern = ConnectiveModel._get_edge_pattern(
+                        edge_start, edge_end, sentence)
+                    pattern = '%s %s (%s %s' % (pattern, relation,
+                                                end_pattern, edge_pattern)
                 else: # back edge
                     relation = '>'
-                    edge_label = sentence.edge_labels[(edge_end, edge_start)]
-                    pattern = '%s <1 %s %s (%s' % (pattern, edge_label,
-                                                   relation, end_pattern)
+                    edge_pattern = ConnectiveModel._get_edge_pattern(
+                        edge_end, edge_start, sentence)
+                    pattern = '%s %s %s (%s' % (pattern, edge_pattern,
+                                                relation, end_pattern)
 
             else:
                 pattern = '%s(%s' % (pattern, end_pattern)
@@ -154,7 +169,10 @@ class ConnectiveModel(Model):
                 continue
             start_pattern = get_named_node_pattern(edge_start)
             end_pattern = get_named_node_pattern(edge_end)
-            pattern = '%s : (%s < %s)' % (pattern, start_pattern, end_pattern)
+            edge_pattern = ConnectiveModel._get_edge_pattern(
+                edge_start, edge_end, sentence)
+            pattern = '%s : (%s < (%s %s))' % (pattern, start_pattern,
+                                               end_pattern, edge_pattern)
 
         node_names_to_print = [name for name in node_names.values()
                                if name not in ['cause', 'effect']]
