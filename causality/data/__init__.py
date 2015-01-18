@@ -132,11 +132,29 @@ class ParsedSentence(object):
     def get_head(self, tokens):
         min_depth = float('inf')
         head = None
+        # equal_replacement = None
         for token in tokens:
             depth = self.get_depth(token)
             if depth < min_depth:
                 head = token
                 min_depth = depth
+                # equal_replacement = None
+            elif (depth == min_depth and token.pos[:2] == 'VB'
+                  and head.pos[:2] != 'VB'):
+                # If the depths are equal, prefer verbs over others. This
+                # helps to get the correct heads for fragmented arguments, such
+                # as arguments that consist of an xcomp and its subject.
+                # equal_replacement = (token, head)
+                head = token
+                min_depth = depth
+
+        '''
+        if equal_replacement is not None:
+            logging.debug("Preferring %s over %s as head of '%s' in '%s'" %
+                         (equal_replacement[0], equal_replacement[1],
+                          ' '.join([t.original_text for t in tokens]),
+                          tokens[0].parent_sentence.original_text))
+        '''
 
         if head is None:
             logging.warn('Returning null head for tokens %s'
@@ -433,6 +451,7 @@ class ParsedSentence(object):
         # Now, we can actually create the matrix and insert all the edges.
         num_nodes = len(self.tokens)
         self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='bool')
+        graph_excluded_edges = [] # edges that shouldn't be used for graph algs
         for match_result in matches:
             (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma,
              arg2_index, arg2_copy) = match_result.group(*range(1,8))
@@ -441,8 +460,12 @@ class ParsedSentence(object):
 
             token_1_idx = copy_node_indices[arg1_index][len(arg1_copy)]
             token_2_idx = copy_node_indices[arg2_index][len(arg2_copy)]
-            self.edge_graph[token_1_idx, token_2_idx] = True
             self.edge_labels[(token_1_idx, token_2_idx)] = relation
+            if relation == 'ref':
+                graph_excluded_edges.append((token_1_idx, token_2_idx))
+            else:
+                self.edge_graph[token_1_idx, token_2_idx] = True
+
         self.edge_graph = self.edge_graph.tocsr()
 
         # TODO: do this with breadth_first_order instead
@@ -452,6 +475,12 @@ class ParsedSentence(object):
         self.path_costs, self.path_predecessors = csgraph.shortest_path(
             self.edge_graph, unweighted=True, return_predecessors=True,
             directed=False)
+
+        # Add in edges that we didn't want to use for distances/shortest path.
+        self.edge_graph = self.edge_graph.tolil()
+        for start, end in graph_excluded_edges:
+            self.edge_graph[start, end] = True
+        self.edge_graph = self.edge_graph.tocsr()
 
 
 class CausationInstance(object):
