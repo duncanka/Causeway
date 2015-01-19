@@ -6,8 +6,7 @@ from data import Token, CausationInstance
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
-from stages import match_causation_pairs, print_instances_by_eval_result, normalize_order
-from util.metrics import ClassificationMetrics
+from pairwise import PairwiseCausalityStage
 
 try:
     DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
@@ -155,10 +154,11 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {extractor.name: extractor
                                          for extractor in FEATURE_EXTRACTORS}
 
 
-class SimpleCausalityStage(ClassifierStage):
+class SimpleCausalityStage(ClassifierStage, PairwiseCausalityStage):
     def __init__(self, classifier):
         super(SimpleCausalityStage, self).__init__(
-            'Simple causality', [PhrasePairModel(classifier)])
+            name='Simple causality', models=[PhrasePairModel(classifier)],
+            print_test_instances=FLAGS.sc_print_test_instances)
         self._expected_causations = []
 
     def get_consumed_attributes(self):
@@ -181,18 +181,19 @@ class SimpleCausalityStage(ClassifierStage):
             # the cause and one is the effect, but we don't actually know
             # which is which. We arbitrarily choose to call the one with the
             # earlier head the cause. We leave the connective unset.
-            cause, effect = normalize_order(
+            cause, effect = self.normalize_order(
                 (part.head_token_1, part.head_token_2))
             # Causations assume their arguments are lists of tokens.
             causation.cause, causation.effect = [cause], [effect]
             sentence.causation_instances.append(causation)
 
     def _begin_evaluation(self):
-        self.tp, self.fp, self.fn = 0, 0, 0
-        if FLAGS.sc_print_test_instances:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
-        else:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
+        ''' Select correct ancestor for this method '''
+        return PairwiseCausalityStage._begin_evaluation(self)
+
+    def _complete_evaluation(self):
+        ''' Select correct ancestor for this method '''
+        return PairwiseCausalityStage._complete_evaluation(self)
 
     def _prepare_for_evaluation(self, sentences):
         self._expected_causations = [set(sentence.causation_instances)
@@ -205,20 +206,8 @@ class SimpleCausalityStage(ClassifierStage):
                                             i in sentence.causation_instances]
             expected_cause_effect_pairs = [i.get_cause_and_effect_heads() for
                                            i in expected_causation_set]
-            tp, fp, fn = match_causation_pairs(
+            self.match_causation_pairs(
                 expected_cause_effect_pairs, predicted_cause_effect_pairs,
-                self.tp_pairs, self.fp_pairs, self.fn_pairs)
-
-            self.tp += tp
-            self.fn += fn
-            self.fp += fp
+                self.tp_pairs, self.fp_pairs, self.fn_pairs, self.pairwise_metrics)
 
         self._expected_causations = []
-
-    def _complete_evaluation(self):
-        results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
-        if FLAGS.sc_print_test_instances:
-            print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
-                                           self.fn_pairs)
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
-        return results

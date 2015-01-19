@@ -10,11 +10,9 @@ import tempfile
 import time
 
 from data import ParsedSentence
-from pipeline import Stage
 from pipeline.models import Model
-from stages import match_causation_pairs, print_instances_by_eval_result, normalize_order
+from pairwise import PairwiseCausalityStage
 from util import pairwise
-from util.metrics import ClassificationMetrics
 from util.scipy import steiner_tree, longest_path_in_tree
 
 try:
@@ -330,7 +328,8 @@ class ConnectiveModel(Model):
             # Add newlines for writing to file later.
             ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
             true_causation_pairs = [
-                normalize_order(instance.get_cause_and_effect_heads())
+                ConnectiveStage.normalize_order(
+                    instance.get_cause_and_effect_heads())
                 for instance in sentence.causation_instances]
             true_causation_pairs_by_sentence.append(
                 set([(arg_1.index, arg_2.index)
@@ -401,9 +400,9 @@ class ConnectiveModel(Model):
             # Estimate total output file size for this pattern: each
             # sentence has sentence #, + 3 bytes for : and newlines.
             # As a very rough estimate, matching node names increase the
-            # bytes used by ~1.6x.
+            # bytes used by ~1.85x.
             total_estimated_bytes += sum(
-                1.6 * (int(log10(i + 1)) + 3)
+                1.85 * (int(log10(i + 1)) + 3)
                 for i in range(len(possible_sentence_indices)))
 
         # Start the threads
@@ -430,10 +429,11 @@ class ConnectiveModel(Model):
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
 
-class ConnectiveStage(Stage):
+class ConnectiveStage(PairwiseCausalityStage):
     def __init__(self, name):
         super(ConnectiveStage, self).__init__(
-            name, [ConnectiveModel(part_type=ParsedSentence)])
+            print_test_instances=FLAGS.sc_print_test_instances, name=name,
+            models=[ConnectiveModel(part_type=ParsedSentence)])
 
     def get_produced_attributes(self):
         return ['possible_causations']
@@ -441,31 +441,12 @@ class ConnectiveStage(Stage):
     def _extract_parts(self, sentence):
         return [sentence]
 
-    def _begin_evaluation(self):
-        self.tp, self.fp, self.fn = 0, 0, 0
-        if FLAGS.tregex_print_test_instances:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
-        else:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
-
     def _evaluate(self, sentences):
         for sentence in sentences:
             predicted_pairs = [(pc.arg1, pc.arg2)
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
-            tp, fp, fn = match_causation_pairs(
+            self.match_causation_pairs(
                 expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
-                self.fn_pairs)
-
-            self.tp += tp
-            self.fp += fp
-            self.fn += fn
-
-    def _complete_evaluation(self):
-        results = ClassificationMetrics(self.tp, self.fp, self.fn, None)
-        if FLAGS.tregex_print_test_instances:
-            print_instances_by_eval_result(self.tp_pairs, self.fp_pairs,
-                                           self.fn_pairs)
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
-        return results
+                self.fn_pairs, self.pairwise_metrics)

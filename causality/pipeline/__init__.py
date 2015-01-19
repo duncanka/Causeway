@@ -263,8 +263,9 @@ class Stage(object):
         pass
 
 class ClassifierStage(Stage):
-    def __init__(self, name, models):
-        super(ClassifierStage, self).__init__(name, models)
+    def __init__(self, name, models, *args, **kwargs):
+        super(ClassifierStage, self).__init__(name=name, models=models,
+                                              *args, **kwargs)
         self.tp = 0
         self.tn = 0
         self.fp = 0

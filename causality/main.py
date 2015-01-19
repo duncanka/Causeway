@@ -11,8 +11,8 @@ FLAGS = gflags.FLAGS
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from stages.simple_causality import SimpleCausalityStage
-from stages.connective_stage import ConnectiveStage
+from pairwise.simple_causality import SimpleCausalityStage
+from pairwise.connective_stage import ConnectiveStage
 from util import print_indented
 from util.metrics import ClassificationMetrics
 
