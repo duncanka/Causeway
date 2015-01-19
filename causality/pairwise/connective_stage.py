@@ -13,6 +13,7 @@ from data import ParsedSentence
 from pipeline.models import Model
 from pairwise import PairwiseCausalityStage
 from util import pairwise
+from util.metrics import ClassificationMetrics
 from util.scipy import steiner_tree, longest_path_in_tree
 
 try:
@@ -438,8 +439,25 @@ class ConnectiveStage(PairwiseCausalityStage):
     def get_produced_attributes(self):
         return ['possible_causations']
 
+    @staticmethod
+    def average_eval_pairs(metrics_pairs):
+        return (ClassificationMetrics.average([m1 for m1, _ in metrics_pairs]),
+                ClassificationMetrics.average([m2 for _, m2 in metrics_pairs]))
+
     def _extract_parts(self, sentence):
         return [sentence]
+
+    def _begin_evaluation(self):
+        PairwiseCausalityStage._begin_evaluation(self)
+        self.pairwise_only_metrics = ClassificationMetrics()
+
+    def _complete_evaluation(self):
+        ''' Select correct ancestor for this method '''
+        all_instances_metrics = PairwiseCausalityStage._complete_evaluation(
+            self)
+        pairwise_only_metrics = self.pairwise_only_metrics
+        del self.pairwise_only_metrics
+        return (all_instances_metrics, pairwise_only_metrics)
 
     def _evaluate(self, sentences):
         for sentence in sentences:
@@ -447,6 +465,11 @@ class ConnectiveStage(PairwiseCausalityStage):
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
-            self.match_causation_pairs(
+            tp, fp, fn = self.match_causation_pairs(
                 expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
-                self.fn_pairs, self.pairwise_metrics)
+                self.fn_pairs, self.all_instances_metrics)
+
+            self.pairwise_only_metrics.tp += tp
+            self.pairwise_only_metrics.fp += fp
+            fns_to_ignore = sum(1 for pair in expected_pairs if None in pair)
+            self.pairwise_only_metrics.fn += fn - fns_to_ignore

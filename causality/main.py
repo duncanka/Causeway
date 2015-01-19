@@ -78,12 +78,15 @@ if __name__ == '__main__':
         stage_names = [p.name for p in causality_pipeline.stages]
         for stage_name, result in zip(stage_names, eval_results):
             print "Evaluation for stage %s:" % stage_name
-            print_indented(1, result)
+            # The labels will be used for eval results of the connective stage.
+            causality_pipeline.print_stage_results(
+                1, result, ['All instances', 'Pairwise instances only'])
 
     if FLAGS.eval_with_cv:
         print "Evaluating with %d-fold cross-validation" % FLAGS.cv_folds
         eval_results = causality_pipeline.cross_validate(
-            stage_aggregators=[ClassificationMetrics.average] * 2)
+            stage_aggregators=[ConnectiveStage.average_eval_pairs,
+                               ClassificationMetrics.average])
         print_eval(eval_results)
     else:
         if FLAGS.train_paths:

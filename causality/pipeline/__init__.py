@@ -90,7 +90,7 @@ class Pipeline(object):
                 stage_results.append(current_stage_result)
                 if FLAGS.cv_print_fold_results:
                     print_indented(1, 'Stage', stage.name, 'results:')
-                    print_indented(2, current_stage_result)
+                    self.print_stage_results(2, current_stage_result)
 
             if (FLAGS.cv_debug_stop_after is not None 
                 and i + 1 >= FLAGS.cv_debug_stop_after):
@@ -102,6 +102,19 @@ class Pipeline(object):
                         in zip(stage_aggregators, results)]
         self.eval_results = results
         return results
+
+    @staticmethod
+    def print_stage_results(indent_baseline, results, result_names=[]):
+        if isinstance(results, list) or isinstance(results, tuple):
+            for i, r in enumerate(results):
+                try:
+                    result_name = result_names[i]
+                except IndexError:
+                    result_name = 'Evaluation result %d' % i
+                print_indented(indent_baseline, result_name, ':', sep='')
+                print_indented(indent_baseline + 1, str(r))
+        else:
+            print_indented(indent_baseline, results)
 
     def train(self, instances=None):
         if instances is None:

@@ -13,19 +13,23 @@ class PairwiseCausalityStage(Stage):
         super(PairwiseCausalityStage, self).__init__(*args, **kwargs)
 
     def _begin_evaluation(self):
-        self.pairwise_metrics = ClassificationMetrics(finalize=False)
+        self.all_instances_metrics = ClassificationMetrics(finalize=False)
         if self.print_test_instances:
             self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
         else:
             self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
 
     def _complete_evaluation(self):
-        self.pairwise_metrics._finalize_counts()
+        self.all_instances_metrics._finalize_counts()
         if self.print_test_instances:
             PairwiseCausalityStage.print_instances_by_eval_result(
                 self.tp_pairs, self.fp_pairs, self.fn_pairs)
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
-        return self.pairwise_metrics
+        del self.tp_pairs
+        del self.fp_pairs
+        del self.fn_pairs
+        all_instances_metrics = self.all_instances_metrics
+        del self.all_instances_metrics
+        return all_instances_metrics
 
     @staticmethod
     def starts_before(token_1, token_2):
@@ -78,6 +82,8 @@ class PairwiseCausalityStage(Stage):
         metrics.tp += tp
         metrics.fp += fp
         metrics.fn += fn
+
+        return tp, fp, fn
 
     @staticmethod
     def print_instances_by_eval_result(tp_pairs, fp_pairs, fn_pairs):

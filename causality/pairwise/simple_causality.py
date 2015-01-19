@@ -208,6 +208,7 @@ class SimpleCausalityStage(ClassifierStage, PairwiseCausalityStage):
                                            i in expected_causation_set]
             self.match_causation_pairs(
                 expected_cause_effect_pairs, predicted_cause_effect_pairs,
-                self.tp_pairs, self.fp_pairs, self.fn_pairs, self.pairwise_metrics)
+                self.tp_pairs, self.fp_pairs, self.fn_pairs,
+                self.all_instances_metrics)
 
         self._expected_causations = []
