@@ -1,6 +1,6 @@
 import copy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
-import itertools
+# import itertools
 import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
@@ -14,28 +14,39 @@ except DuplicateFlagError as e:
 safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
 
 class ClassificationMetrics(object):
-    def __init__(self, tp, fp, fn, tn=None):
+    def __init__(self, tp=0, fp=0, fn=0, tn=None, finalize=True):
         # Often there is no well-defined concept of a true negative, so it
         # defaults to undefined.
-        self.tp = tp
-        self.fp = fp
-        self.tn = tn
-        self.fn = fn
+        self._tp = tp
+        self._fp = fp
+        self._tn = tn
+        self._fn = fn
+
+        if finalize:
+            self._finalize_counts()
+        else:
+            self._finalized = False
 
         #assert tp >= 0 and fp >= 0 and fn >= 0 and (tn is None or tn >= 0), (
         #    'Invalid raw metrics values (%s)' % ((tp, fp, fn, tn),))
 
-        tp = float(tp)
-        self.precision = tp / safe_divisor(tp + fp)
-        self.recall = tp / safe_divisor(tp + fn)
-        self.f1 = 2 * tp / safe_divisor(2 * tp + fp + fn)
-        if tn is not None:
-            self.accuracy = (tp + tn) / safe_divisor(tp + tn + fp + fn)
+    def _finalize_counts(self):
+        tp = float(self._tp)
+        self._precision = tp / safe_divisor(tp + self._fp)
+        self._recall = tp / safe_divisor(tp + self._fn)
+        self._f1 = 2 * tp / safe_divisor(2 * tp + self._fp + self._fn)
+        if self._tn is not None:
+            self._accuracy = (tp + self._tn) / safe_divisor(
+                tp + self._tn + self._fp + self._fn)
         else:
-            self.accuracy = float('nan')
-            self.tn = self.accuracy
+            self._accuracy = float('nan')
+            self._tn = self._accuracy
+        self._finalized = True
 
     def __str__(self):
+        if not self._finalized:
+            self._finalize_counts()
+
         if FLAGS.metrics_log_raw_counts:
             return ('TP: %g\n'
                     'TN: %g\n'
@@ -45,25 +56,76 @@ class ClassificationMetrics(object):
                     'Precision: %g\n'
                     'Recall: %g\n'
                     'F1: %g') % (
-                        self.tp, self.tn, self.fp, self.fn, self.accuracy,
-                        self.precision, self.recall, self.f1)
+                        self._tp, self._tn, self._fp, self._fn, self._accuracy,
+                        self._precision, self._recall, self._f1)
         else:
             return ('Accuracy: %g\n'
                     'Precision: %g\n'
                     'Recall: %g\n'
                     'F1: %g') % (
-                        self.accuracy, self.precision, self.recall, self.f1)
+                        self._accuracy, self._precision, self._recall,
+                        self._f1)
 
     @staticmethod
     def average(metrics_list):
-        avg = ClassificationMetrics(0,0,0)
-        property_names = ['tp', 'fp', 'tn', 'fn', 'accuracy', 'precision',
-                          'recall', 'f1']
+        '''
+        Averaging produces a technically non-sensical ClassificationMetrics
+        object: the usual relationships do not hold between the properties.
+        To get around this, we manually modify the underlying attributes, then
+        reassure the object that it's been finalized.
+        '''
+        avg = ClassificationMetrics(0, 0, 0, None, False)
+        property_names = (ClassificationMetrics.MUTABLE_PROPERTY_NAMES +
+                          ClassificationMetrics.DERIVED_PROPERTY_NAMES)
         for property_name in property_names:
-            setattr(avg, property_name,
-                    sum([getattr(m, property_name) for m in metrics_list])
+            underlying_property_name = '_' + property_name
+            setattr(avg, underlying_property_name,
+                    sum([getattr(m, underlying_property_name)
+                         for m in metrics_list])
                     / float(len(metrics_list)))
+        avg._finalized = True
         return avg
+    
+    ''' We need a bunch of extra functions to support property creation. '''
+
+    @staticmethod
+    def make_mutable_getter(property_name):
+        def getter(self):
+            if not self._finalized:
+                self._finalize_counts()
+            return getattr(self, '_' + property_name)
+        return getter
+
+    @staticmethod
+    def make_derived_getter(property_name):
+        return lambda self: getattr(self, '_' + property_name)
+
+    @staticmethod
+    def make_real_setter(property_name):
+        def setter(self, value):
+            setattr(self, '_' + property_name, value)
+            self._finalized = False
+        return setter
+
+    @staticmethod
+    def make_derived_setter(property_name):
+        def setter(self, value):
+            raise ValueError('%s property is not directly modifiable'
+                             % property_name)
+        return setter
+
+    MUTABLE_PROPERTY_NAMES = ['tp', 'fp', 'fn', 'tn']
+    DERIVED_PROPERTY_NAMES = ['accuracy', 'precision', 'recall', 'f1']
+
+for property_name in (ClassificationMetrics.MUTABLE_PROPERTY_NAMES
+                      + ClassificationMetrics.DERIVED_PROPERTY_NAMES):
+    if property_name in ClassificationMetrics.MUTABLE_PROPERTY_NAMES:
+        getter = ClassificationMetrics.make_derived_getter(property_name)
+        setter = ClassificationMetrics.make_real_setter(property_name)
+    else: # derived property
+        getter = ClassificationMetrics.make_mutable_getter(property_name)
+        setter = ClassificationMetrics.make_derived_setter(property_name)
+    setattr(ClassificationMetrics, property_name, property(getter, setter))
 
 def diff_binary_vectors(predicted, gold):
     # Make sure np.where works properly
@@ -88,25 +150,6 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         if set(self._values) != set(other._values):
             raise ValueError(
                 "Can't add confusion matrices with different label sets")
-
-        '''
-        # NOTE: Apparently I can get around this just by disabling sorting by
-        # count above...
-        #
-        # The NLTK confusion matrix labels can be sorted in order of frequency.
-        # The orders may be different, so we normalize the order of the other
-        # one's matrix to match self's.
-        if self._values == other._values:
-            other_reordered_confusion = other._confusion
-        else:
-            other_reordered_confusion = np.empty(other._confusion.shape)
-            remapping = [self._indices[value] for value in other._values]
-            for index1, index2 in itertools.product(range(len(remapping)),
-                                                    range(len(remapping))):
-                other_reordered_confusion[remapping[index1],
-                                          remapping[index2]] = (
-                    other._confusion[index1, index2])
-        '''
 
         new_matrix = copy.copy(self)
         new_matrix._confusion = self._confusion + other._confusion
