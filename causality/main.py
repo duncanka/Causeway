@@ -83,7 +83,8 @@ if __name__ == '__main__':
                 1, result, ['All instances', 'Pairwise instances only'])
 
     if FLAGS.eval_with_cv:
-        print "Evaluating with %d-fold cross-validation" % FLAGS.cv_folds
+        logging.info("Evaluating with %d-fold cross-validation"
+                     % FLAGS.cv_folds)
         eval_results = causality_pipeline.cross_validate(
             stage_aggregators=[ConnectiveStage.average_eval_pairs,
                                ClassificationMetrics.average])

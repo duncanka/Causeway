@@ -43,7 +43,7 @@ class Pipeline(object):
         self.eval_results = None
 
     def _read_instances(self, paths=None):
-        print "Creating instances..."
+        logging.info("Creating instances...")
         instances = []
         for path in paths:
             logging.info('Reading instances from %s' % path)

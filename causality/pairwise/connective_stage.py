@@ -433,7 +433,7 @@ class ConnectiveModel(Model):
 class ConnectiveStage(PairwiseCausalityStage):
     def __init__(self, name):
         super(ConnectiveStage, self).__init__(
-            print_test_instances=FLAGS.sc_print_test_instances, name=name,
+            print_test_instances=FLAGS.tregex_print_test_instances, name=name,
             models=[ConnectiveModel(part_type=ParsedSentence)])
 
     def get_produced_attributes(self):
