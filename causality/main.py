@@ -51,8 +51,8 @@ if __name__ == '__main__':
     seed = FLAGS.seed
     if seed is None:
         seed = int(os.urandom(4).encode('hex'), 16)
-    np.random.seed(FLAGS.seed)
-    logging.info("Using seed: %d" % seed)
+    np.random.seed(seed)
+    print "Using seed:", seed
 
     if FLAGS.sc_classifier_model == 'tree':
         sc_classifier = tree.DecisionTreeClassifier()

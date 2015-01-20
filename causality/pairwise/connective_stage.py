@@ -452,7 +452,6 @@ class ConnectiveStage(PairwiseCausalityStage):
         self.pairwise_only_metrics = ClassificationMetrics()
 
     def _complete_evaluation(self):
-        ''' Select correct ancestor for this method '''
         all_instances_metrics = PairwiseCausalityStage._complete_evaluation(
             self)
         pairwise_only_metrics = self.pairwise_only_metrics
