@@ -6,7 +6,7 @@ diff -ur src-orig/edu/stanford/nlp/trees/PennTreeReader.java src/edu/stanford/nl
      Tree t = null;
 
 -    while (tokenizer.hasNext() && t == null) {
-+    // Order matters this. If the tokenizer is reading from a stream,
++    // Order matters here. If the tokenizer is reading from a stream,
 +    // this could hang if the conditions were in the other order.
 +    while (t == null && tokenizer.hasNext()) {
 
