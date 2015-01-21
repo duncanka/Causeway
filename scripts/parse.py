@@ -29,12 +29,12 @@ def run_parser(sentence, parser_path, write_results=False):
         parse_path = os.path.splitext(sentence_file.name)[0] + '.parse'
         with open(parse_path, 'w') as parse_file:
             parse_file.write(stdout)
-        return sentence_file.name
+        return (sentence_file.name, parse_path)
     else:
         return stdout
 
 def get_parsed_sentence(sentence_text):
-    txt_path = run_parser(
+    txt_path, _ = run_parser(
         sentence_text, '../../../stanford-parser-full-2014-10-31/', True)
     from data.readers import SentenceReader
     r = SentenceReader()
