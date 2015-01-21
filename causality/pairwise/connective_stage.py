@@ -6,6 +6,7 @@ import logging
 from math import log10
 import Queue
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -22,10 +23,12 @@ try:
                   'stanford-tregex-2014-10-26/tregex.sh',
                   'Command to run TRegex')
     DEFINE_integer(
-        'tregex_max_steiners', 6,
+        'tregex_max_steiners', sys.maxsize,
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
+    DEFINE_bool('tregex_print_patterns', False,
+                'Whether to print all connective patterns')
     DEFINE_bool('tregex_print_test_instances', False,
                 'Whether to print true positive, false positive, and false'
                 ' negative instances after testing')
@@ -183,6 +186,8 @@ class ConnectiveModel(Model):
         # conjunctions that introduce spurious differences btw patterns?
         self.tregex_patterns = []
         patterns_seen = set()
+        if FLAGS.tregex_print_patterns:
+            print 'Patterns:'
         for sentence in sentences:
             for instance in sentence.causation_instances:
                 if instance.cause != None and instance.effect is not None:
@@ -196,9 +201,10 @@ class ConnectiveModel(Model):
                         continue
 
                     if pattern not in patterns_seen:
-                        logging.debug(
-                            'Adding pattern:\n\t%s\n\tSentence: %s\n'
-                            % (pattern, sentence.original_text))
+                        if FLAGS.tregex_print_patterns:
+                            print pattern
+                            print 'Sentence:', sentence.original_text
+                            print
                         patterns_seen.add(pattern)
                         connective_lemmas = [t.lemma for t in connective]
                         self.tregex_patterns.append((pattern, node_names,
