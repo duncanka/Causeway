@@ -100,11 +100,13 @@ class ConnectiveModel(Model):
     def _get_edge_pattern(edge_start, edge_end, sentence):
         edge_label = sentence.edge_labels[(edge_start, edge_end)]
         if edge_label in ['nsubj', 'csubj']:
-            return '[<1 nsubj | <1 csubj]'
+            options = ['<1 nsubj', '<1 csubj']
         elif edge_label in ['nsubjpass', 'csubjpass']:
-            return '[<1 nsubjpass | <1 csubjpass]'
+            options = ['<1 nsubjpass', '<1 csubjpass']
         else:
-            return '<1 %s' % edge_label
+            options = ['<1 ' + edge_label]
+        options += ['<1 dep']
+        return '[%s]' % ' | '.join(options)
 
     @staticmethod
     def _get_pattern_for_instance(sentence, connective, cause_head, effect_head):
