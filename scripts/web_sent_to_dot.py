@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import re
-import subprocess
 import os
 import sys
 import httplib, urllib
@@ -42,6 +40,6 @@ if __name__ == '__main__':
         f.write(parse)
 
     with open(tmp_file_path, 'r') as f:
-        make_dot(f)
+        make_dot(f, tmp_file_path)
 
     os.remove(tmp_file_path)
