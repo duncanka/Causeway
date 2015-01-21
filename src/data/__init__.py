@@ -299,7 +299,7 @@ class ParsedSentence(object):
                                          incoming_arc_label, node.pos)
             for child_arc_label, child in sorted(
                 self.get_children(node), key=lambda pair: pair[1].start_offset):
-                if child not in visited:
+                if child not in visited and child_arc_label != 'ref':
                     node_str += ' ' + convert_node(child, child_arc_label)
             node_str += ')'
             return node_str
