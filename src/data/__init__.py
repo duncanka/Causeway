@@ -219,9 +219,6 @@ class ParsedSentence(object):
 
         return False
 
-    def token_texts(self):
-        return [t.original_text for t in self.tokens[1:]]
-
     def extract_dependency_path(self, source, target):
         edges = []
         while target is not source:

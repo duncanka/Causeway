@@ -378,10 +378,10 @@ class ConnectiveModel(Model):
     def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
         possible_sentence_indices = []
         for i, sentence in enumerate(sentences):
-            token_texts = sentence.token_texts()
+            token_lemmas = [token.lemma for token in sentence.tokens]
             # TODO: Should we filter here by whether there are enough tokens in
             # the sentence to match the rest of the pattern, too?
-            if all([connective_lemma in token_texts
+            if all([connective_lemma in token_lemmas
                     for connective_lemma in connective_lemmas]):
                 possible_sentence_indices.append(i)
 
