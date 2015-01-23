@@ -1,5 +1,3 @@
-# TODO: Always allow 'dep'?
-
 from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer
 import threading
 import logging
@@ -105,7 +103,8 @@ class ConnectiveModel(Model):
             options = ['<1 nsubjpass', '<1 csubjpass']
         else:
             options = ['<1 ' + edge_label]
-        options += ['<1 dep']
+        if edge_label != 'dep':
+            options += ['<1 dep']
         return '[%s]' % ' | '.join(options)
 
     @staticmethod
