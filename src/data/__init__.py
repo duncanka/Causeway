@@ -130,24 +130,37 @@ class ParsedSentence(object):
         return self.__depths[token.index]
 
     def get_head(self, tokens):
-        min_depth = float('inf')
+        def token_is_preferred_to(old_token, new_token):
+            # If the depths are equal, prefer verbs/copulas over nouns, and
+            # nouns over others. This helps to get the correct heads for
+            # fragmented arguments, such as arguments that consist of an xcomp
+            # and its subject, as well as a few other edge cases.
+            if self.is_clause_head(new_token):
+                return False
+            elif self.is_clause_head(old_token):
+                return True
+            elif new_token.pos in Token.NOUN_TAGS:
+                return False
+            elif old_token.pos in Token.NOUN_TAGS:
+                return True
+            else:
+                return False
+
+        min_depth = np.inf
         head = None
         # equal_replacement = None
         for token in tokens:
             depth = self.get_depth(token)
-            if depth < min_depth:
+            if depth < min_depth or (
+                depth == min_depth and token_is_preferred_to(token, head)):
                 head = token
                 min_depth = depth
-                # equal_replacement = None
-            elif (depth == min_depth and token.pos[:2] == 'VB'
-                  and head.pos[:2] != 'VB'):
-                # If the depths are equal, prefer verbs over others. This
-                # helps to get the correct heads for fragmented arguments, such
-                # as arguments that consist of an xcomp and its subject.
-                # equal_replacement = (token, head)
-                head = token
-                min_depth = depth
-
+                '''
+                if depth == min_depth:
+                    equal_replacement = (token, head)
+                else:
+                    equal_replacement = None
+                '''
         '''
         if equal_replacement is not None:
             logging.debug("Preferring %s over %s as head of '%s' in '%s'" %
@@ -202,6 +215,7 @@ class ParsedSentence(object):
                      self.tokens[edge_end_index])
                     for edge_end_index in self.edge_graph[token.index].indices]
 
+    INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass']
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
             return False
@@ -215,6 +229,12 @@ class ParsedSentence(object):
             for edge_end_index in self.edge_graph[token.index].indices:
                 # A copula edge to a child also indicates a clause.
                 if self.edge_labels[(token.index, edge_end_index)] == 'cop':
+                    return True
+            incoming = self.edge_graph[:, token.index]
+            for edge_start_index in incoming.nonzero()[0]:
+                # An incoming clause edge also indicates a clause.
+                if (self.edge_labels[(edge_start_index, token.index)]
+                    in self.INCOMING_CLAUSE_EDGES):
                     return True
 
         return False
