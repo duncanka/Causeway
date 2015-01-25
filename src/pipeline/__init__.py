@@ -23,7 +23,8 @@ try:
                 " for all test paths. If multiple paths are provided, they"
                 " must correspond one-to-one with the test paths provided.")
     DEFINE_integer('cv_folds', 10,
-                   'How many folds to split data into for cross-validation.')
+                   'How many folds to split data into for cross-validation. A'
+                   ' negative value indicates leave-one-out CV.')
     DEFINE_integer('cv_debug_stop_after', None,
                    'Number of CV rounds to stop after (for debugging)')
     DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
@@ -69,11 +70,13 @@ class Pipeline(object):
 
         instances = self._read_instances(FLAGS.train_paths + FLAGS.test_paths)
         random.shuffle(instances)
+        if num_folds < 0:
+            num_folds = len(instances)
         folds = partition(instances, num_folds)
         results = [[] for _ in self.stages]
 
         for i, fold in enumerate(folds):
-            print "Beginning fold", i + 1
+            print "Beginning fold", i + 1, 'of', num_folds
             testing = fold
             training = list(itertools.chain(
                 *[f for f in folds if f is not fold]))
