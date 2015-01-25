@@ -315,14 +315,21 @@ class ParsedSentence(object):
         visited = set()
         def convert_node(node, incoming_arc_label):
             visited.add(node)
-            node_str = '(%s_%d %s %s' % (node.lemma, node.index,
+            lemma = node.lemma
+            if node.lemma == '(':
+                lemma = 'LPR'
+            elif node.lemma == ')':
+                lemma = 'RPR'
+            node_str = '(%s_%d %s %s' % (lemma, node.index,
                                          incoming_arc_label, node.pos)
+
             for child_arc_label, child in sorted(
                 self.get_children(node), key=lambda pair: pair[1].start_offset):
                 if child not in visited and child_arc_label != 'ref':
                     node_str += ' ' + convert_node(child, child_arc_label)
             node_str += ')'
             return node_str
+
         return convert_node(self.get_children(self.tokens[0], 'root')[0],
                             'root')
 
