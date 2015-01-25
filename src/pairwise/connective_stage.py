@@ -311,10 +311,10 @@ class ConnectiveModel(Model):
         def get_progress(self):
             try:
                 return self.total_bytes_output + self.output_file.tell()
-            except (AttributeError, IOError):
+            except (AttributeError, IOError, ValueError):
                 # AttributeError indicates that self.output_file was None.
-                # IOError indicates that we managed to ask for file size
-                # just after the file was closed. Either way, that means
+                # IOError/ValueError indicate that we managed to ask for file
+                # size just after the file was closed. Either way, that means
                 # that now the total number of bytes has been recorded.
                 return self.total_bytes_output
 
