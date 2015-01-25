@@ -67,7 +67,7 @@ class ClassificationMetrics(object):
                         self._f1)
 
     @staticmethod
-    def average(metrics_list):
+    def average(metrics_list, ignore_nans=True):
         '''
         Averaging produces a technically non-sensical ClassificationMetrics
         object: the usual relationships do not hold between the properties.
@@ -79,10 +79,12 @@ class ClassificationMetrics(object):
                           ClassificationMetrics.DERIVED_PROPERTY_NAMES)
         for property_name in property_names:
             underlying_property_name = '_' + property_name
+            values = [getattr(m, underlying_property_name)
+                      for m in metrics_list]
+            if ignore_nans:
+                values = [v for v in values if not np.isnan(v)]
             setattr(avg, underlying_property_name,
-                    sum([getattr(m, underlying_property_name)
-                         for m in metrics_list])
-                    / float(len(metrics_list)))
+                    sum(values) / safe_divisor(float(len(values))))
         avg._finalized = True
         return avg
     
