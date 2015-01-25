@@ -2,6 +2,7 @@ from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE
 import threading
 import logging
 from math import log10
+import os
 import Queue
 import subprocess
 import sys
@@ -16,9 +17,9 @@ from util.metrics import ClassificationMetrics
 from util.scipy import steiner_tree, longest_path_in_tree
 
 try:
-    DEFINE_string('tregex_command',
+    DEFINE_string('tregex_dir',
                   '/home/jesse/Documents/Work/Research/'
-                  'stanford-tregex-2014-10-26/tregex.sh',
+                  'stanford-tregex-2014-10-26',
                   'Command to run TRegex')
     DEFINE_integer(
         'tregex_max_steiners', sys.maxsize,
@@ -59,7 +60,7 @@ class ConnectiveModel(Model):
     @staticmethod
     def _get_non_connective_token_pattern(token, node_name, node_names):
         node_names[token.index] = node_name
-        return '/.*_[0-9+]/=%s' % node_name
+        return '/.*_[0-9]+/=%s' % node_name
         '''
         parent_sentence = token.parent_sentence
         if parent_sentence.is_clause_head(token):
@@ -108,7 +109,8 @@ class ConnectiveModel(Model):
         return '[%s]' % ' | '.join(options)
 
     @staticmethod
-    def _get_pattern_for_instance(sentence, connective, cause_head, effect_head):
+    def _get_pattern_for_instance(sentence, connective, cause_head,
+                                  effect_head):
         connective_nodes = [token.index for token in connective]
         required_token_indices = list(set(# Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_nodes))
@@ -243,7 +245,7 @@ class ConnectiveModel(Model):
                         self.true_causation_pairs_by_sentence[i]
                         for i in possible_sentence_indices]
 
-                    with tempfile.NamedTemporaryFile('w+b') as tree_file:
+                    with tempfile.NamedTemporaryFile('w') as tree_file:
                         tree_file.writelines(possible_trees)
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
@@ -262,10 +264,10 @@ class ConnectiveModel(Model):
                 # TODO: Make this use the node labels to also retrieve the
                 # possible connective tokens.
                 tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
-                full_tregex_command = (
-                    [FLAGS.tregex_command] + tregex_args
+                tregex_command = (
+                    [os.path.join(FLAGS.tregex_dir, 'tregex.sh')] + tregex_args
                     + [pattern, tree_file_path])
-                subprocess.call(full_tregex_command, stdout=self.output_file,
+                subprocess.call(tregex_command, stdout=self.output_file,
                                 stderr=self.dev_null)
                 self.output_file.seek(0)
 
@@ -333,7 +335,6 @@ class ConnectiveModel(Model):
         true_causation_pairs_by_sentence = []
         for sentence in sentences:
             sentence.possible_causations = []
-            # Add newlines for writing to file later.
             ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
             true_causation_pairs = [
                 ConnectiveStage.normalize_order(
@@ -343,6 +344,21 @@ class ConnectiveModel(Model):
                 set([(arg_1.index, arg_2.index)
                      for (arg_1, arg_2) in true_causation_pairs
                      if arg_1 is not None and arg_2 is not None]))
+            
+        with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
+            tree_file.writelines(ptb_strings)
+            tree_file.flush()
+            with tempfile.NamedTemporaryFile('w+b', delete=False) as surgeried_file:
+                tsurgeon_command = (
+                    ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
+                      '-treeFile', tree_file.name] +
+                     [os.path.join('pairwise', tr) for tr in [
+                      'normalize_passives.tregex',
+                      'normalize_vmod_passives.tregex',
+                      'postprocess_vmod_passives.tregex']]))
+                subprocess.call(tsurgeon_command, stdout=surgeried_file)
+                surgeried_file.seek(0)
+                ptb_strings = surgeried_file.readlines()
 
         return ptb_strings, true_causation_pairs_by_sentence
 
