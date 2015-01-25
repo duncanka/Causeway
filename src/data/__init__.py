@@ -314,6 +314,12 @@ class ParsedSentence(object):
         # TSurgeon script that duplicates the relevant nodes?
         visited = set()
         def convert_node(node, incoming_arc_label):
+            # If we've already visited the node before, don't recurse on it --
+            # just re-output its own string. In the vast majority of cases,
+            # this will match the patterns just fine, since they're only
+            # matching heads anyway. And since we're duplicating the node name,
+            # we'll know later what real node matched.
+            recurse = node not in visited
             visited.add(node)
             lemma = node.lemma
             if node.lemma == '(':
@@ -324,8 +330,9 @@ class ParsedSentence(object):
                                          incoming_arc_label, node.pos)
 
             for child_arc_label, child in sorted(
-                self.get_children(node), key=lambda pair: pair[1].start_offset):
-                if child not in visited and child_arc_label != 'ref':
+                self.get_children(node),
+                key=lambda pair: pair[1].start_offset):
+                if recurse and child_arc_label != 'ref':
                     node_str += ' ' + convert_node(child, child_arc_label)
             node_str += ')'
             return node_str
@@ -484,6 +491,8 @@ class ParsedSentence(object):
 
             token_1_idx = copy_node_indices[arg1_index][len(arg1_copy)]
             token_2_idx = copy_node_indices[arg2_index][len(arg2_copy)]
+            # TODO: What should we do about the cases where there are
+            # multiple labels for the same edge? (e.g., conj and ccomp)
             self.edge_labels[(token_1_idx, token_2_idx)] = relation
             if relation == 'ref':
                 graph_excluded_edges.append((token_1_idx, token_2_idx))

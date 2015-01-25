@@ -13,7 +13,6 @@ from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
 from pairwise.simple_causality import SimpleCausalityStage
 from pairwise.connective_stage import ConnectiveStage
-from util import print_indented
 from util.metrics import ClassificationMetrics
 
 try:
