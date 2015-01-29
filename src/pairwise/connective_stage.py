@@ -114,6 +114,7 @@ class ConnectiveModel(Model):
         connective_nodes = [token.index for token in connective]
         required_token_indices = list(set(# Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_nodes))
+
         steiner_nodes, steiner_graph = steiner_tree(
             sentence.edge_graph, required_token_indices,
             sentence.path_costs, sentence.path_predecessors)
@@ -141,17 +142,15 @@ class ConnectiveModel(Model):
                 steiner_nodes, cause_head, effect_head)
             if edge_start is not None:
                 if steiner_graph[edge_start, edge_end]: # forward edge
-                    relation = '<'
                     edge_pattern = ConnectiveModel._get_edge_pattern(
                         edge_start, edge_end, sentence)
-                    pattern = '%s %s (%s %s' % (pattern, relation,
-                                                end_pattern, edge_pattern)
+                    pattern = '%s < (%s %s' % (pattern, end_pattern,
+                                               edge_pattern)
                 else: # back edge
-                    relation = '>'
                     edge_pattern = ConnectiveModel._get_edge_pattern(
                         edge_end, edge_start, sentence)
-                    pattern = '%s %s %s (%s' % (pattern, edge_pattern,
-                                                relation, end_pattern)
+                    pattern = '%s %s > (%s' % (pattern, edge_pattern,
+                                               end_pattern)
 
             else:
                 pattern = '%s(%s' % (pattern, end_pattern)
