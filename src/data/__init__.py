@@ -199,8 +199,8 @@ class ParsedSentence(object):
 
     def get_children(self, token, edge_type=None):
         '''
-        If edge_type is given, returns a list of children of token related by an
-        edge with label edge_type. Otherwise, returns a list of
+        If edge_type is given, returns a list of children of `token` related by
+        an edge with label `edge_type`. Otherwise, returns a list of
         (edge_label, child_token) tuples.
         '''
         # Grab the sparse column of the edge matrix with the edges of this
