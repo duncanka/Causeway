@@ -4,8 +4,6 @@ import logging
 from math import log10
 import os
 import Queue
-from scipy.sparse import lil_matrix
-from scipy.sparse.csgraph import shortest_path
 import subprocess
 import sys
 import tempfile
@@ -112,15 +110,14 @@ class ConnectiveModel(Model):
 
     @staticmethod
     def _get_pattern_for_instance(sentence, connective, cause_head,
-                                  effect_head, reweighted_graph, path_costs,
-                                  shortest_path_predecessors):
+                                  effect_head):
         connective_nodes = [token.index for token in connective]
         required_token_indices = list(set(# Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_nodes))
 
         steiner_nodes, steiner_graph = steiner_tree(
-            reweighted_graph, required_token_indices,
-            path_costs, shortest_path_predecessors)
+            sentence.edge_graph, required_token_indices,
+            sentence.path_costs, sentence.path_predecessors)
 
         if len(steiner_nodes) > FLAGS.tregex_max_steiners:
             logging.debug(
@@ -185,27 +182,6 @@ class ConnectiveModel(Model):
                                if name not in ['cause', 'effect']]
         return pattern, node_names_to_print
 
-    @staticmethod
-    def _get_reweighted_graph(sentence):
-        '''
-        We'll want to prefer xcomp-> ->nsubj paths over
-        nsubj-> nsubj<- and nsubj<- xcomp-> paths. We also want to
-        disprefer paths that rely on expletives. We recompute the
-        path costs accordingly.
-        '''
-        reweighted_graph = lil_matrix(sentence.edge_graph,
-                                      dtype='float')
-        for edge, label in sentence.edge_labels.iteritems():
-            if label == 'xcomp':
-                reweighted_graph[edge] = 0.8 # instead of 1
-                edge_end_token = sentence.tokens[edge[1]]
-                nsubj_children = sentence.get_children(edge_end_token, 'nsubj')
-                for child in nsubj_children:
-                    reweighted_graph[edge[1], child.index] = 0.85
-            elif label == 'expl':
-                reweighted_graph[edge] = 1.1 # instead of 1
-        return reweighted_graph
-
     def _extract_patterns(self, sentences):
         # TODO: Extend this to work with cases of missing arguments.
         # TODO: Figure out tree transformations to get rid of dumb things like
@@ -215,20 +191,13 @@ class ConnectiveModel(Model):
         if FLAGS.tregex_print_patterns:
             print 'Patterns:'
         for sentence in sentences:
-            if sentence.causation_instances:
-                reweighted_graph = self._get_reweighted_graph(sentence)
-                shortest_path_costs, path_predecessors = shortest_path(
-                    reweighted_graph, return_predecessors=True, directed=False)
-
             for instance in sentence.causation_instances:
                 if instance.cause != None and instance.effect is not None:
                     connective = instance.connective
                     cause_head = sentence.get_head(instance.cause)
                     effect_head = sentence.get_head(instance.effect)
                     pattern, node_names = self._get_pattern_for_instance(
-                        sentence, connective, cause_head, effect_head,
-                        reweighted_graph, shortest_path_costs,
-                        path_predecessors)
+                        sentence, connective, cause_head, effect_head)
 
                     if pattern is None:
                         continue
