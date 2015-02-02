@@ -194,7 +194,7 @@ def steiner_tree(graph, terminals, *args, **kwargs):
     else:
         raise NotImplementedError
 
-# Based on http://paal.mimuw.edu.pl/dreyfus__wagner_8hpp_source.html.
+# Based on http://siekiera.mimuw.edu.pl/~paal/dreyfus__wagner_8hpp_source.html.
 def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                    shortest_path_predecessors=None, start=0):
     '''
@@ -204,23 +204,6 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
     course, this means we need to do some extra work at the end to reconstruct
     the solution in the original graph.
     '''
-    if shortest_path_predecessors is None or shortest_path_costs is None:
-        shortest_path_costs, shortest_path_predecessors = shortest_path(
-            graph, return_predecessors=True)
-
-    n = graph.shape[0]
-    non_terminals = list(set(range(n)) - set(terminals))
-    terminal_positions = {} # maps vertex indices to positions in terminals
-    for i, terminal in enumerate(terminals):
-        terminal_positions[terminal] = i
-
-    steiner_edges = []
-    # For the keys in these dicts, we need to convert the Numpy arrays to
-    # strings to make them hashable. Apparently this is the fastest way to get
-    # a hashable array.
-    best_candidates = {} # maps (vertex, remaining) to (cost, vertex)
-    best_splits = {} # maps (vertex, remaining) to best cost
-
     def get_edge_weight(w, v):
         return shortest_path_costs[w, v]
 
@@ -228,11 +211,11 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
         if index == len(terminals):
             complement = remaining ^ subset
             if subset.any() and complement.any():
-                dist = (connect_vertex(vertex, subset)
+                cost = (connect_vertex(vertex, subset)
                         + connect_vertex(vertex, complement))
-                return (dist, subset)
+                return (cost, subset)
             else:
-                return (-1, np.empty(n, dtype=np.bool))
+                return (np.inf, np.empty(n, dtype=np.bool))
         else:
             ret1 = best_split(vertex, remaining, subset, index + 1)
             if remaining[index]:
@@ -240,12 +223,12 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                 subset = subset.copy() # copy 1st to prevent messing w/ caller
                 subset[index] ^= True
                 ret2 = best_split(vertex, remaining, subset, index + 1)
-                if ret1[0] < 0 or ret1[0] > ret2[0]:
+                if ret1[0] > ret2[0]:
                     ret1 = ret2
             return ret1
 
     def split_vertex(vertex, remaining):
-        # TODO: optimize away this counting step by passing arg?
+        # TODO: optimize away this counting step by passing an arg?
         if np.count_nonzero(remaining) < 2:
             return 0
         # Use the memoized version if possible.
@@ -253,28 +236,30 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
             return best_splits[(vertex, remaining.tostring())][0]
         except KeyError:
             # Optimization, to avoid checking subset twice.
-            index = np.where(remaining == True)[0][0] + 1
-            best = best_split(vertex, remaining, remaining, index)
+            remaining_index = np.where(remaining == True)[0][0] + 1
+            best = best_split(vertex, remaining, remaining, remaining_index)
             best_splits[(vertex, remaining.tostring())] = best
             return best[0]
 
     def connect_vertex(vertex, remaining):
+        ''' Computes minimal cost of connecting given vertex with all vertices
+            in `remaining`. '''
         n_remaining = np.count_nonzero(remaining)
         # Base cases: 0 or 1 remaining nodes
         if n_remaining == 0:
             return 0
         elif n_remaining == 1:
-            index = np.where(remaining == True)[0][0]
-            cost = get_edge_weight(vertex, terminals[index])
+            terminal_index = np.where(remaining == True)[0][0]
+            cost = get_edge_weight(vertex, terminals[terminal_index])
             best_candidates[(vertex, remaining.tostring())] = (
-                cost, terminals[index])
+                cost, terminals[terminal_index])
             return cost
 
         # Use the memoized version if possible
         try:
             return best_candidates[(vertex, remaining.tostring())][0]
         except KeyError:
-            best = split_vertex(vertex, remaining)
+            best_cost = split_vertex(vertex, remaining)
             candidate_vertex = vertex
 
             finished_terminals = [
@@ -283,10 +268,10 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
             vertices_to_try = non_terminals + finished_terminals
 
             for vertex_to_try in vertices_to_try:
-                dist = split_vertex(vertex_to_try, remaining)
-                dist += get_edge_weight(vertex, vertex_to_try)
-                if best < 0 or dist < best:
-                    best = dist
+                cost = split_vertex(vertex_to_try, remaining)
+                cost += get_edge_weight(vertex, vertex_to_try)
+                if best_cost < 0 or cost < best_cost:
+                    best_cost = cost
                     candidate_vertex = vertex_to_try
 
             remaining = remaining.copy() # Prevent damage to caller state
@@ -294,17 +279,17 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                 if not remaining[terminal_position]:
                     continue
                 remaining[terminal_position] = False
-                dist = connect_vertex(terminal, remaining)
-                dist += get_edge_weight(vertex, terminal)
+                cost = connect_vertex(terminal, remaining)
+                cost += get_edge_weight(vertex, terminal)
                 remaining[terminal_position] = True
 
-                if best < 0 or dist < best:
-                    best = dist
+                if best_cost < 0 or cost < best_cost:
+                    best_cost = cost
                     candidate_vertex = terminal
 
             best_candidates[(vertex, remaining.tostring())] = (
-                best, candidate_vertex)
-            return best
+                best_cost, candidate_vertex)
+            return best_cost
 
     def retrieve_solution_connect(vertex, remaining):
         if not remaining.any():
@@ -335,12 +320,31 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
         retrieve_solution_connect(vertex, split)
         retrieve_solution_connect(vertex, remaining ^ split)
 
+    # Initialization
+
+    if shortest_path_predecessors is None or shortest_path_costs is None:
+        shortest_path_costs, shortest_path_predecessors = shortest_path(
+            graph, return_predecessors=True)
+    n = graph.shape[0]
+    non_terminals = list(set(range(n)) - set(terminals))
+    terminal_positions = {} # maps vertex indices to positions in terminals
+    for i, terminal in enumerate(terminals):
+        terminal_positions[terminal] = i
+    steiner_edges = []
+    # For the keys in these dicts, we need to convert the Numpy arrays to
+    # strings to make them hashable. Apparently this is the fastest way to get
+    # a hashable copy of an array.
+    best_candidates = {}    # maps (vertex, remaining) to (cost, vertex)
+                            # (where the 2nd vertex is the next to connect to
+                            # achieve the specified cost)
+    best_splits = {} # maps (vertex, remaining) to (cost, terminals)
     num_terminals = len(terminals)
     start = min(start, num_terminals - 1)
-    # set all terminals except 'start' to 1
+    # set all terminals except 'start' to True (they're all remaining)
     remaining = np.ones(num_terminals, dtype=np.bool)
     remaining[start] = False
 
+    # Run dynamic programming algorithm
     connect_vertex(terminals[start], remaining)
     retrieve_solution_connect(terminals[start], remaining)
 

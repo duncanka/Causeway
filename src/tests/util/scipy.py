@@ -37,8 +37,7 @@ class ScipyTestCase(unittest.TestCase):
 class DreyfusWagnerTestCase(ScipyTestCase):
     def _test_graph(self, terminals, correct_nodes, correct_graph):
         path_costs, path_predecessors = shortest_path(
-            self.graph, return_predecessors=True,
-            directed=False)
+            self.graph, return_predecessors=True, directed=False)
         steiner_nodes, steiner_graph = dreyfus_wagner(
             self.graph, terminals, path_costs, path_predecessors)
         self.assertEqual(set(steiner_nodes), set(correct_nodes))
