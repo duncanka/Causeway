@@ -131,6 +131,20 @@ class LargerGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
         self._test_graph([6, 4], [2, 3], correct_graph)
 
 
+class DreyfusWagnerRegressionsTestCase(DreyfusWagnerTestCase):
+    def test_finds_lower_cost_path(self):
+        # 0 = 37, 1 = 39, 2 = 35
+        graph = lil_matrix((3, 3), dtype='float')
+        graph[0, 2] = 1
+        graph[1, 2] = 0.85
+        graph[0, 1] = 0.8
+        self.graph = graph
+        correct_graph = lil_matrix((3, 3), dtype='float')
+        correct_graph[0, 1] = 0.8
+        correct_graph[1, 2] = 0.85
+        self._test_graph([0, 1, 2], [], correct_graph)
+
+
 class LongestPathTestCase(ScipyTestCase):
     def assertArraysEqualOrReversed(self, array1, array2):
         try:

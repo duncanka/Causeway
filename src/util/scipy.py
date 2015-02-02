@@ -325,7 +325,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                 # Copy to prevent damage to caller state
                 remaining = remaining.copy()
                 remaining[terminal_position] ^= 1
-                retrieve_solution_connect(vertex, remaining)
+                retrieve_solution_connect(next_vertex, remaining)
 
     def retrieve_solution_split(vertex, remaining):
         # TODO: is this check actually necessary?
