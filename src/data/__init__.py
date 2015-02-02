@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
-from util import Enum, merge_dicts
+from util import Enum, merge_dicts, listify
 from util.streams import *
 
 class Annotation(object):
@@ -88,6 +88,11 @@ class DependencyPathError(ValueError):
 class ParsedSentence(object):
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
+    SUBJECT_EDGE_LABELS = ['nsubj', 'csubj', 'nsubjpass', 'csubjpass']
+    INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass']
+    EDGE_REGEX = re.compile(
+        "([A-Za-z_\\-/\\.']+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
+    DEPTH_EXCLUDED_EDGE_LABELS = ['ref']
 
     @staticmethod
     def unescape_token_text(token_text):
@@ -202,20 +207,22 @@ class ParsedSentence(object):
         If edge_type is given, returns a list of children of token related by an
         edge with label edge_type. Otherwise, returns a list of
         (edge_label, child_token) tuples.
+
+        edge_type may be a single type or a list of types.
         '''
         # Grab the sparse column of the edge matrix with the edges of this
         # token. Iterate over the edge end indices therein.
         if edge_type:
+            edge_type = listify(edge_type)
             return [self.tokens[edge_end_index] for edge_end_index
                     in self.edge_graph[token.index].indices
                     if (self.edge_labels[(token.index, edge_end_index)]
-                        == edge_type)]
+                        in edge_type)]
         else:
             return [(self.edge_labels[(token.index, edge_end_index)],
                      self.tokens[edge_end_index])
                     for edge_end_index in self.edge_graph[token.index].indices]
 
-    INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass']
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
             return False
@@ -459,9 +466,6 @@ class ParsedSentence(object):
                                  token.is_absent, token)
             copies.append(len(self.tokens) - 1)
 
-    EDGE_REGEX = re.compile(
-        "([A-Za-z_\\-/\\.']+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
-
     def __create_edges(self, edges, copy_node_indices):
         edge_lines = [line for line in edges if line] # skip blanks
         matches = [ParsedSentence.EDGE_REGEX.match(edge_line)
@@ -481,7 +485,7 @@ class ParsedSentence(object):
 
         # Now, we can actually create the matrix and insert all the edges.
         num_nodes = len(self.tokens)
-        self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='bool')
+        self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='float')
         graph_excluded_edges = [] # edges that shouldn't be used for graph algs
         for match_result in matches:
             (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma,
@@ -494,23 +498,38 @@ class ParsedSentence(object):
             # TODO: What should we do about the cases where there are
             # multiple labels for the same edge? (e.g., conj and ccomp)
             self.edge_labels[(token_1_idx, token_2_idx)] = relation
-            if relation == 'ref':
+            if relation in self.DEPTH_EXCLUDED_EDGE_LABELS:
                 graph_excluded_edges.append((token_1_idx, token_2_idx))
             else:
-                self.edge_graph[token_1_idx, token_2_idx] = True
-
+                self.edge_graph[token_1_idx, token_2_idx] = 1
         self.edge_graph = self.edge_graph.tocsr()
 
         # TODO: do this with breadth_first_order instead
         shortest_distances = csgraph.shortest_path(self.edge_graph,
                                                    unweighted=True)
         self.__depths = shortest_distances[0]
+
+        # For the directed shortest paths we save, we'll want to prefer
+        # xcomp-> ->nsubj paths over nsubj-> nsubj<- and
+        # nsubj<- xcomp-> paths. We also want to disprefer paths that rely on
+        # expletives. We reweight the graph accordingly.
+        for edge, label in self.edge_labels.iteritems():
+            if label == 'xcomp':
+                self.edge_graph[edge] = 0.98
+                edge_end_token = self.tokens[edge[1]]
+                subj_children = self.get_children(
+                    edge_end_token, self.SUBJECT_EDGE_LABELS)
+                for child in subj_children:
+                    self.edge_graph[edge[1], child.index] = 0.985
+            elif label == 'expl':
+                self.edge_graph[edge] = 1.01
+
         self.path_costs, self.path_predecessors = csgraph.shortest_path(
-            self.edge_graph, unweighted=True, return_predecessors=True,
-            directed=False)
+            self.edge_graph, return_predecessors=True, directed=False)
 
         # Add in edges that we didn't want to use for distances/shortest path.
-        self.edge_graph = self.edge_graph.tolil()
+        # Also convert to bool.
+        self.edge_graph = lil_matrix(self.edge_graph, dtype='bool')
         for start, end in graph_excluded_edges:
             self.edge_graph[start, end] = True
         self.edge_graph = self.edge_graph.tocsr()
