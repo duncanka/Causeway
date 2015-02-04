@@ -198,7 +198,7 @@ class StandoffReader(Reader):
             raise UserWarning(message)
 
     def __process_lines(self, lines, ids_to_annotations, ids_to_instances,
-                        unused_arg_ids):
+                        unused_arg_ids, previous_line_count=float('inf')):
         lines_to_reprocess = []
         ids_to_reprocess = set()
         ids_needed_to_reprocess = set()
@@ -236,13 +236,17 @@ class StandoffReader(Reader):
             except UserWarning as e:
                 logging.warn('%s (File: %s; Line: %s)'
                              % (e.message, self._file_stream.name, stripped))
-                return
 
         # There is no possibility of cyclical relationships in our annotation
         # scheme, so it's OK to just assume that with each pass we'll reduce
         # the set of IDs that need to be added.
         recurse = False
         if lines_to_reprocess:
+            if len(lines_to_reprocess) == previous_line_count:
+                logging.warn("Count of lines to process has not changed after"
+                             " recursion. Giving up on the following IDs: %s"
+                             % ids_needed_to_reprocess)
+                return
             for id_needed in ids_needed_to_reprocess:
                 # Any ID that was referenced before being defined must be
                 # defined somewhere -- either we've seen a definition since
@@ -259,7 +263,7 @@ class StandoffReader(Reader):
                         % (id_needed, self._file_stream.name))
         if recurse:
             self.__process_lines(lines_to_reprocess, ids_to_annotations,
-                                 ids_to_instances, unused_arg_ids)
+                                 ids_to_instances, unused_arg_ids, len(lines))
         else:
             for arg_id in unused_arg_ids:
                 logging.warn('Unused argument: %s: "%s" (file: %s)'
@@ -426,8 +430,5 @@ class StandoffReader(Reader):
             if (last_sentence.document_char_offset +
                 len(last_sentence.original_text)) > first_start:
                 result = last_sentence
-
-        if result is None:
-            raise Exception
 
         return result
