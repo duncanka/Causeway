@@ -17,7 +17,7 @@ if __name__ == '__main__':
     parse = run_parser(sentence, parser_path)
     print parse
 
-    with NamedTemporaryFile(mode='r+') as f:
+    with NamedTemporaryFile(mode='r+', prefix='parse') as f:
         f.write(parse)
         f.file.seek(0)
         make_dot(f.file, f.name)

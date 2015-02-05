@@ -244,7 +244,8 @@ class ConnectiveModel(Model):
                         self.true_causation_pairs_by_sentence[i]
                         for i in possible_sentence_indices]
 
-                    with tempfile.NamedTemporaryFile('w') as tree_file:
+                    with tempfile.NamedTemporaryFile(
+                        'w', prefix='trees') as tree_file:
                         tree_file.writelines(possible_trees)
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
@@ -258,7 +259,8 @@ class ConnectiveModel(Model):
         def _process_pattern(self, pattern, possible_sentences, tree_file_path,
                              possible_true_causation_pairs):
             # Create output file
-            with tempfile.NamedTemporaryFile('w+b') as self.output_file:
+            with tempfile.NamedTemporaryFile(
+                'w+b', prefix='matches') as self.output_file:
                 #print "Processing", pattern, "to", tregex_output.name
                 # TODO: Make this use the node labels to also retrieve the
                 # possible connective tokens.
@@ -485,6 +487,8 @@ class ConnectiveStage(PairwiseCausalityStage):
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
+            if (None, None) in expected_pairs:
+                raise Exception
             tp, fp, fn = self.match_causation_pairs(
                 expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
                 self.fn_pairs, self.all_instances_metrics)

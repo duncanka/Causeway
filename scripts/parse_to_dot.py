@@ -38,4 +38,4 @@ if __name__ == '__main__':
     else:
         # Read from stdin
         print "Enter your dependency parse document below:"
-        make_dot(sys.stdin, 'stdin')
+        make_dot(sys.stdin, '/tmp/parse-stdin')
