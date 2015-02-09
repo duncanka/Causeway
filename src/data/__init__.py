@@ -2,7 +2,9 @@
 Define basic causality datatypes
 '''
 
+from copy import copy
 import logging
+from nltk.tree import bracket_parse
 import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
@@ -316,9 +318,6 @@ class ParsedSentence(object):
     def to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
         # recursion.
-        # TODO: This misses the important case of nodes with multiple parents.
-        # What can we do to capture those cases? Perhaps run the tree through a
-        # TSurgeon script that duplicates the relevant nodes?
         visited = set()
         def convert_node(node, incoming_arc_label):
             # If we've already visited the node before, don't recurse on it --
@@ -346,6 +345,46 @@ class ParsedSentence(object):
 
         return convert_node(self.get_children(self.tokens[0], 'root')[0],
                             'root')
+
+    @staticmethod
+    def _sentence_graph_from_ptb_str(ptb_str, num_tokens):
+        # We need to have num_tokens provided here, or else we won't know for
+        # sure how big the graph should be. (There can be tokens missing from
+        # the graph, and even if there aren't it would take more processing
+        # than it's worth to find the max node index in the PTB tree.)
+        tree = bracket_parse(ptb_str)
+        edge_graph = lil_matrix((num_tokens, num_tokens))
+        edge_labels = {}
+        excluded_edges = []
+
+        def convert_node(parent_index, node):
+            # Node index is whatever's after the last underscore.
+            node_index = int(node.node[node.node.rindex('_') + 1:])
+            edge_label = node[0]  # 0th child is always edge label
+            if edge_label in ParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
+                excluded_edges.append((parent_index, node_index))
+            else:
+                edge_graph[parent_index, node_index] = 1
+            edge_labels[parent_index, node_index] = edge_label
+
+            for child in node[2:]: # Skip edge label (child 0) & POS (child 1).
+                convert_node(node_index, child)
+
+        convert_node(0, tree) # initial parent index is 0 for root
+        return edge_graph, edge_labels, excluded_edges
+
+    def substitute_ptb_graph(self, ptb_str):
+        '''
+        Returns a shallow copy of the ParsedSentence object, whose edge graph
+        has been replaced by the one represented in `ptb_str`.
+        '''
+        edge_graph, edge_labels, excluded_edges = (
+            self._sentence_graph_from_ptb_str(ptb_str, len(self.tokens)))
+        new_sentence = copy(self)
+        new_sentence.edge_graph = edge_graph
+        new_sentence.edge_labels = edge_labels
+        new_sentence.__initialize_graph(excluded_edges)
+        return new_sentence
 
     ''' Private support functions '''
 
@@ -502,8 +541,10 @@ class ParsedSentence(object):
                 graph_excluded_edges.append((token_1_idx, token_2_idx))
             else:
                 self.edge_graph[token_1_idx, token_2_idx] = 1
-        self.edge_graph = self.edge_graph.tocsr()
+        self.__initialize_graph(graph_excluded_edges)
 
+    def __initialize_graph(self, graph_excluded_edges):
+        self.edge_graph = self.edge_graph.tocsr()
         # TODO: do this with breadth_first_order instead
         shortest_distances = csgraph.shortest_path(self.edge_graph,
                                                    unweighted=True)
