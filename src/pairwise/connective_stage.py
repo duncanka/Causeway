@@ -4,6 +4,7 @@ import logging
 from math import log10
 import os
 import Queue
+from scipy.sparse.lil import lil_matrix
 import subprocess
 import sys
 import tempfile
@@ -115,6 +116,22 @@ class ConnectiveModel(Model):
         required_token_indices = list(set(# Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_nodes))
 
+        # Once the sentence has been preprocessed, it is possible some nodes
+        # will have been deleted. We make sure to delete these from the list
+        # of required nodes. (We check whether each has an incoming or outgoing
+        # edge.
+        # TODO: remember what nodes have been deleted, so that they can be
+        #       re-added as part of the connective span if the pattern matches.
+        required_token_indices_to_keep = []
+        for required_index in required_token_indices:
+            if (sentence.edge_graph[:, required_index].nnz != 0 
+                or sentence.edge_graph[required_index, :].nnz != 0):
+                required_token_indices_to_keep.append(required_index)
+            else:
+                logging.debug("Eliminating token %s from pattern"
+                              % sentence.tokens[required_index])
+        required_token_indices = required_token_indices_to_keep
+
         steiner_nodes, steiner_graph = steiner_tree(
             sentence.edge_graph, required_token_indices,
             sentence.path_costs, sentence.path_predecessors)
@@ -184,20 +201,23 @@ class ConnectiveModel(Model):
 
     def _extract_patterns(self, sentences):
         # TODO: Extend this to work with cases of missing arguments.
-        # TODO: Figure out tree transformations to get rid of dumb things like
-        # conjunctions that introduce spurious differences btw patterns?
         self.tregex_patterns = []
         patterns_seen = set()
+
+        modified_ptb_strings, true_causation_pairs_by_sentence = (
+            self._preprocess_sentences(sentences))
+
         if FLAGS.tregex_print_patterns:
             print 'Patterns:'
-        for sentence in sentences:
+        for sentence, ptb_string in zip(sentences, modified_ptb_strings):
+            modified_sentence = sentence.substitute_ptb_graph(ptb_string)
             for instance in sentence.causation_instances:
                 if instance.cause != None and instance.effect is not None:
                     connective = instance.connective
                     cause_head = sentence.get_head(instance.cause)
                     effect_head = sentence.get_head(instance.effect)
                     pattern, node_names = self._get_pattern_for_instance(
-                        sentence, connective, cause_head, effect_head)
+                        modified_sentence, connective, cause_head, effect_head)
 
                     if pattern is None:
                         continue
@@ -211,6 +231,8 @@ class ConnectiveModel(Model):
                         connective_lemmas = [t.lemma for t in connective]
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
+
+        return modified_ptb_strings, true_causation_pairs_by_sentence
 
     class TregexProcessorThread(threading.Thread):
         def __init__(self, sentences, ptb_strings, queue,
@@ -320,18 +342,20 @@ class ConnectiveModel(Model):
                 return self.total_bytes_output
 
     def train(self, sentences):
-        self._extract_patterns(sentences)
+        ptb_strings, true_causation_pairs_by_sentence = (
+            self._extract_patterns(sentences))
         # Now that we have all the patterns, we also need to make sure all the
         # instances we pass along to the next stage have input matching what
         # will be passed along at test time. That means we need false negatives
         # in exactly the same places that they'll be at test time, so we just
         # run test() to find all the correct and spurious matches.
         logging.debug("Running test to generate input for next stage")
-        self.test(sentences)
+        self.test(sentences, ptb_strings, true_causation_pairs_by_sentence)
 
 
     @staticmethod
     def _preprocess_sentences(sentences):
+        logging.info("Preprocessing sentences...")
         ptb_strings = []
         true_causation_pairs_by_sentence = []
         for sentence in sentences:
@@ -349,7 +373,8 @@ class ConnectiveModel(Model):
         with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
             tree_file.writelines(ptb_strings)
             tree_file.flush()
-            with tempfile.NamedTemporaryFile('w+b', delete=False) as surgeried_file:
+            with tempfile.NamedTemporaryFile('w+b',
+                                             delete=False) as surgeried_file:
                 tsurgeon_command = (
                     ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
                       '-treeFile', tree_file.name] +
@@ -359,6 +384,8 @@ class ConnectiveModel(Model):
                 subprocess.call(tsurgeon_command, stdout=surgeried_file)
                 surgeried_file.seek(0)
                 ptb_strings = surgeried_file.readlines()
+
+        logging.info('Done preprocessing.')
 
         return ptb_strings, true_causation_pairs_by_sentence
 
@@ -402,12 +429,14 @@ class ConnectiveModel(Model):
 
         return possible_sentence_indices
 
-    def test(self, sentences):
+    def test(self, sentences, ptb_strings=None,
+             true_causation_pairs_by_sentence=None):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        ptb_strings, true_causation_pairs_by_sentence = (
-            self._preprocess_sentences(sentences))
+        if ptb_strings is None or true_causation_pairs_by_sentence is None:
+            ptb_strings, true_causation_pairs_by_sentence = (
+                self._preprocess_sentences(sentences))
 
         # Interacting with the TRegex processes is heavily I/O-bound, plus we
         # really want multiple TRegex processes running in parallel, so we farm
