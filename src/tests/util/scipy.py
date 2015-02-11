@@ -4,7 +4,8 @@ from scipy.sparse import lil_matrix
 from scipy.sparse.csgraph import shortest_path
 import unittest
 
-from util.scipy import dreyfus_wagner, longest_path_in_tree
+from util.scipy import dreyfus_wagner, longest_path_in_tree, \
+    UnconnectedNodesError
 
 class ScipyTestCase(unittest.TestCase):
     def assertArraysEqual(self, array1, array2):
@@ -132,7 +133,6 @@ class LargerGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
 
 class DreyfusWagnerRegressionsTestCase(DreyfusWagnerTestCase):
     def test_finds_lower_cost_path(self):
-        # 0 = 37, 1 = 39, 2 = 35
         graph = lil_matrix((3, 3), dtype='float')
         graph[0, 2] = 1
         graph[1, 2] = 0.85
@@ -142,6 +142,11 @@ class DreyfusWagnerRegressionsTestCase(DreyfusWagnerTestCase):
         correct_graph[0, 1] = 0.8
         correct_graph[1, 2] = 0.85
         self._test_graph([0, 1, 2], [], correct_graph)
+
+    def test_handles_unconnected_terminal(self):
+        graph = lil_matrix((4, 4), dtype='float')
+        self.assertRaises(UnconnectedNodesError, dreyfus_wagner, graph,
+                          [0, 1, 2])
 
 
 class LongestPathTestCase(ScipyTestCase):

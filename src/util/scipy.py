@@ -196,7 +196,7 @@ def steiner_tree(graph, terminals, *args, **kwargs):
 
 # Based on http://siekiera.mimuw.edu.pl/~paal/dreyfus__wagner_8hpp_source.html.
 def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
-                   shortest_path_predecessors=None, start=0):
+                   shortest_path_predecessors=None, directed=True, start=0):
     '''
     The Dreyfus-Wagner algorithm assumes a fully connected graph. We simulate
     that by precomputing all shortest paths, or by having them supplied, and
@@ -215,7 +215,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                         + connect_vertex(vertex, complement))
                 return (cost, subset)
             else:
-                return (np.inf, np.empty(n, dtype=np.bool))
+                return (np.inf, None)
         else:
             ret1 = best_split(vertex, remaining, subset, index + 1)
             if remaining[index]:
@@ -317,6 +317,8 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
         if not remaining.any():
             return
         split = best_splits[(vertex, remaining.tostring())][1]
+        if split is None:
+            raise UnconnectedNodesError('Could not connect terminal %d' % vertex)
         retrieve_solution_connect(vertex, split)
         retrieve_solution_connect(vertex, remaining ^ split)
 
@@ -324,7 +326,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
 
     if shortest_path_predecessors is None or shortest_path_costs is None:
         shortest_path_costs, shortest_path_predecessors = shortest_path(
-            graph, return_predecessors=True)
+            graph, return_predecessors=True, directed=directed)
     n = graph.shape[0]
     non_terminals = list(set(range(n)) - set(terminals))
     terminal_positions = {} # maps vertex indices to positions in terminals
