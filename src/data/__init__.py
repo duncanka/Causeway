@@ -371,7 +371,8 @@ class ParsedSentence(object):
             for child in node[2:]: # Skip edge label (child 0) & POS (child 1).
                 convert_node(node_index, child)
 
-        convert_node(0, tree[0]) # initial parent index is 0 for root
+        for root_child in tree:
+            convert_node(0, root_child) # initial parent index is 0 for root
         return edge_graph, edge_labels, excluded_edges
 
     def substitute_ptb_graph(self, ptb_str):
