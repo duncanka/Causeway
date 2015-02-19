@@ -1,9 +1,16 @@
+from gflags import FLAGS, DEFINE_bool, DuplicateFlagError
 import logging
 import os
 import re
 
 from util import streams, recursively_list_files
 from data import ParsedSentence, Annotation, CausationInstance
+
+try:
+    DEFINE_bool('reader_binarize_degrees', False,
+                'Whether to turn degrees into "Facilitate" and "Inhibit"')
+except DuplicateFlagError as e:
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 # TODO: convert readers into the more Pythonic paradigm of essentially acting
 # like generators.
@@ -335,6 +342,11 @@ class StandoffReader(Reader):
 
         _, id_to_modify, degree = attr_parts
         try:
+            if FLAGS.reader_binarize_degrees:
+                if degree == 'Enable':
+                    degree = 'Facilitate'
+                elif degree == 'Disentail':
+                    degree = 'Inhibit'
             degree_index = CausationInstance.Degrees.index(degree)
             ids_to_instances[id_to_modify].degree = degree_index
         except ValueError:
