@@ -33,9 +33,10 @@ def make_dot(parse_file, filename):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r') as f:
-            make_dot(f, f.name)
+        fname = sys.argv[1]
     else:
-        # Read from stdin
-        print "Enter your dependency parse document below:"
-        make_dot(sys.stdin, '/tmp/parse-stdin')
+        fname = '/tmp/parse-stdin'
+
+    # Read from stdin
+    print "Enter your dependency parse document below:"
+    make_dot(sys.stdin, fname)
