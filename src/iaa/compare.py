@@ -1,11 +1,11 @@
 from __future__ import print_function
-from gflags import *
+from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, DuplicateFlagError, FLAGS
+import itertools
 import logging
 import sys
 
-from data.readers import *
-from iaa import *
-from util import *
+from data.readers import DirectoryReader, StandoffReader
+from iaa import CausalityMetrics, print_indented
 
 try:
     DEFINE_list(
