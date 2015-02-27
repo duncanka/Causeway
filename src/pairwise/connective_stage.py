@@ -112,6 +112,63 @@ class ConnectiveModel(Model):
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
 
+    #####################################
+    # Preprocessing methods
+    #####################################
+
+    @staticmethod
+    def _preprocess_sentences(sentences):
+        logging.info("Preprocessing sentences...")
+        ptb_strings = []
+        true_causation_pairs_by_sentence = []
+        for sentence in sentences:
+            sentence.possible_causations = []
+            ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
+            true_causation_pairs = [
+                ConnectiveStage.normalize_order(
+                    instance.get_cause_and_effect_heads())
+                for instance in sentence.causation_instances]
+            true_causation_pairs_by_sentence.append(
+                set([(arg_1.index, arg_2.index)
+                     for (arg_1, arg_2) in true_causation_pairs
+                     if arg_1 is not None and arg_2 is not None]))
+
+        with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
+            tree_file.writelines(ptb_strings)
+            tree_file.flush()
+            with tempfile.NamedTemporaryFile('w+b',
+                                             delete=False) as surgeried_file:
+                tsurgeon_command = (
+                    ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
+                      '-treeFile', tree_file.name] +
+                     [os.path.join('pairwise', tr) for tr in [
+                      'normalize_passives.ts', 'normalize_vmod_passives.ts',
+                      'postprocess_vmod_passives.ts']]))
+                subprocess.call(tsurgeon_command, stdout=surgeried_file)
+                surgeried_file.seek(0)
+                ptb_strings = surgeried_file.readlines()
+
+        logging.info('Done preprocessing.')
+
+        return ptb_strings, true_causation_pairs_by_sentence
+
+    @staticmethod
+    def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
+        possible_sentence_indices = []
+        for i, sentence in enumerate(sentences):
+            token_lemmas = [token.lemma for token in sentence.tokens]
+            # TODO: Should we filter here by whether there are enough tokens in
+            # the sentence to match the rest of the pattern, too?
+            if all([connective_lemma in token_lemmas
+                    for connective_lemma in connective_lemmas]):
+                possible_sentence_indices.append(i)
+
+        return possible_sentence_indices
+
+    #####################################
+    # Pattern generation
+    #####################################
+
     @staticmethod
     def _get_connective_token_pattern(token, connective_index, node_names):
         node_name = 'connective_%d' % connective_index
@@ -297,6 +354,10 @@ class ConnectiveModel(Model):
 
         return modified_ptb_strings, true_causation_pairs_by_sentence
 
+    #####################################
+    # Running TRegex
+    #####################################
+
     class TregexProcessorThread(threading.Thread):
         def __init__(self, sentences, ptb_strings, queue,
                      true_causation_pairs_by_sentence, *args, **kwargs):
@@ -405,42 +466,6 @@ class ConnectiveModel(Model):
                 return self.total_bytes_output
 
     @staticmethod
-    def _preprocess_sentences(sentences):
-        logging.info("Preprocessing sentences...")
-        ptb_strings = []
-        true_causation_pairs_by_sentence = []
-        for sentence in sentences:
-            sentence.possible_causations = []
-            ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
-            true_causation_pairs = [
-                ConnectiveStage.normalize_order(
-                    instance.get_cause_and_effect_heads())
-                for instance in sentence.causation_instances]
-            true_causation_pairs_by_sentence.append(
-                set([(arg_1.index, arg_2.index)
-                     for (arg_1, arg_2) in true_causation_pairs
-                     if arg_1 is not None and arg_2 is not None]))
-            
-        with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
-            tree_file.writelines(ptb_strings)
-            tree_file.flush()
-            with tempfile.NamedTemporaryFile('w+b',
-                                             delete=False) as surgeried_file:
-                tsurgeon_command = (
-                    ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
-                      '-treeFile', tree_file.name] +
-                     [os.path.join('pairwise', tr) for tr in [
-                      'normalize_passives.ts', 'normalize_vmod_passives.ts',
-                      'postprocess_vmod_passives.ts']]))
-                subprocess.call(tsurgeon_command, stdout=surgeried_file)
-                surgeried_file.seek(0)
-                ptb_strings = surgeried_file.readlines()
-
-        logging.info('Done preprocessing.')
-
-        return ptb_strings, true_causation_pairs_by_sentence
-
-    @staticmethod
     def _make_progress_reporter(threads, total_estimated_bytes,
                                     all_threads_done):
         def report_progress_loop():
@@ -467,18 +492,6 @@ class ConnectiveModel(Model):
         progress_reporter.daemon = True
         return progress_reporter
 
-    @staticmethod
-    def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
-        possible_sentence_indices = []
-        for i, sentence in enumerate(sentences):
-            token_lemmas = [token.lemma for token in sentence.tokens]
-            # TODO: Should we filter here by whether there are enough tokens in
-            # the sentence to match the rest of the pattern, too?
-            if all([connective_lemma in token_lemmas
-                    for connective_lemma in connective_lemmas]):
-                possible_sentence_indices.append(i)
-
-        return possible_sentence_indices
 
 class ConnectiveStage(PairwiseCausalityStage):
     def __init__(self, name):
