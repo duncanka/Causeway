@@ -4,7 +4,6 @@ import logging
 from math import log10
 import os
 import Queue
-from scipy.sparse.lil import lil_matrix
 import subprocess
 import sys
 import tempfile
