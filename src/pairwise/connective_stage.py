@@ -48,6 +48,70 @@ class ConnectiveModel(Model):
         super(ConnectiveModel, self).__init__(*args, **kwargs)
         self.tregex_patterns = []
 
+    def train(self, sentences):
+        ptb_strings, true_causation_pairs_by_sentence = (
+            self._extract_patterns(sentences))
+        # Now that we have all the patterns, we also need to make sure all the
+        # instances we pass along to the next stage have input matching what
+        # will be passed along at test time. That means we need false negatives
+        # in exactly the same places that they'll be at test time, so we just
+        # run test() to find all the correct and spurious matches.
+        logging.debug("Running test to generate input for next stage")
+        self.test(sentences, ptb_strings, true_causation_pairs_by_sentence)
+
+    def test(self, sentences, ptb_strings=None,
+             true_causation_pairs_by_sentence=None):
+        logging.info('Tagging possible connectives...')
+        start_time = time.time()
+
+        if ptb_strings is None or true_causation_pairs_by_sentence is None:
+            ptb_strings, true_causation_pairs_by_sentence = (
+                self._preprocess_sentences(sentences))
+
+        # Interacting with the TRegex processes is heavily I/O-bound, plus we
+        # really want multiple TRegex processes running in parallel, so we farm
+        # out patterns to worker threads.
+
+        # Queue up the patterns
+        total_estimated_bytes = 0
+        queue = Queue.Queue()
+        for pattern, node_labels, connective_lemmas in self.tregex_patterns:
+            possible_sentence_indices = self._filter_sentences_for_pattern(
+                sentences, pattern, connective_lemmas)
+            queue.put_nowait((pattern, node_labels,
+                              possible_sentence_indices))
+            # Estimate total output file size for this pattern: each
+            # sentence has sentence #, + 3 bytes for : and newlines.
+            # As a very rough estimate, matching node names increase the
+            # bytes used by ~1.85x.
+            total_estimated_bytes += sum(
+                1.85 * (int(log10(i + 1)) + 3)
+                for i in range(len(possible_sentence_indices)))
+
+        # Start the threads
+        threads = []
+        for _ in range(FLAGS.tregex_max_threads):
+            new_thread = self.TregexProcessorThread(
+                sentences, ptb_strings, queue,
+                true_causation_pairs_by_sentence)
+            threads.append(new_thread)
+            new_thread.start()
+
+        # Set up progress reporter and wait for threads to finish.
+        all_threads_done = [False] # use a list for passing by ref
+        progress_reporter = self._make_progress_reporter(
+            threads, total_estimated_bytes, all_threads_done)
+        try:
+            progress_reporter.start()
+            queue.join()
+        finally:
+            # Make sure progress reporter exits
+            all_threads_done[0] = True
+
+        elapsed_seconds = time.time() - start_time
+        logging.info("Done tagging possible connectives in %0.2f seconds"
+                     % elapsed_seconds)
+
     @staticmethod
     def _get_connective_token_pattern(token, connective_index, node_names):
         node_name = 'connective_%d' % connective_index
@@ -340,18 +404,6 @@ class ConnectiveModel(Model):
                 # that now the total number of bytes has been recorded.
                 return self.total_bytes_output
 
-    def train(self, sentences):
-        ptb_strings, true_causation_pairs_by_sentence = (
-            self._extract_patterns(sentences))
-        # Now that we have all the patterns, we also need to make sure all the
-        # instances we pass along to the next stage have input matching what
-        # will be passed along at test time. That means we need false negatives
-        # in exactly the same places that they'll be at test time, so we just
-        # run test() to find all the correct and spurious matches.
-        logging.debug("Running test to generate input for next stage")
-        self.test(sentences, ptb_strings, true_causation_pairs_by_sentence)
-
-
     @staticmethod
     def _preprocess_sentences(sentences):
         logging.info("Preprocessing sentences...")
@@ -427,59 +479,6 @@ class ConnectiveModel(Model):
                 possible_sentence_indices.append(i)
 
         return possible_sentence_indices
-
-    def test(self, sentences, ptb_strings=None,
-             true_causation_pairs_by_sentence=None):
-        logging.info('Tagging possible connectives...')
-        start_time = time.time()
-
-        if ptb_strings is None or true_causation_pairs_by_sentence is None:
-            ptb_strings, true_causation_pairs_by_sentence = (
-                self._preprocess_sentences(sentences))
-
-        # Interacting with the TRegex processes is heavily I/O-bound, plus we
-        # really want multiple TRegex processes running in parallel, so we farm
-        # out patterns to worker threads.
-
-        # Queue up the patterns
-        total_estimated_bytes = 0
-        queue = Queue.Queue()
-        for pattern, node_labels, connective_lemmas in self.tregex_patterns:
-            possible_sentence_indices = self._filter_sentences_for_pattern(
-                sentences, pattern, connective_lemmas)
-            queue.put_nowait((pattern, node_labels,
-                              possible_sentence_indices))
-            # Estimate total output file size for this pattern: each
-            # sentence has sentence #, + 3 bytes for : and newlines.
-            # As a very rough estimate, matching node names increase the
-            # bytes used by ~1.85x.
-            total_estimated_bytes += sum(
-                1.85 * (int(log10(i + 1)) + 3)
-                for i in range(len(possible_sentence_indices)))
-
-        # Start the threads
-        threads = []
-        for _ in range(FLAGS.tregex_max_threads):
-            new_thread = self.TregexProcessorThread(
-                sentences, ptb_strings, queue,
-                true_causation_pairs_by_sentence)
-            threads.append(new_thread)
-            new_thread.start()
-
-        # Set up progress reporter and wait for threads to finish.
-        all_threads_done = [False] # use a list for passing by ref
-        progress_reporter = self._make_progress_reporter(
-            threads, total_estimated_bytes, all_threads_done)
-        try:
-            progress_reporter.start()
-            queue.join()
-        finally:
-            # Make sure progress reporter exits
-            all_threads_done[0] = True
-
-        elapsed_seconds = time.time() - start_time
-        logging.info("Done tagging possible connectives in %0.2f seconds"
-                     % elapsed_seconds)
 
 class ConnectiveStage(PairwiseCausalityStage):
     def __init__(self, name):
