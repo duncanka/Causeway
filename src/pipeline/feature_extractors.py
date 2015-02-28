@@ -70,20 +70,21 @@ class TrainableFeatureExtractor(FeatureExtractor):
                   feature_type=FeatureExtractor.FeatureTypes.Categorical):
         self.name = name
         self.feature_type = feature_type
+        self.training_results = None
         self._trainer = trainer
         self._feature_extractor_creator = feature_extractor_creator
         self._subfeature_extractors = None
 
     def train(self, parts):
-        extracted_data = self._trainer(parts)
-        subfeature_extractors = self._feature_extractor_creator(extracted_data)
+        self.training_results = self._trainer(parts)
+        subfeature_extractors = self._feature_extractor_creator(
+            self.training_results)
         self._subfeature_extractors = []
         for subfeature_name, subfeature_extractor in subfeature_extractors:
             full_subfeature_name = '%s:%s' % (self.name, subfeature_name)
             subfeature_extractor = FeatureExtractor(
                 full_subfeature_name, subfeature_extractor, self.feature_type)
             self._subfeature_extractors.append(subfeature_extractor)
-        return extracted_data
 
     def extract_subfeature_names(self, parts):
         assert self._subfeature_extractors is not None, (
