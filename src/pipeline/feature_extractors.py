@@ -38,6 +38,9 @@ class FeatureExtractor(object):
             feature_name = self.name
         return {feature_name: feature_value}
 
+    def extract_all(self, parts):
+        return [self.extract(part) for part in parts]
+
     @staticmethod
     def get_categorical_feature_name(base_name, value):
         return '%s=%s' % (base_name, value)

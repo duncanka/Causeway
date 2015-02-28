@@ -142,25 +142,17 @@ class ClassifierModel(FeaturizedModel):
         labels = np.fromiter((part.label for part in relevant_parts),
                              int, len(relevant_parts))
 
-        last_printed_time = start_time
-        for row_index, part in enumerate(relevant_parts):
-            if row_index % 300 == 0:
-                current_time = time.time()
-                if current_time - last_printed_time > 5:
-                    logging.info(
-                        "%d%% featurized" %
-                        (row_index / float(len(relevant_parts)) * 100))
-                    last_printed_time = current_time
-
-            for feature_name in self.selected_features:
-                extractor = self.feature_extractor_map[feature_name]
-                subfeature_values = extractor.extract(part)
+        for feature_name in self.selected_features:
+            extractor = self.feature_extractor_map[feature_name]
+            feature_values_by_part = extractor.extract_all(parts)
+            for part_index, part_subfeature_values in enumerate(
+                feature_values_by_part):
                 for subfeature_name, subfeature_value in (
-                    subfeature_values.iteritems()):
+                    part_subfeature_values.iteritems()):
                     try:
                         feature_index = self.feature_name_dictionary[
                             subfeature_name]
-                        features[row_index, feature_index] = subfeature_value
+                        features[part_index, feature_index] = subfeature_value
                     except KeyError:
                         logging.debug('Ignoring unknown subfeature: %s'
                                       % subfeature_name)
