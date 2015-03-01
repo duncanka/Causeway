@@ -149,6 +149,8 @@ class ClassifierModel(FeaturizedModel):
                 feature_values_by_part):
                 for subfeature_name, subfeature_value in (
                     part_subfeature_values.iteritems()):
+                    if subfeature_value == 0:
+                        continue # Don't bother setting 0's in a sparse matrix.
                     try:
                         feature_index = self.feature_name_dictionary[
                             subfeature_name]

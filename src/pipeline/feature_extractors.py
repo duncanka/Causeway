@@ -33,10 +33,9 @@ class FeatureExtractor(object):
         if self.feature_type == self.FeatureTypes.Categorical:
             feature_name = FeatureExtractor.get_categorical_feature_name(
                 self.name, feature_value)
-            feature_value = 1.0
+            return {feature_name: 1.0}
         else: # feature_type == Numerical
-            feature_name = self.name
-        return {feature_name: feature_value}
+            return {self.name: feature_value}
 
     def extract_all(self, parts):
         return [self.extract(part) for part in parts]
