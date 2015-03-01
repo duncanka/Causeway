@@ -1,4 +1,5 @@
-from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer
+from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, \
+    DEFINE_integer
 import threading
 import logging
 from math import log10
@@ -98,7 +99,7 @@ class ConnectiveModel(Model):
             new_thread.start()
 
         # Set up progress reporter and wait for threads to finish.
-        all_threads_done = [False] # use a list for passing by ref
+        all_threads_done = [False] # use a list for passing by ref (EVIL HACK)
         progress_reporter = self._make_progress_reporter(
             threads, total_estimated_bytes, all_threads_done)
         try:
@@ -113,7 +114,7 @@ class ConnectiveModel(Model):
                      % elapsed_seconds)
 
     #####################################
-    # Preprocessing methods
+    # Sentence preprocessing
     #####################################
 
     @staticmethod
@@ -392,6 +393,8 @@ class ConnectiveModel(Model):
 
                     with tempfile.NamedTemporaryFile(
                         'w', prefix='trees') as tree_file:
+                        # logging.debug("Trees written to %s (pattern: %s)"
+                        #              % (tree_file.name, pattern))
                         tree_file.writelines(possible_trees)
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
@@ -407,7 +410,8 @@ class ConnectiveModel(Model):
             # Create output file
             with tempfile.NamedTemporaryFile(
                 'w+b', prefix='matches') as self.output_file:
-                #print "Processing", pattern, "to", tregex_output.name
+                # logging.debug("Processing %s to %s"
+                #              % (pattern, self.output_file.name))
                 # TODO: Make this use the node labels to also retrieve the
                 # possible connective tokens.
                 tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
@@ -467,7 +471,7 @@ class ConnectiveModel(Model):
 
     @staticmethod
     def _make_progress_reporter(threads, total_estimated_bytes,
-                                    all_threads_done):
+                                all_threads_done):
         def report_progress_loop():
             while(True):
                 time.sleep(4)
