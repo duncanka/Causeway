@@ -121,6 +121,8 @@ class DirectoryReader(Reader):
         self._filenames = iter([])
 
     def open(self, dirpath):
+        self.close()
+
         if not os.path.isdir(dirpath):
             raise IOError("No such directory: '%s" % dirpath)
 

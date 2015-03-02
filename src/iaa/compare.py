@@ -1,5 +1,6 @@
 from __future__ import print_function
-from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, DuplicateFlagError, FLAGS
+from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, \
+    DuplicateFlagError, FlagsError, FLAGS
 import itertools
 import logging
 import sys
@@ -12,7 +13,7 @@ try:
         'iaa_paths', [], "Paths to annotation files to be compared against each"
         " other for IAA.")
     DEFINE_list(
-        'iaa_file_regexes', r".*\.ann",
+        'iaa_file_regexes', r".*\.ann$",
         "Regexes to match filenames against for IAA (non-matching files will"
         " not be compared).")
     DEFINE_integer('iaa_max_sentence', sys.maxint,
@@ -81,8 +82,8 @@ def main(argv):
         sys.exit(1)
 
     if not (FLAGS.iaa_log_differences or FLAGS.iaa_log_stats
-        or FLAGS.iaa_log_confusion):
-        print('Nothing to log')
+            or FLAGS.iaa_log_confusion):
+        print('Nothing to log for comparison')
         sys.exit(0)
 
     logging.basicConfig(
@@ -94,7 +95,8 @@ def main(argv):
     all_instances = []
     for path in FLAGS.iaa_paths:
         reader.open(path)
-        all_instances.append(reader.get_all()[:FLAGS.iaa_max_sentence])
+        path_instances = reader.get_all()[:FLAGS.iaa_max_sentence]
+        all_instances.append(path_instances)
     reader.close()
 
     instances_path_pairs = zip(all_instances, FLAGS.iaa_paths)
