@@ -56,7 +56,7 @@ class PhrasePairModel(ClassifierModel):
         # offset is source.
         if source.start_offset > target.start_offset:
             source, target = target, source
-        deps = part.instance.extract_dependency_path(source, target)
+        deps = part.instance.extract_dependency_path(source, target, False)
         if len(deps) > FLAGS.sc_max_dep_path_len:
             return 'LONG-RANGE'
         else:
