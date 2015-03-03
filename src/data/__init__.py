@@ -248,7 +248,7 @@ class ParsedSentence(object):
 
         return False
 
-    def extract_dependency_path(self, source, target):
+    def extract_dependency_path(self, source, target, include_conj=True):
         edges = []
         while target is not source:
             predecessor_index = self.path_predecessors[source.index,
@@ -260,11 +260,13 @@ class ParsedSentence(object):
             try:
                 # Normal case: the predecessor is the source of the edge.
                 label = self.edge_labels[(predecessor_index, target.index)]
-                edges.append((predecessor, target, label))
+                start, end = predecessor, target
             except KeyError:
                 # Back edge case: the predecessor is the target of the edge.
                 label = self.edge_labels[(target.index, predecessor_index)]
-                edges.append((target, predecessor, label))
+                start, end = target, predecessor
+            if label != 'conj' or include_conj:
+                edges.append((start, end, label))
             target = predecessor
         return DependencyPath(reversed(edges))
 
