@@ -70,6 +70,11 @@ class CharacterTrackingStreamWrapper(io.TextIOWrapper):
         except StopIteration:
             pass
 
+    def __repr__(self):
+        return '<%s wrapping %s>' % (type(self).__name__,
+                                     super(CharacterTrackingStreamWrapper,
+                                           self).__repr__())
+
 for name in ['read', 'readline']: # readlines() and next() just call these two
     CharacterTrackingStreamWrapper.__add_overriden_read__(name)
 

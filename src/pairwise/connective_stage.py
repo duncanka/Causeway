@@ -135,7 +135,8 @@ class ConnectiveModel(Model):
                      if arg_1 is not None and arg_2 is not None]))
 
         with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
-            tree_file.writelines(ptb_strings)
+            encoded_strings = [s.encode('utf-8') for s in ptb_strings]
+            tree_file.writelines(encoded_strings)
             tree_file.flush()
             with tempfile.NamedTemporaryFile('w+b',
                                              delete=False) as surgeried_file:

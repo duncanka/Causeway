@@ -108,6 +108,14 @@ class ParsedSentence(object):
             return ''
 
     def __init__(self, tokenized_text, tagged_lemmas, edges, document_text):
+        '''
+        `tokenized_text` and `tagged_lemmas` are the token and lemma strings
+         from the parser.
+         `edges` is a list of edge strings from the parser.
+         `document_text` is an instance of
+         `util.streams.CharacterTrackingStreamWrapper`. (Built-in stream types
+         will *not* work.)
+        '''
         self.tokens = []
         self.causation_instances = []
         self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
@@ -420,7 +428,7 @@ class ParsedSentence(object):
 
     def __align_tokens_to_text(self, document_text):
         eat_whitespace(document_text)
-        self.document_char_offset = document_text.tell()
+        self.document_char_offset = document_text.character_position
 
         # Root has no alignment to source.
         self.tokens[0].start_offset = None
@@ -452,7 +460,7 @@ class ParsedSentence(object):
                     lambda char: self.PERIOD_SUBSTITUTES.find(char) != -1)
                 if (not_at_eof and next_is_period_sub):
                     # We've moved the stream over the period, so adjust offset.
-                    token.start_offset = (document_text.tell()
+                    token.start_offset = (document_text.character_position
                                           - self.document_char_offset - 1)
                     token.end_offset = token.start_offset + 1
                     token.original_text = next_char
@@ -463,7 +471,7 @@ class ParsedSentence(object):
                     token.original_text = ''
                     document_text.seek(start_pos)
             else: # Normal case: just read the next token.
-                search_start = document_text.tell()
+                search_start = document_text.character_position
                 # Our preprocessing may hallucinate periods onto the ends of
                 # abbreviations, particularly "U.S." Deal with them.
                 if original[-1] == '.':
@@ -487,7 +495,7 @@ class ParsedSentence(object):
                         document_text, lambda char: char == '.')
                     if is_period:
                         self.original_text += '.'
-                token.end_offset = (document_text.tell()
+                token.end_offset = (document_text.character_position
                                     - self.document_char_offset)
                 token.start_offset = token.end_offset - len(original)
 

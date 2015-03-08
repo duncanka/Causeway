@@ -1,14 +1,18 @@
-from gflags import FLAGS, DEFINE_bool, DuplicateFlagError
+import io
+from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
 import logging
 import os
 import re
 
-from util import streams, recursively_list_files
+from util import recursively_list_files
+from util.streams import read_stream_until, CharacterTrackingStreamWrapper
 from data import ParsedSentence, Annotation, CausationInstance
 
 try:
     DEFINE_bool('reader_binarize_degrees', False,
-                'Whether to turn degrees into "Facilitate" and "Inhibit"')
+                'Whether to turn all degrees into "Facilitate" and "Inhibit"')
+    DEFINE_string('reader_codec', 'utf-8',
+                  'The encoding to assume for data files')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -21,7 +25,8 @@ class Reader(object):
 
     def open(self, filepath):
         self.close()
-        self._file_stream = open(filepath, 'r')
+        self._file_stream = CharacterTrackingStreamWrapper(
+            io.open(filepath, 'rb'), FLAGS.reader_codec)
 
     def close(self):
         if self._file_stream:
@@ -47,7 +52,8 @@ class SentenceReader(Reader):
     def open(self, filepath):
         super(SentenceReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
-        self._parse_file = open(base_path + '.parse', 'r')
+        self._parse_file = CharacterTrackingStreamWrapper(
+            io.open(base_path + '.parse', 'rb'), FLAGS.reader_codec)
 
     def close(self):
         super(SentenceReader, self).close()
@@ -66,16 +72,17 @@ class SentenceReader(Reader):
         tmp = self._parse_file.readline()
         assert not tmp.strip(), (
             'Invalid parse file: expected blank line after tokens: %s'
-            % tokenized)
+            % tokenized).encode('ascii', 'replace')
 
         lemmas = self._parse_file.readline()
         lemmas = lemmas.strip()
         assert lemmas, (
             'Invalid parse file: expected lemmas line after tokens: %s'
-             % tokenized)
+             % tokenized).encode('ascii', 'replace')
         tmp = self._parse_file.readline()
         assert not tmp.strip(), (
-            'Invalid parse file: expected blank line after lemmas: %s' % lemmas)
+            'Invalid parse file: expected blank line after lemmas: %s'
+            % lemmas).encode('ascii', 'replace')
 
         # If the sentence was unparsed, don't return a new ParsedSentence for
         # it, but do advance the stream past the unparsed words.
@@ -101,18 +108,21 @@ class SentenceReader(Reader):
         # Now create the sentence from the read data + the text file.
         sentence = ParsedSentence(
             tokenized, lemmas, parse_lines, self._file_stream)
-        assert (len(sentence.original_text) == self._file_stream.tell()
-                - sentence.document_char_offset), \
-            'Sentence length != offset difference: %s' % sentence.original_text
+        assert (len(sentence.original_text) ==
+                self._file_stream.character_position
+                  - sentence.document_char_offset), \
+            ('Sentence length != offset difference: %s'
+             % sentence.original_text).encode('ascii', 'replace')
         return sentence
 
     def __skip_tokens(self, tokenized, message):
         print '%s: %s' % (message, tokenized)
         for token in tokenized.split():
             unescaped = ParsedSentence.unescape_token_text(token)
-            _, found_token = streams.read_stream_until(
+            _, found_token = read_stream_until(
                 self._parse_file, unescaped, False, False)
-            assert found_token, 'Skipped token not found: %s' % unescaped
+            assert found_token, ('Skipped token not found: %s'
+                                 % unescaped).encode('ascii', 'replace')
 
 class DirectoryReader(Reader):
     def __init__(self, file_regexes, base_reader):
