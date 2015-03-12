@@ -95,8 +95,8 @@ class PairwiseCausalityStage(Stage):
                 # If only one argument is present, it'll be in position 0.
                 sentence = pair[0].parent_sentence
                 arg2 = '"%s"' % pair[1].original_text if pair[1] else None
-                print '    %s ("%s" / %s)' % (
-                    sentence.original_text.replace('\n', ' '),
-                    pair[0].original_text, arg2)
+                print ('    %s ("%s" / %s)' % (
+                   sentence.original_text.replace('\n', ' '),
+                   pair[0].original_text, arg2)).encode('utf-8')
 
             print '\n'

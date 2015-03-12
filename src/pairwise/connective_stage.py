@@ -346,8 +346,9 @@ class ConnectiveModel(Model):
 
                     if pattern not in patterns_seen:
                         if FLAGS.tregex_print_patterns:
-                            print pattern
-                            print 'Sentence:', sentence.original_text
+                            print pattern.encode('utf-8')
+                            print 'Sentence:', sentence.original_text.encode(
+                                'utf-8')
                             print
                         patterns_seen.add(pattern)
                         connective_lemmas = [t.lemma for t in connective]

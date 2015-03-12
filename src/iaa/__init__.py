@@ -188,7 +188,7 @@ class CausalityMetrics(object):
             print(property_type_name,
                   ('property not set in Annotation %d;' % number),
                   'not including in analysis (sentence: "',
-                  get_truncated_sentence(instance_1) + '")',
+                  get_truncated_sentence(instance_1).encode('utf-8') + '")',
                   file=sys.stderr)
 
         for instance_1, instance_2 in matches:
@@ -328,7 +328,7 @@ class CausalityMetrics(object):
         filename = os.path.split(instance.source_sentence.source_file_path)[-1]
         print_indented(
             indent, "Annotation", annotator_num,
-            'only: "%s"' % connective_text, '(%s:%d: "%s")'
+            'only: "%s"' % connective_text.encode('utf-8'), '(%s:%d: "%s")'
             % (filename, sentence_num, get_truncated_sentence(instance)))
 
     def _log_property_differences(self, property_enum, indent):
@@ -353,7 +353,8 @@ class CausalityMetrics(object):
                 instance_1.source_sentence.source_file_path)[-1]
             print_indented(
                 indent, property_name, 's for connective "',
-                ParsedSentence.get_annotation_text(instance_1.connective),
+                ParsedSentence.get_annotation_text(
+                    instance_1.connective).encode('utf-8)'),
                 '" differ',
                 (': %s vs. %s' % values if value_extractor else ''),
                 ' (', filename, ':', sentence_num, ': "',

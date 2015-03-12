@@ -444,7 +444,8 @@ class ParsedSentence(object):
                 # absent token that will have been detected so far.
                 prev_token = self.tokens[i]
                 if prev_token.original_text.endswith(original):
-                    #print "Found duplicated token:", token.original_text
+                    # print "Found duplicated token:", (
+                    #    token.original_text.encode('utf-8'))
                     token.start_offset = prev_token.end_offset - len(original)
                     token.end_offset = prev_token.end_offset
             elif original == '.' and i == len(non_root_tokens) - 1:
@@ -502,9 +503,10 @@ class ParsedSentence(object):
             '''
             if not token.is_absent:
                 print "Annotated token span: ", token.start_offset, ",", \
-                    token.end_offset, 'for', token.original_text + \
-                    '. Annotated text:', \
-                    self.original_text[token.start_offset:token.end_offset]
+                    token.end_offset, 'for', \
+                    token.original_text.encode('utf-8') + '. Annotated text:',\
+                    (self.original_text[token.start_offset:token.end_offset]
+                    ).encode('utf-8')
             '''
 
 
