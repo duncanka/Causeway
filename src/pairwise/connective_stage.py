@@ -136,8 +136,12 @@ class ConnectiveModel(Model):
 
         # Order matters a lot here.
         tsurgeon_script_names = [
-            'normalize_passives', 'normalize_vmod_passives_1',
-            'normalize_vmod_passives_2']
+            'normalize_passives',
+            'normalize_vmod_passives_1',
+            'normalize_vmod_passives_2',
+            'normalize_vmod_no_agent_1',
+            'normalize_vmod_no_agent_2',
+            'normalize_vmod_no_agent_3']
         tsurgeon_script_names = [
             os.path.join('pairwise', 'tsurgeon', script_name) + '.ts'
             for script_name in tsurgeon_script_names]
