@@ -13,6 +13,9 @@ except DuplicateFlagError as e:
 
 safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
 
+def f1(precision, recall):
+    return 2 * precision * recall / safe_divisor(precision + recall)
+
 class ClassificationMetrics(object):
     def __init__(self, tp=0, fp=0, fn=0, tn=None, finalize=True):
         # Often there is no well-defined concept of a true negative, so it
@@ -34,7 +37,7 @@ class ClassificationMetrics(object):
         tp = float(self._tp)
         self._precision = tp / safe_divisor(tp + self._fp)
         self._recall = tp / safe_divisor(tp + self._fn)
-        self._f1 = 2 * tp / safe_divisor(2 * tp + self._fp + self._fn)
+        self._f1 = f1(self._precision, self._recall)
         if self._tn is not None:
             self._accuracy = (tp + self._tn) / safe_divisor(
                 tp + self._tn + self._fp + self._fn)
@@ -119,15 +122,15 @@ class ClassificationMetrics(object):
     MUTABLE_PROPERTY_NAMES = ['tp', 'fp', 'fn', 'tn']
     DERIVED_PROPERTY_NAMES = ['accuracy', 'precision', 'recall', 'f1']
 
-for property_name in (ClassificationMetrics.MUTABLE_PROPERTY_NAMES
-                      + ClassificationMetrics.DERIVED_PROPERTY_NAMES):
-    if property_name in ClassificationMetrics.MUTABLE_PROPERTY_NAMES:
-        getter = ClassificationMetrics.make_derived_getter(property_name)
-        setter = ClassificationMetrics.make_real_setter(property_name)
-    else: # derived property
-        getter = ClassificationMetrics.make_mutable_getter(property_name)
-        setter = ClassificationMetrics.make_derived_setter(property_name)
+for property_name in ClassificationMetrics.MUTABLE_PROPERTY_NAMES:
+    getter = ClassificationMetrics.make_derived_getter(property_name)
+    setter = ClassificationMetrics.make_real_setter(property_name)
     setattr(ClassificationMetrics, property_name, property(getter, setter))
+for property_name in ClassificationMetrics.DERIVED_PROPERTY_NAMES:
+    getter = ClassificationMetrics.make_mutable_getter(property_name)
+    setter = ClassificationMetrics.make_derived_setter(property_name)
+    setattr(ClassificationMetrics, property_name, property(getter, setter))
+
 
 def diff_binary_vectors(predicted, gold):
     # Make sure np.where works properly
@@ -162,8 +165,10 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         return new_matrix
 
     def pp_metrics(self):
-        return '% Agreement: {:.2}\nKappa: {:.2}'.format(
-            self.pct_agreement(), self.kappa())
+        return ('% Agreement: {:.2}\nKappa: {:.2}\n'
+                'Micro F1: {:.2}\nMacro F1: {:.2}'.format(
+                    self.pct_agreement(), self.kappa(), self.f1_micro(),
+                    self.f1_macro()))
 
     def pp(self, *args, **kwargs):
         """
@@ -198,3 +203,26 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         kappa = (self._correct - agree_by_chance) / safe_divisor(
             self._total - agree_by_chance)
         return kappa
+
+    def _get_f1_stats_arrays(self):
+        # Which axis we call gold and which we call test is pretty arbitrary.
+        # It doesn't matter, because F1 is symmetric.
+        tp = self._confusion.diagonal()
+        fp = self._confusion.sum(0) - tp
+        fn = self._confusion.sum(1) - tp
+        return (tp, fp, fn)
+
+    def f1_micro(self):
+        _, fp, fn = self._get_f1_stats_arrays()
+        p_micro = self._correct / float(safe_divisor(self._correct + fp.sum()))
+        r_micro = self._correct / float(safe_divisor(self._correct + fn.sum()))
+        return f1(p_micro, r_micro)
+
+    def f1_macro(self):
+        tp, fp, fn = self._get_f1_stats_arrays()
+        p_macro_fractions = tp / np.sum([tp, fp], axis=0, dtype=float)
+        p_macro = np.average(p_macro_fractions)
+        r_macro_fractions = tp / np.sum([tp, fn], axis=0, dtype=float)
+        r_macro = np.average(r_macro_fractions)
+        print p_macro, r_macro
+        return f1(p_macro, r_macro)
