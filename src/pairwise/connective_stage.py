@@ -134,6 +134,14 @@ class ConnectiveModel(Model):
                      for (arg_1, arg_2) in true_causation_pairs
                      if arg_1 is not None and arg_2 is not None]))
 
+        # Order matters a lot here.
+        tsurgeon_script_names = [
+            'normalize_passives', 'normalize_vmod_passives_1',
+            'normalize_vmod_passives_2']
+        tsurgeon_script_names = [
+            os.path.join('pairwise', 'tsurgeon', script_name) + '.ts'
+            for script_name in tsurgeon_script_names]
+
         with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
             encoded_strings = [s.encode('utf-8') for s in ptb_strings]
             tree_file.writelines(encoded_strings)
@@ -142,10 +150,7 @@ class ConnectiveModel(Model):
                                              delete=False) as surgeried_file:
                 tsurgeon_command = (
                     ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
-                      '-treeFile', tree_file.name] +
-                     [os.path.join('pairwise', 'tsurgeon', tr) for tr in [
-                      'normalize_passives.ts', 'normalize_vmod_passives_1.ts',
-                      'normalize_vmod_passives_2.ts']]))
+                      '-treeFile', tree_file.name] + tsurgeon_script_names))
                 subprocess.call(tsurgeon_command, stdout=surgeried_file)
                 surgeried_file.seek(0)
                 ptb_strings = surgeried_file.readlines()
