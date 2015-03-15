@@ -55,8 +55,9 @@ class PairwiseCausalityStage(Stage):
         '''
         Match expected and predicted cause/effect pairs from a single sentence.
         expected_pairs and found_pairs are lists of Token tuples.
-        *_instances are all lists in which to record the pairs of various sorts
-        for later examination (ignored for any that are None).
+        tp_pairs, fp_pairs, and fn_pairs are all lists in which to record the
+        pairs of various sorts for later examination (ignored for any that are
+        None).
         '''
         tp, fp, fn = 0, 0, 0
         found_pairs = [PairwiseCausalityStage.normalize_order(pair)
