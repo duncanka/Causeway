@@ -144,8 +144,8 @@ class ConnectiveModel(Model):
                     ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
                       '-treeFile', tree_file.name] +
                      [os.path.join('pairwise', 'tsurgeon', tr) for tr in [
-                      'normalize_passives.ts', 'normalize_vmod_passives.ts',
-                      'postprocess_vmod_passives.ts']]))
+                      'normalize_passives.ts', 'normalize_vmod_passives_1.ts',
+                      'normalize_vmod_passives_2.ts']]))
                 subprocess.call(tsurgeon_command, stdout=surgeried_file)
                 surgeried_file.seek(0)
                 ptb_strings = surgeried_file.readlines()
