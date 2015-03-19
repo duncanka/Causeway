@@ -13,7 +13,7 @@ find $FILESDIR -type f -name "*.txt" -exec "${0%/*}/cleanup.sh" {} \;
 FILES=`find $FILESDIR -type f -not -name "*.*"`
 java -mx4600m -cp "$PARSERDIR/*:" edu.stanford.nlp.parser.lexparser.LexicalizedParser \
     -tokenizerOptions "ptb3Escaping=false,americanize=false,untokenizable=firstKeep" \
-    -outputFormat "words,wordsAndTags,typedDependencies" -outputFormatOptions "nonCollapsedDependencies,stem" \
+    -outputFormat "words,wordsAndTags,typedDependencies,penn" -outputFormatOptions "nonCollapsedDependencies,stem" \
     -writeOutputFiles -outputFilesExtension "parse" -maxLength 275 \
     -printWordsForUnparsed edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz $FILES;
 rm $FILES;

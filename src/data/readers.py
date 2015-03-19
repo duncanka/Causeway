@@ -92,10 +92,17 @@ class SentenceReader(Reader):
             self.__skip_tokens(tokenized, 'Ignoring unparsed sentence')
             return self.get_next()
 
+        constituency_parse, double_newline_found = read_stream_until(
+            self._parse_file, '\n\n')
+        assert double_newline_found, (
+            'Invalid parse file: expected blank line after constituency parse: %s'
+            % constituency_parse).encode('ascii', 'replace')
+
         parse_lines = []
         tmp = self._parse_file.readline().strip()
         if not tmp:
-            self.__skip_tokens(tokenized, 'Skipping sentence with empty parse')
+            self.__skip_tokens(tokenized,
+                               'Skipping sentence with empty dependency parse')
             return self.get_next()
         while tmp:
             parse_lines.append(tmp)
@@ -107,7 +114,8 @@ class SentenceReader(Reader):
 
         # Now create the sentence from the read data + the text file.
         sentence = ParsedSentence(
-            tokenized, lemmas, parse_lines, self._file_stream)
+            tokenized, lemmas, constituency_parse, parse_lines,
+            self._file_stream)
         assert (len(sentence.original_text) ==
                 self._file_stream.character_position
                   - sentence.document_char_offset), \

@@ -118,7 +118,8 @@ def peek_and_revert_unless(stream, condition=lambda char: True):
         stream.seek(position)
     return next_char, test_result
 
-def read_stream_until(stream, delimiter, case_insensitive, accumulate=True):
+def read_stream_until(stream, delimiter, case_insensitive=False,
+                      accumulate=True):
     ''' NOTE: Does not work for interactive streams. '''
     accumulator = (None, '')[accumulate]
 

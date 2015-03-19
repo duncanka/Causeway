@@ -107,7 +107,8 @@ class ParsedSentence(object):
         except TypeError: # Happens if None is passed
             return ''
 
-    def __init__(self, tokenized_text, tagged_lemmas, edges, document_text):
+    def __init__(self, tokenized_text, tagged_lemmas, penn_tree, edges,
+                 document_text):
         '''
         `tokenized_text` and `tagged_lemmas` are the token and lemma strings
          from the parser.
@@ -140,6 +141,7 @@ class ParsedSentence(object):
         copy_node_indices = self.__create_tokens(token_strings, tag_strings)
         self.__align_tokens_to_text(document_text)
         self.__create_edges(edges, copy_node_indices)
+        self.constituency_tree = bracket_parse(penn_tree)
 
     def get_depth(self, token):
         return self.__depths[token.index]

@@ -11,7 +11,7 @@ def write_parse_results(txt_file_name, parse_text):
 def run_parser(sentence, parser_path, write_results=False):
     if write_results:
         delete = False
-        output_format = 'words,wordsAndTags,typedDependencies'
+        output_format = 'words,wordsAndTags,penn,typedDependencies'
     else:
         delete = True
         output_format = 'typedDependencies'
