@@ -11,12 +11,12 @@ FLAGS = gflags.FLAGS
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from pairwise.simple_causality import SimpleCausalityStage
+from pairwise.candidate_classifier import CandidateClassifierStage
 from pairwise.connective_stage import ConnectiveStage
 from util.metrics import ClassificationMetrics
 
 try:
-    gflags.DEFINE_enum('sc_classifier_model', 'forest',
+    gflags.DEFINE_enum('pw_classifier_model', 'forest',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
@@ -53,22 +53,22 @@ if __name__ == '__main__':
     np.random.seed(seed)
     print "Using seed:", seed
 
-    if FLAGS.sc_classifier_model == 'tree':
+    if FLAGS.pw_classifier_model == 'tree':
         sc_classifier = tree.DecisionTreeClassifier()
-    elif FLAGS.sc_classifier_model == 'knn':
+    elif FLAGS.pw_classifier_model == 'knn':
         sc_classifier = neighbors.KNeighborsClassifier()
-    elif FLAGS.sc_classifier_model == 'logistic':
+    elif FLAGS.pw_classifier_model == 'logistic':
         sc_classifier = linear_model.LogisticRegression()
-    elif FLAGS.sc_classifier_model == 'svm':
+    elif FLAGS.pw_classifier_model == 'svm':
         sc_classifier = svm.SVC()
-    elif FLAGS.sc_classifier_model == 'forest':
+    elif FLAGS.pw_classifier_model == 'forest':
         sc_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
 
     sc_classifier = ClassBalancingModelWrapper(sc_classifier,
                                                FLAGS.rebalance_ratio)
 
     connective_stage = ConnectiveStage('Connectives')
-    sc_stage = SimpleCausalityStage(sc_classifier)
+    sc_stage = CandidateClassifierStage(sc_classifier)
     causality_pipeline = Pipeline(
         [connective_stage, sc_stage],
         DirectoryReader((r'.*\.ann$',), StandoffReader()))

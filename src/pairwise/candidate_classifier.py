@@ -9,16 +9,17 @@ from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtr
 from pairwise import PairwiseCausalityStage
 
 try:
-    DEFINE_list('sc_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
-                                'deplen', 'tenses', 'connective'],
-                'Features to use for simple causality model')
-    DEFINE_integer('sc_max_words_btw_phrases', 10,
+    DEFINE_list(
+        'pw_candidate_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
+                                  'deplen', 'tenses', 'connective'],
+        'Features to use for simple causality model')
+    DEFINE_integer('pw_candidate_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max");
-    DEFINE_integer('sc_max_dep_path_len', 3,
+    DEFINE_integer('pw_candidate_max_dep_path_len', 3,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'");
-    DEFINE_bool('sc_print_test_instances', False,
+    DEFINE_bool('pw_candidate_print_instances', False,
                 'Whether to print true positive, false positive, and false'
                 ' negative instances after testing')
 except DuplicateFlagError as e:
@@ -38,14 +39,14 @@ class PhrasePairModel(ClassifierModel):
             PhrasePairPart,
             # Avoid any potential harm that could come to our class variable.
             PhrasePairModel.FEATURE_EXTRACTOR_MAP.copy(),
-            FLAGS.sc_features, classifier)
+            FLAGS.pw_candidate_features, classifier)
 
     # First define longer feature extraction functions.
     @staticmethod
     def words_btw_heads(part):
         words_btw = part.instance.count_words_between(
             part.head_token_1, part.head_token_2)
-        return min(words_btw, FLAGS.sc_max_words_btw_phrases)
+        return min(words_btw, FLAGS.pw_candidate_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
@@ -57,7 +58,7 @@ class PhrasePairModel(ClassifierModel):
         if source.start_offset > target.start_offset:
             source, target = target, source
         deps = part.instance.extract_dependency_path(source, target, False)
-        if len(deps) > FLAGS.sc_max_dep_path_len:
+        if len(deps) > FLAGS.pw_candidate_max_dep_path_len:
             return 'LONG-RANGE'
         else:
             return str(deps)
@@ -154,11 +155,11 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {extractor.name: extractor
                                          for extractor in FEATURE_EXTRACTORS}
 
 
-class SimpleCausalityStage(ClassifierStage, PairwiseCausalityStage):
+class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
     def __init__(self, classifier):
-        super(SimpleCausalityStage, self).__init__(
-            name='Simple causality', models=[PhrasePairModel(classifier)],
-            print_test_instances=FLAGS.sc_print_test_instances)
+        super(CandidateClassifierStage, self).__init__(
+            name='Candidate classifier', models=[PhrasePairModel(classifier)],
+            print_test_instances=FLAGS.pw_candidate_print_instances)
         self._expected_causations = []
 
     def get_consumed_attributes(self):
