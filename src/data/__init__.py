@@ -88,6 +88,7 @@ class DependencyPathError(ValueError):
             '%s is not reachable from %s' % (target, source))
 
 class ParsedSentence(object):
+    # TODO: Split this into general and causality-specific
     UNESCAPE_MAP = {'\\*': '*', '...': '. . .'}
     PERIOD_SUBSTITUTES = '.:'
     SUBJECT_EDGE_LABELS = ['nsubj', 'csubj', 'nsubjpass', 'csubjpass']

@@ -12,7 +12,7 @@ import time
 
 from data import ParsedSentence
 from pipeline.models import Model
-from pairwise import PairwiseCausalityStage
+from causality_pipelines.pairwise import PairwiseCausalityStage
 from util import pairwise
 from util.metrics import ClassificationMetrics
 from util.scipy import steiner_tree, longest_path_in_tree
@@ -143,7 +143,8 @@ class TRegexConnectiveModel(Model):
             'normalize_vmod_no_agent_2',
             'normalize_vmod_no_agent_3']
         tsurgeon_script_names = [
-            os.path.join('pairwise', 'tsurgeon', script_name) + '.ts'
+            os.path.join('causality_pipelines', 'pairwise', 'tsurgeon',
+                         script_name) + '.ts'
             for script_name in tsurgeon_script_names]
 
         with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
@@ -241,9 +242,9 @@ class TRegexConnectiveModel(Model):
         return '[%s]' % ' | '.join(options)
 
     @staticmethod
-    def _get_pattern_for_instance(sentence, connective, cause_head,
+    def _get_pattern_for_instance(sentence, connective_tokens, cause_head,
                                   effect_head):
-        connective_nodes = [token.index for token in connective]
+        connective_nodes = [token.index for token in connective_tokens]
         required_token_indices = list(set(# Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_nodes))
 
@@ -252,7 +253,7 @@ class TRegexConnectiveModel(Model):
         # of required nodes. (We check whether each has an incoming or outgoing
         # edge.
         # TODO: remember what nodes have been deleted, so that they can be
-        #       re-added as part of the connective span if the pattern matches.
+        #       re-added as part of the connective_tokens span if the pattern matches.
         required_token_indices_to_keep = []
         for required_index in required_token_indices:
             if (sentence.edge_graph[:, required_index].nnz != 0 
@@ -327,7 +328,7 @@ class TRegexConnectiveModel(Model):
                                                end_pattern, edge_pattern)
 
         node_names_to_print = [name for name in node_names.values()
-                               if name not in ['cause', 'effect']]
+                               if name not in ['cause_tokens', 'effect_tokens']]
         return pattern, node_names_to_print
 
     def _extract_patterns(self, sentences):

@@ -64,7 +64,8 @@ class Pipeline(object):
         results for the corresponding pipeline stage (one result per fold) and
         aggregates them into a single result for the stage.
         '''
-        assert len(stage_aggregators) == len(self.stages)
+        if stage_aggregators:
+            assert len(stage_aggregators) == len(self.stages)
         if num_folds is None:
             num_folds = FLAGS.cv_folds
 
@@ -108,6 +109,7 @@ class Pipeline(object):
 
     @staticmethod
     def print_stage_results(indent_baseline, results, result_names=[]):
+        # TODO: Make result names something a stage can define for itself
         if isinstance(results, list) or isinstance(results, tuple):
             for i, r in enumerate(results):
                 try:

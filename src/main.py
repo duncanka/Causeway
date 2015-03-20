@@ -11,12 +11,15 @@ FLAGS = gflags.FLAGS
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from pairwise.candidate_classifier import CandidateClassifierStage
-from pairwise.tregex_stage import TRegexConnectiveStage
+from causality_pipelines.pairwise.candidate_classifier \
+    import CandidateClassifierStage
+from causality_pipelines.connective_based.regex_stage \
+    import RegexConnectiveStage
+from causality_pipelines.pairwise.tregex_stage import TRegexConnectiveStage
 from util.metrics import ClassificationMetrics
 
 try:
-    gflags.DEFINE_enum('pw_classifier_model', 'forest',
+    gflags.DEFINE_enum('pw_classifier_model', 'tree',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
@@ -29,6 +32,8 @@ try:
     gflags.DEFINE_bool('debug', False,
                        'Whether to print debug-level logging.')
     gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
+    gflags.DEFINE_enum('pipeline_type', 'tregex', ['tregex', 'regex'],
+                       'Which causality pipeline to run')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -53,25 +58,35 @@ if __name__ == '__main__':
     np.random.seed(seed)
     print "Using seed:", seed
 
-    if FLAGS.pw_classifier_model == 'tree':
-        candidate_classifier = tree.DecisionTreeClassifier()
-    elif FLAGS.pw_classifier_model == 'knn':
-        candidate_classifier = neighbors.KNeighborsClassifier()
-    elif FLAGS.pw_classifier_model == 'logistic':
-        candidate_classifier = linear_model.LogisticRegression()
-    elif FLAGS.pw_classifier_model == 'svm':
-        candidate_classifier = svm.SVC()
-    elif FLAGS.pw_classifier_model == 'forest':
-        candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
+    if FLAGS.pipeline_type == 'tregex':
+        if FLAGS.pw_classifier_model == 'tree':
+            candidate_classifier = tree.DecisionTreeClassifier()
+        elif FLAGS.pw_classifier_model == 'knn':
+            candidate_classifier = neighbors.KNeighborsClassifier()
+        elif FLAGS.pw_classifier_model == 'logistic':
+            candidate_classifier = linear_model.LogisticRegression()
+        elif FLAGS.pw_classifier_model == 'svm':
+            candidate_classifier = svm.SVC()
+        elif FLAGS.pw_classifier_model == 'forest':
+            candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
 
-    candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
-                                                      FLAGS.rebalance_ratio)
+        candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
+                                                          FLAGS.rebalance_ratio)
 
-    connective_stage = TRegexConnectiveStage('Connectives')
-    candidate_classifier_stage = CandidateClassifierStage(candidate_classifier)
+        connective_stage = TRegexConnectiveStage('TRegex connectives')
+        candidate_classifier_stage = CandidateClassifierStage(
+            candidate_classifier, 'Candidate classifier')
+        stages = [connective_stage, candidate_classifier_stage]
+        results_names = ['All instances', 'Pairwise instances only']
+        stage_aggregators = [TRegexConnectiveStage.average_eval_pairs,
+                             ClassificationMetrics.average]
+    else: # regex
+        stages = [RegexConnectiveStage('Regex connectives')]
+        results_names = []
+        stage_aggregators = [ClassificationMetrics.average]
+
     causality_pipeline = Pipeline(
-        [connective_stage, candidate_classifier_stage],
-        DirectoryReader((r'.*\.ann$',), StandoffReader()))
+        stages, DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
     def print_eval(eval_results):
         stage_names = [p.name for p in causality_pipeline.stages]
@@ -79,14 +94,13 @@ if __name__ == '__main__':
             print "Evaluation for stage %s:" % stage_name
             # The labels will be used for eval results of the connective stage.
             causality_pipeline.print_stage_results(
-                1, result, ['All instances', 'Pairwise instances only'])
+                1, result, results_names)
 
     if FLAGS.eval_with_cv:
         logging.info("Evaluating with %d-fold cross-validation"
                      % FLAGS.cv_folds)
         eval_results = causality_pipeline.cross_validate(
-            stage_aggregators=[TRegexConnectiveStage.average_eval_pairs,
-                               ClassificationMetrics.average])
+            stage_aggregators=stage_aggregators)
         print_eval(eval_results)
     else:
         if FLAGS.train_paths:

@@ -6,7 +6,7 @@ from data import Token, CausationInstance
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
-from pairwise import PairwiseCausalityStage
+from causality_pipelines.pairwise import PairwiseCausalityStage
 
 try:
     DEFINE_list(
@@ -156,9 +156,9 @@ PhrasePairModel.FEATURE_EXTRACTOR_MAP = {extractor.name: extractor
 
 
 class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
-    def __init__(self, classifier):
+    def __init__(self, classifier, name):
         super(CandidateClassifierStage, self).__init__(
-            name='Candidate classifier', models=[PhrasePairModel(classifier)],
+            name=name, models=[PhrasePairModel(classifier)],
             print_test_instances=FLAGS.pw_candidate_print_instances)
         self._expected_causations = []
 
