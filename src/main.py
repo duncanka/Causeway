@@ -54,23 +54,23 @@ if __name__ == '__main__':
     print "Using seed:", seed
 
     if FLAGS.pw_classifier_model == 'tree':
-        sc_classifier = tree.DecisionTreeClassifier()
+        candidate_classifier = tree.DecisionTreeClassifier()
     elif FLAGS.pw_classifier_model == 'knn':
-        sc_classifier = neighbors.KNeighborsClassifier()
+        candidate_classifier = neighbors.KNeighborsClassifier()
     elif FLAGS.pw_classifier_model == 'logistic':
-        sc_classifier = linear_model.LogisticRegression()
+        candidate_classifier = linear_model.LogisticRegression()
     elif FLAGS.pw_classifier_model == 'svm':
-        sc_classifier = svm.SVC()
+        candidate_classifier = svm.SVC()
     elif FLAGS.pw_classifier_model == 'forest':
-        sc_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
+        candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
 
-    sc_classifier = ClassBalancingModelWrapper(sc_classifier,
-                                               FLAGS.rebalance_ratio)
+    candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
+                                                      FLAGS.rebalance_ratio)
 
     connective_stage = TRegexConnectiveStage('Connectives')
-    sc_stage = CandidateClassifierStage(sc_classifier)
+    candidate_classifier_stage = CandidateClassifierStage(candidate_classifier)
     causality_pipeline = Pipeline(
-        [connective_stage, sc_stage],
+        [connective_stage, candidate_classifier_stage],
         DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
     def print_eval(eval_results):
