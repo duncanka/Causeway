@@ -12,7 +12,7 @@ from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
 from pairwise.candidate_classifier import CandidateClassifierStage
-from pairwise.connective_stage import ConnectiveStage
+from pairwise.tregex_stage import TRegexConnectiveStage
 from util.metrics import ClassificationMetrics
 
 try:
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     sc_classifier = ClassBalancingModelWrapper(sc_classifier,
                                                FLAGS.rebalance_ratio)
 
-    connective_stage = ConnectiveStage('Connectives')
+    connective_stage = TRegexConnectiveStage('Connectives')
     sc_stage = CandidateClassifierStage(sc_classifier)
     causality_pipeline = Pipeline(
         [connective_stage, sc_stage],
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         logging.info("Evaluating with %d-fold cross-validation"
                      % FLAGS.cv_folds)
         eval_results = causality_pipeline.cross_validate(
-            stage_aggregators=[ConnectiveStage.average_eval_pairs,
+            stage_aggregators=[TRegexConnectiveStage.average_eval_pairs,
                                ClassificationMetrics.average])
         print_eval(eval_results)
     else:

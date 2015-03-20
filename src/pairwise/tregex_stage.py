@@ -44,9 +44,9 @@ class PossibleCausation(object):
         self.matching_pattern = matching_pattern
         self.correct = correct
 
-class ConnectiveModel(Model):
+class TRegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
-        super(ConnectiveModel, self).__init__(*args, **kwargs)
+        super(TRegexConnectiveModel, self).__init__(*args, **kwargs)
         self.tregex_patterns = []
 
     def train(self, sentences):
@@ -126,7 +126,7 @@ class ConnectiveModel(Model):
             sentence.possible_causations = []
             ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
             true_causation_pairs = [
-                ConnectiveStage.normalize_order(
+                TRegexConnectiveStage.normalize_order(
                     instance.get_cause_and_effect_heads())
                 for instance in sentence.causation_instances]
             true_causation_pairs_by_sentence.append(
@@ -205,7 +205,7 @@ class ConnectiveModel(Model):
 
     @staticmethod
     def _get_steiner_pattern(token, steiner_index, node_names):
-        return ConnectiveModel._get_non_connective_token_pattern(
+        return TRegexConnectiveModel._get_non_connective_token_pattern(
             token, 'steiner_%d' % steiner_index, node_names)
 
     @staticmethod
@@ -214,17 +214,17 @@ class ConnectiveModel(Model):
         token = sentence.tokens[node]
         try:
             connective_index = connective_nodes.index(node)
-            return ConnectiveModel._get_connective_token_pattern(
+            return TRegexConnectiveModel._get_connective_token_pattern(
                 token, connective_index, node_names)
         except ValueError: # It's not a connective node
             try:
                 steiner_index = steiner_nodes.index(node)
-                return ConnectiveModel._get_steiner_pattern(
+                return TRegexConnectiveModel._get_steiner_pattern(
                     token, steiner_index, node_names)
             except ValueError:  # It's an argument node
                 node_name = ['cause', 'effect'][
                     token.index == effect_head.index]
-                return ConnectiveModel._get_non_connective_token_pattern(
+                return TRegexConnectiveModel._get_non_connective_token_pattern(
                     token, node_name, node_names)
 
     @staticmethod
@@ -285,17 +285,17 @@ class ConnectiveModel(Model):
         node_names = {}
         edges = [(None, longest_path[0])] + list(pairwise(longest_path))
         for edge_start, edge_end in edges:
-            end_pattern = ConnectiveModel._get_node_pattern(
+            end_pattern = TRegexConnectiveModel._get_node_pattern(
                 sentence, edge_end, node_names, connective_nodes,
                 steiner_nodes, cause_head, effect_head)
             if edge_start is not None:
                 if steiner_graph[edge_start, edge_end]: # forward edge
-                    edge_pattern = ConnectiveModel._get_edge_pattern(
+                    edge_pattern = TRegexConnectiveModel._get_edge_pattern(
                         edge_start, edge_end, sentence)
                     pattern = '%s < (%s %s' % (pattern, end_pattern,
                                                edge_pattern)
                 else: # back edge
-                    edge_pattern = ConnectiveModel._get_edge_pattern(
+                    edge_pattern = TRegexConnectiveModel._get_edge_pattern(
                         edge_end, edge_start, sentence)
                     pattern = '%s %s > (%s' % (pattern, edge_pattern,
                                                end_pattern)
@@ -311,7 +311,7 @@ class ConnectiveModel(Model):
             try:
                 return '=' + node_names[node]
             except KeyError:  # Node hasn't been named and given a pattern yet
-                return '(%s)' % ConnectiveModel._get_node_pattern(
+                return '(%s)' % TRegexConnectiveModel._get_node_pattern(
                     sentence, node, node_names, connective_nodes,
                     steiner_nodes, cause_head, effect_head)
 
@@ -321,7 +321,7 @@ class ConnectiveModel(Model):
                 continue
             start_pattern = get_named_node_pattern(edge_start)
             end_pattern = get_named_node_pattern(edge_end)
-            edge_pattern = ConnectiveModel._get_edge_pattern(
+            edge_pattern = TRegexConnectiveModel._get_edge_pattern(
                 edge_start, edge_end, sentence)
             pattern = '%s : (%s < (%s %s))' % (pattern, start_pattern,
                                                end_pattern, edge_pattern)
@@ -373,7 +373,7 @@ class ConnectiveModel(Model):
     class TregexProcessorThread(threading.Thread):
         def __init__(self, sentences, ptb_strings, queue,
                      true_causation_pairs_by_sentence, *args, **kwargs):
-            super(ConnectiveModel.TregexProcessorThread, self).__init__(
+            super(TRegexConnectiveModel.TregexProcessorThread, self).__init__(
                 *args, **kwargs)
             self.sentences = sentences
             self.ptb_strings = ptb_strings
@@ -508,11 +508,11 @@ class ConnectiveModel(Model):
         return progress_reporter
 
 
-class ConnectiveStage(PairwiseCausalityStage):
+class TRegexConnectiveStage(PairwiseCausalityStage):
     def __init__(self, name):
-        super(ConnectiveStage, self).__init__(
+        super(TRegexConnectiveStage, self).__init__(
             print_test_instances=FLAGS.tregex_print_test_instances, name=name,
-            models=[ConnectiveModel(part_type=ParsedSentence)])
+            models=[TRegexConnectiveModel(part_type=ParsedSentence)])
 
     def get_produced_attributes(self):
         return ['possible_causations']
