@@ -4,9 +4,10 @@ Define basic causality datatypes
 
 from copy import copy
 import logging
-from nltk.tree import bracket_parse
+from nltk.tree import ImmutableParentedTree
 import numpy as np
 import re
+
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 from util import Enum, merge_dicts, listify
 from util.streams import *
@@ -142,7 +143,7 @@ class ParsedSentence(object):
         copy_node_indices = self.__create_tokens(token_strings, tag_strings)
         self.__align_tokens_to_text(document_text)
         self.__create_edges(edges, copy_node_indices)
-        self.constituency_tree = bracket_parse(penn_tree)
+        self.constituency_tree = ImmutableParentedTree.fromstring(penn_tree)
 
     def get_depth(self, token):
         return self.__depths[token.index]
@@ -366,7 +367,7 @@ class ParsedSentence(object):
         # sure how big the graph should be. (There can be tokens missing from
         # the graph, and even if there aren't it would take more processing
         # than it's worth to find the max node index in the PTB tree.)
-        tree = bracket_parse(ptb_str)
+        tree = ImmutableParentedTree.fromstring(ptb_str)
         edge_graph = lil_matrix((num_tokens, num_tokens))
         edge_labels = {}
         excluded_edges = []
