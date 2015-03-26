@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import copy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 # import itertools
