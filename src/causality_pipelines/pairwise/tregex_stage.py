@@ -6,7 +6,6 @@ from math import log10
 import os
 import Queue
 import subprocess
-import sys
 import tempfile
 import time
 
@@ -285,7 +284,7 @@ class TRegexConnectiveModel(Model):
     @staticmethod
     def _add_cons_edge_to_pattern(sentence, steiner_graph, pattern,
                                   node_pattern, edge_start, edge_end):
-        # TODO: Make this use <+(VP) for VPs
+        # TODO: Make this use <+(VP) for VPs.
         if steiner_graph[edge_start, edge_end]: # forward edge
             pattern = '%s < (%s' % (pattern, node_pattern)
         else: # back edge
@@ -691,8 +690,7 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
-            if (None, None) in expected_pairs:
-                raise Exception
+            assert (None, None) not in expected_pairs
             tp, fp, fn = self.match_causation_pairs(
                 expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
                 self.fn_pairs, self.all_instances_metrics)

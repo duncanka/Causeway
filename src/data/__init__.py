@@ -408,9 +408,11 @@ class ParsedSentence(object):
         return new_sentence
 
     def get_constituency_node_for_tokens(self, tokens):
-        indices = [token.index for token in tokens]
+        # Token indices include ROOT, so we subtract 1 to get indices that will
+        # match NLTK's leaf indices.
+        indices = [token.index - 1 for token in tokens]
         treeposition = self.constituency_tree.treeposition_spanning_leaves(
-            min(indices), max(indices) + 1)
+            min(indices), max(indices) + 1) # +1 because of Python-style ranges
         node = self.constituency_tree[treeposition]
         if not isinstance(node, Tree): # We got a treeposition of a leaf string
             node = self.constituency_tree[treeposition[:-1]]
