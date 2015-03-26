@@ -374,7 +374,8 @@ class ParsedSentence(object):
 
         def convert_node(parent_index, node):
             # Node index is whatever's after the last underscore.
-            node_index = int(node.node[node.node.rindex('_') + 1:])
+            node_label = node.label()
+            node_index = int(node_label[node_label.rindex('_') + 1:])
             edge_label = node[0]  # 0th child is always edge label
             if edge_label in ParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
                 excluded_edges.append((parent_index, node_index))
