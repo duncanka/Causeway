@@ -188,8 +188,8 @@ def reconstruct_predecessor_path(predecessors, w, v):
 
 # Steiner tree finding.
 def steiner_tree(graph, terminals, *args, **kwargs):
-    method = kwargs.pop('method', 'dreyfus-wagner')
-    if method == 'dreyfus-wagner':
+    algorithm = kwargs.pop('algorithm', 'dreyfus-wagner')
+    if algorithm == 'dreyfus-wagner':
         return dreyfus_wagner(graph, terminals, *args, **kwargs)
     else:
         raise NotImplementedError

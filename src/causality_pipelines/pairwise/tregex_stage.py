@@ -1,5 +1,5 @@
 from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, \
-    DEFINE_integer
+    DEFINE_integer, DEFINE_enum
 import threading
 import logging
 from math import log10
@@ -10,11 +10,12 @@ import sys
 import tempfile
 import time
 
-from data import ParsedSentence
+from data import ParsedSentence, Token
 from pipeline.models import Model
 from causality_pipelines.pairwise import PairwiseCausalityStage
 from util import pairwise
 from util.metrics import ClassificationMetrics
+from util.nltk import subtree_at_index, index_of_subtree
 from util.scipy import steiner_tree, longest_path_in_tree
 
 try:
@@ -23,7 +24,7 @@ try:
                   'stanford-tregex-2014-10-26',
                   'Command to run TRegex')
     DEFINE_integer(
-        'tregex_max_steiners', sys.maxsize,
+        'tregex_max_steiners', 10,
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
@@ -32,6 +33,9 @@ try:
     DEFINE_bool('tregex_print_test_instances', False,
                 'Whether to print true positive, false positive, and false'
                 ' negative instances after testing')
+    DEFINE_enum('tregex_pattern_type', 'dependency',
+                ['dependency', 'constituency'],
+                'Type of tree to generate and run TRegex patterns with')
 
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -124,7 +128,10 @@ class TRegexConnectiveModel(Model):
         true_causation_pairs_by_sentence = []
         for sentence in sentences:
             sentence.possible_causations = []
-            ptb_strings.append(sentence.to_ptb_tree_string() + '\n')
+            if FLAGS.tregex_pattern_type == 'dependency':
+                ptb_strings.append(sentence.dep_to_ptb_tree_string() + '\n')
+            else:
+                ptb_strings.append(sentence.constituency_tree.pformat() + '\n')
             true_causation_pairs = [
                 TRegexConnectiveStage.normalize_order(
                     instance.get_cause_and_effect_heads())
@@ -134,34 +141,41 @@ class TRegexConnectiveModel(Model):
                      for (arg_1, arg_2) in true_causation_pairs
                      if arg_1 is not None and arg_2 is not None]))
 
-        # Order matters a lot here.
-        tsurgeon_script_names = [
-            'normalize_passives',
-            'normalize_vmod_passives_1',
-            'normalize_vmod_passives_2',
-            'normalize_vmod_no_agent_1',
-            'normalize_vmod_no_agent_2',
-            'normalize_vmod_no_agent_3']
-        tsurgeon_script_names = [
-            os.path.join('causality_pipelines', 'pairwise', 'tsurgeon',
-                         script_name) + '.ts'
-            for script_name in tsurgeon_script_names]
+        if FLAGS.tregex_pattern_type == 'dependency':
+            # Order matters a lot here.
+            tsurgeon_script_names = [
+                'normalize_passives',
+                'normalize_vmod_passives_1',
+                'normalize_vmod_passives_2',
+                'normalize_vmod_no_agent_1',
+                'normalize_vmod_no_agent_2',
+                'normalize_vmod_no_agent_3']
+            tsurgeon_script_names = [
+                os.path.join('causality_pipelines', 'pairwise', 'tsurgeon_dep',
+                             script_name) + '.ts'
+                for script_name in tsurgeon_script_names]
 
-        with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
-            encoded_strings = [s.encode('utf-8') for s in ptb_strings]
-            tree_file.writelines(encoded_strings)
-            tree_file.flush()
-            with tempfile.NamedTemporaryFile('w+b',
-                                             delete=False) as surgeried_file:
-                tsurgeon_command = (
-                    ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
-                      '-treeFile', tree_file.name] + tsurgeon_script_names))
-                subprocess.call(tsurgeon_command, stdout=surgeried_file)
-                surgeried_file.seek(0)
-                ptb_strings = surgeried_file.readlines()
+            with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
+                encoded_strings = [s.encode('utf-8') for s in ptb_strings]
+                tree_file.writelines(encoded_strings)
+                tree_file.flush()
+                with tempfile.NamedTemporaryFile(
+                    'w+b', delete=False) as surgeried_file:
+                    tsurgeon_command = (
+                        ([os.path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
+                          '-treeFile', tree_file.name]
+                         + tsurgeon_script_names))
+                    subprocess.call(tsurgeon_command, stdout=surgeried_file)
+                    surgeried_file.seek(0)
+                    ptb_strings = surgeried_file.readlines()
+        else:
+            # Temporary measure until we get TSurgeon scripts updated for
+            # constituency parses: don't do any real preprocessing.
+            # TODO: Implement constituency scripts, and move TSurgeon-running
+            # code to be shared.
+            pass
 
         logging.info('Done preprocessing.')
-
         return ptb_strings, true_causation_pairs_by_sentence
 
     @staticmethod
@@ -182,54 +196,40 @@ class TRegexConnectiveModel(Model):
     #####################################
 
     @staticmethod
-    def _get_connective_token_pattern(token, connective_index, node_names):
-        node_name = 'connective_%d' % connective_index
-        node_names[token.index] = node_name
+    def _get_dep_node_pattern(
+        sentence, node_index, node_names, connective_indices,
+        steiner_nodes, cause_head, effect_head):
+        def non_connective_pattern(node_name):
+            node_names[node_index] = node_name
+            return '/.*_[0-9]+/=%s' % node_name
+            '''
+            parent_sentence = token.parent_sentence
+            if parent_sentence.is_clause_head(token):
+                pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
+            else:
+                pos_pattern = ('<2 /^%s.*/' % token.get_gen_pos())
+    
+            return '/.*_[0-9+]/=%s %s' % (node_name, pos_pattern)
+            '''
 
-        return (
-            '/^%s_[0-9]+$/=%s <2 /^%s.*/' % (
-            token.lemma, node_name, token.get_gen_pos()))
-
-    @staticmethod
-    def _get_non_connective_token_pattern(token, node_name, node_names):
-        node_names[token.index] = node_name
-        return '/.*_[0-9]+/=%s' % node_name
-        '''
-        parent_sentence = token.parent_sentence
-        if parent_sentence.is_clause_head(token):
-            pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
-        else:
-            pos_pattern = ('<2 /^%s.*/' % token.get_gen_pos())
-
-        return '/.*_[0-9+]/=%s %s' % (node_name, pos_pattern)
-        '''
-
-    @staticmethod
-    def _get_steiner_pattern(token, steiner_index, node_names):
-        return TRegexConnectiveModel._get_non_connective_token_pattern(
-            token, 'steiner_%d' % steiner_index, node_names)
-
-    @staticmethod
-    def _get_node_pattern(sentence, node, node_names, connective_nodes,
-                          steiner_nodes, cause_head, effect_head):
-        token = sentence.tokens[node]
+        token = sentence.tokens[node_index]
         try:
-            connective_index = connective_nodes.index(node)
-            return TRegexConnectiveModel._get_connective_token_pattern(
-                token, connective_index, node_names)
+            connective_index = connective_indices.index(node_index)
+            node_name = 'connective_%d' % connective_index
+            node_names[node_index] = node_name
+            return ('/^%s_[0-9]+$/=%s <2 /^%s.*/' % (
+                        token.lemma, node_name, token.get_gen_pos()))
         except ValueError: # It's not a connective node
             try:
-                steiner_index = steiner_nodes.index(node)
-                return TRegexConnectiveModel._get_steiner_pattern(
-                    token, steiner_index, node_names)
-            except ValueError:  # It's an argument node
+                steiner_index = steiner_nodes.index(node_index)
+                return non_connective_pattern('steiner_%d' % steiner_index)
+            except ValueError:  # It's an argument node_index
                 node_name = ['cause', 'effect'][
                     token.index == effect_head.index]
-                return TRegexConnectiveModel._get_non_connective_token_pattern(
-                    token, node_name, node_names)
+                return non_connective_pattern(node_name)
 
     @staticmethod
-    def _get_edge_pattern(edge_start, edge_end, sentence):
+    def _get_dep_edge_pattern(edge_start, edge_end, sentence):
         edge_label = sentence.edge_labels[(edge_start, edge_end)]
         if edge_label in ['nsubj', 'csubj']:
             options = ['<1 nsubj', '<1 csubj']
@@ -242,18 +242,157 @@ class TRegexConnectiveModel(Model):
         return '[%s]' % ' | '.join(options)
 
     @staticmethod
-    def _get_pattern_for_instance(sentence, connective_tokens, cause_head,
-                                  effect_head):
-        connective_nodes = [token.index for token in connective_tokens]
+    def _add_dep_edge_to_pattern(sentence, steiner_graph, pattern,
+                                 node_pattern, edge_start, edge_end):
+        if steiner_graph[edge_start, edge_end]: # forward edge
+            edge_pattern = TRegexConnectiveModel._get_dep_edge_pattern(
+                edge_start, edge_end, sentence)
+            pattern = '%s < (%s %s' % (pattern, node_pattern,
+                                       edge_pattern)
+        else: # back edge
+            edge_pattern = TRegexConnectiveModel._get_dep_edge_pattern(
+                edge_end, edge_start, sentence)
+            pattern = '%s %s > (%s' % (pattern, edge_pattern,
+                                       node_pattern)
+        return pattern
+
+    @staticmethod
+    def _get_cons_node_pattern(sentence, node_index, node_names,
+                               connective_nodes, steiner_nodes, cause_node,
+                               effect_node):
+        tree = sentence.constituency_tree # for brevity
+        node = subtree_at_index(tree, node_index)
+        
+        try:
+            connective_index = connective_nodes.index(node)
+            assert (isinstance(node[0][0], str)
+                    or isinstance(node[0][0], unicode))
+            node_name = 'connective_%d' % connective_index
+            node_names[node_index] = node_name
+            gen_pos = Token.POS_GENERAL.get(node.label(), node.label())
+            return '(/^%s.*/=%s < %s)' % (gen_pos, node_name, node[0])
+        except ValueError: # It's not a connective node
+            try:
+                steiner_index = steiner_nodes.index(node_index)
+                node_name = 'steiner_%d' % steiner_index
+                pattern = '__=%s' % node_name
+            except ValueError: # It's an argument node_index
+                node_name = ['cause', 'effect'][node is effect_node]
+                pattern = '%s=%s' % (node.label(), node_name)
+            node_names[node_index] = node_name
+            return pattern
+
+    @staticmethod
+    def _add_cons_edge_to_pattern(sentence, steiner_graph, pattern,
+                                  node_pattern, edge_start, edge_end):
+        # TODO: Make this use <+(VP) for VPs
+        if steiner_graph[edge_start, edge_end]: # forward edge
+            pattern = '%s < (%s' % (pattern, node_pattern)
+        else: # back edge
+            pattern = '%s > (%s' % (pattern, node_pattern)
+        return pattern
+
+    @staticmethod
+    def _generate_pattern_from_steiners(sentence, steiner_graph, steiner_nodes,
+                                        connective_nodes, cause, effect,
+                                        path_seed_index):
+        '''
+        Both dependency-based and constituency-based pattern generation share
+        the same algorithmic structure once the Steiner graph has been found.
+        The only difference is how patterns are generated for each node/edge.
+        
+        If we're in dependency mode:
+         - `cause` and `effect` are the Tokens representing the argument heads.
+         - `connective_nodes` is a list of token indices.
+        If we're in constituency mode:
+         - `cause` and `effect` are constituency nodes spanning the argument
+           annotations.  
+         - `connective_nodes` is a list of constituency tree nodes.
+        '''
+
+        if len(steiner_nodes) > FLAGS.tregex_max_steiners:
+            logging.debug(
+                "Ignoring very long pattern (sentence: %s)"
+                % sentence.original_text)
+            return (None, None)
+
+        pattern = ''
+        if FLAGS.tregex_pattern_type == 'dependency':
+            node_pattern_fn = TRegexConnectiveModel._get_dep_node_pattern
+            add_edge_fn = TRegexConnectiveModel._add_dep_edge_to_pattern
+        else:
+            node_pattern_fn = TRegexConnectiveModel._get_cons_node_pattern
+            add_edge_fn = TRegexConnectiveModel._add_cons_edge_to_pattern
+
+        # To generate the pattern, we start by generating one long string that
+        # can be checked easily by TRegex. That'll be the biggest chunk of the
+        # pattern. It consists of the longest path through the Steiner tree
+        # edges.
+
+        # Start the longest path search from a node we know is actually in the
+        # tree we're looking for.
+        longest_path = longest_path_in_tree(steiner_graph, path_seed_index)
+        node_names = {}
+        edges = [(None, longest_path[0])] + list(pairwise(longest_path))
+        for edge_start, edge_end in edges:
+            end_node_pattern = node_pattern_fn(
+                sentence, edge_end, node_names, connective_nodes,
+                steiner_nodes, cause, effect)
+            if edge_start is not None:
+                pattern = add_edge_fn(sentence, steiner_graph, pattern,
+                                      end_node_pattern, edge_start, edge_end)
+            else: # start of path
+                pattern = '(%s' % end_node_pattern
+        pattern += ')' * len(edges)
+
+        # Next, we need to make sure all the edges that weren't included in the
+        # longest path get incorporated into the pattern. For this, it's OK to
+        # have a few colon-separated pattern segments.
+        def get_named_node_pattern(node):
+            try:
+                return '=' + node_names[node]
+            except KeyError: # Node hasn't been named and given a pattern yet
+                return '(%s)' % node_pattern_fn(
+                    sentence, node, node_names, connective_nodes,
+                    steiner_nodes, cause, effect)
+
+        for edge_start, edge_end in zip(*steiner_graph.nonzero()):
+            if ((edge_start, edge_end) in edges
+                or (edge_end, edge_start) in edges):
+                continue
+            start_node_pattern = get_named_node_pattern(edge_start)
+            end_node_pattern = get_named_node_pattern(edge_end)
+            # Link end to start using add_edge_fn, as though start were the
+            # entire pattern so far. It will, in fact, be the entire pattern so
+            # far after the colon.
+            edge_pattern = add_edge_fn(
+                sentence, steiner_graph, start_node_pattern, end_node_pattern,
+                edge_start, edge_end)
+            # The final paren is because the edge pattern functions don't close
+            # their parens.
+            pattern = '%s : (%s))' % (pattern, edge_pattern)
+
+        node_names_to_print = [name for name in node_names.values() if name
+                               not in ['cause', 'effect']]
+
+        return pattern, node_names_to_print
+
+    @staticmethod
+    def _get_dependency_pattern(sentence, connective_tokens, cause_tokens,
+                                effect_tokens):
+        connective_indices = [token.index for token in connective_tokens]
+        cause_head = sentence.get_head(cause_tokens)
+        effect_head = sentence.get_head(effect_tokens)
         required_token_indices = list(set(# Eliminate potential duplicates
-            [cause_head.index, effect_head.index] + connective_nodes))
+            [cause_head.index, effect_head.index] + connective_indices))
 
         # Once the sentence has been preprocessed, it is possible some nodes
         # will have been deleted. We make sure to delete these from the list
         # of required nodes. (We check whether each has an incoming or outgoing
         # edge.
         # TODO: remember what nodes have been deleted, so that they can be
-        #       re-added as part of the connective_tokens span if the pattern matches.
+        #       re-added as part of the connective_tokens span if the pattern
+        #       matches.
         required_token_indices_to_keep = []
         for required_index in required_token_indices:
             if (sentence.edge_graph[:, required_index].nnz != 0 
@@ -268,88 +407,69 @@ class TRegexConnectiveModel(Model):
             sentence.edge_graph, required_token_indices,
             sentence.path_costs, sentence.path_predecessors)
 
-        if len(steiner_nodes) > FLAGS.tregex_max_steiners:
-            logging.debug(
-                "Ignoring potentially very long pattern (sentence: %s)"
-                % sentence.original_text)
-            return (None, None)
+        path_seed_index = connective_indices[0]
+        return TRegexConnectiveModel._generate_pattern_from_steiners(
+            sentence, steiner_graph, steiner_nodes, connective_indices,
+            cause_head, effect_head, path_seed_index)
 
-        # To generate the pattern, we start by generating one long string that
-        # can be checked easily by TRegex. That'll be the biggest chunk of the
-        # pattern. It consists of the longest path through the Steiner tree
-        # edges.
+    @staticmethod
+    def _get_constituency_pattern(sentence, connective_tokens, cause_tokens,
+                                  effect_tokens):
+        # TODO: optimize shortest-path calculations on graph to be done only
+        # once? (currently happen repeatedly in steiner_tree)
+        constituency_tree = sentence.constituency_tree # for brevity
+        cause_node = sentence.get_constituency_node_for_tokens(cause_tokens)
+        effect_node = sentence.get_constituency_node_for_tokens(effect_tokens)
+        connective_treepositions = [
+            # Index includes ROOT token, so subtract 1.
+            constituency_tree.leaf_treeposition(t.index - 1)
+            for t in connective_tokens]
+        # Leaf treepositions get us to the words themselves. We want the nodes
+        # just above the words, so we lop off the ends of the positions.
+        connective_nodes = [constituency_tree[position[:-1]]
+                            for position in connective_treepositions]
+        # Use IDs of terminal nodes so we can do quick checks for identity,
+        # rather than expensive recursive equality checks.
+        terminal_ids = [id(terminal) for terminal
+                        in [cause_node, effect_node] + connective_nodes]
+        terminal_indices = [
+            i for (i, subtree) in enumerate(constituency_tree.subtrees())
+            if id(subtree) in terminal_ids]
+        steiner_nodes, steiner_graph = steiner_tree(
+            sentence.constituency_graph, terminal_indices, directed=False)
 
-        # Start the longest path search from a node we know is actually in the
-        # tree we're looking for.
-        longest_path = longest_path_in_tree(steiner_graph, connective_nodes[0])
-        pattern = ''
-        node_names = {}
-        edges = [(None, longest_path[0])] + list(pairwise(longest_path))
-        for edge_start, edge_end in edges:
-            end_pattern = TRegexConnectiveModel._get_node_pattern(
-                sentence, edge_end, node_names, connective_nodes,
-                steiner_nodes, cause_head, effect_head)
-            if edge_start is not None:
-                if steiner_graph[edge_start, edge_end]: # forward edge
-                    edge_pattern = TRegexConnectiveModel._get_edge_pattern(
-                        edge_start, edge_end, sentence)
-                    pattern = '%s < (%s %s' % (pattern, end_pattern,
-                                               edge_pattern)
-                else: # back edge
-                    edge_pattern = TRegexConnectiveModel._get_edge_pattern(
-                        edge_end, edge_start, sentence)
-                    pattern = '%s %s > (%s' % (pattern, edge_pattern,
-                                               end_pattern)
+        path_seed_index = index_of_subtree(connective_nodes[0])
+        return TRegexConnectiveModel._generate_pattern_from_steiners(
+            sentence, steiner_graph, steiner_nodes, connective_nodes,
+            cause_node, effect_node, path_seed_index)
 
-            else:
-                pattern = '%s(%s' % (pattern, end_pattern)
-        pattern += ')' * len(edges)
-
-        # Next, we need to make sure all the edges that weren't included in the
-        # longest path get incorporated into the pattern. For this, it's OK to
-        # have a few colon-separated pattern segments.
-        def get_named_node_pattern(node):
-            try:
-                return '=' + node_names[node]
-            except KeyError:  # Node hasn't been named and given a pattern yet
-                return '(%s)' % TRegexConnectiveModel._get_node_pattern(
-                    sentence, node, node_names, connective_nodes,
-                    steiner_nodes, cause_head, effect_head)
-
-        for edge_start, edge_end in zip(*steiner_graph.nonzero()):
-            if ((edge_start, edge_end) in edges
-                or (edge_end, edge_start) in edges):
-                continue
-            start_pattern = get_named_node_pattern(edge_start)
-            end_pattern = get_named_node_pattern(edge_end)
-            edge_pattern = TRegexConnectiveModel._get_edge_pattern(
-                edge_start, edge_end, sentence)
-            pattern = '%s : (%s < (%s %s))' % (pattern, start_pattern,
-                                               end_pattern, edge_pattern)
-
-        node_names_to_print = [name for name in node_names.values()
-                               if name not in ['cause_tokens', 'effect_tokens']]
-        return pattern, node_names_to_print
+    @staticmethod
+    def _get_pattern(sentence, connective_tokens, cause_tokens, effect_tokens):
+        if FLAGS.tregex_pattern_type == 'dependency':
+            return TRegexConnectiveModel._get_dependency_pattern(
+                sentence, connective_tokens, cause_tokens, effect_tokens)
+        else:
+            return TRegexConnectiveModel._get_constituency_pattern(
+                sentence, connective_tokens, cause_tokens, effect_tokens)
 
     def _extract_patterns(self, sentences):
         # TODO: Extend this to work with cases of missing arguments.
         self.tregex_patterns = []
         patterns_seen = set()
 
-        modified_ptb_strings, true_causation_pairs_by_sentence = (
+        preprocessed_ptb_strings, true_causation_pairs_by_sentence = (
             self._preprocess_sentences(sentences))
 
         if FLAGS.tregex_print_patterns:
             print 'Patterns:'
-        for sentence, ptb_string in zip(sentences, modified_ptb_strings):
-            modified_sentence = sentence.substitute_ptb_graph(ptb_string)
+        for sentence, ptb_string in zip(sentences, preprocessed_ptb_strings):
+            if FLAGS.tregex_pattern_type == 'dependency':
+                sentence = sentence.substitute_dep_ptb_graph(ptb_string)
             for instance in sentence.causation_instances:
                 if instance.cause != None and instance.effect is not None:
-                    connective = instance.connective
-                    cause_head = sentence.get_head(instance.cause)
-                    effect_head = sentence.get_head(instance.effect)
-                    pattern, node_names = self._get_pattern_for_instance(
-                        modified_sentence, connective, cause_head, effect_head)
+                    pattern, node_names = self._get_pattern(
+                        sentence, instance.connective, instance.cause,
+                        instance.effect)
 
                     if pattern is None:
                         continue
@@ -361,11 +481,12 @@ class TRegexConnectiveModel(Model):
                                 'utf-8')
                             print
                         patterns_seen.add(pattern)
-                        connective_lemmas = [t.lemma for t in connective]
+                        connective_lemmas = [t.lemma for t
+                                             in instance.connective]
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
 
-        return modified_ptb_strings, true_causation_pairs_by_sentence
+        return preprocessed_ptb_strings, true_causation_pairs_by_sentence
 
     #####################################
     # Running TRegex
@@ -417,6 +538,7 @@ class TRegexConnectiveModel(Model):
             except Queue.Empty: # no more items in queue
                 return
 
+        FIXED_TREGEX_ARGS = '-o -l -N -h cause -h effect'.split()
         def _process_pattern(self, pattern, possible_sentences, tree_file_path,
                              possible_true_causation_pairs):
             # Create output file
@@ -426,50 +548,76 @@ class TRegexConnectiveModel(Model):
                 #              % (pattern, self.output_file.name))
                 # TODO: Make this use the node labels to also retrieve the
                 # possible connective tokens.
-                tregex_args = '-u -s -o -l -N -h cause -h effect'.split()
+                if FLAGS.tregex_pattern_type == 'dependency':
+                    to_print_arg = '-u'
+                else:
+                    to_print_arg = '-x'
+
                 tregex_command = (
-                    [os.path.join(FLAGS.tregex_dir, 'tregex.sh')] + tregex_args
-                    + [pattern, tree_file_path])
+                    [os.path.join(FLAGS.tregex_dir, 'tregex.sh'), to_print_arg]
+                    + self.FIXED_TREGEX_ARGS + [pattern, tree_file_path])
                 subprocess.call(tregex_command, stdout=self.output_file,
                                 stderr=self.dev_null)
                 self.output_file.seek(0)
 
-                # For each sentence, we leave the file positioned at the next
-                # tree number line.
                 for sentence, true_causation_pairs in zip(
                     possible_sentences, possible_true_causation_pairs):
-                    # Read TRegex output for the sentence.
-                    self.output_file.readline() # skip tree num line
-                    next_line = self.output_file.readline().strip()
-                    lines = []
-                    while next_line:
-                        lines.append(next_line)
-                        next_line = self.output_file.readline().strip()
-
-                    # Parse TRegex output.
-                    line_pairs = zip(lines[0::2], lines[1::2])
-                    for line_pair in line_pairs:
-                        index_pair = [int(line.split("_")[-1])
-                                      for line in line_pair]
-                        index_pair = tuple(sorted(index_pair))
-
-                        # Mark sentence if possible connective is present.
-                        t1_index, t2_index = index_pair
-                        in_gold = index_pair in true_causation_pairs
-                        possible = PossibleCausation(
-                            sentence.tokens[t1_index],
-                            sentence.tokens[t2_index], pattern, in_gold)
-
-                        # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
-                        # It is thread-safe, because lists are thread-safe, and
-                        # we never reassign sentence.possible_causations.
-                        sentence.possible_causations.append(possible)
+                    self._process_tregex_for_sentence(pattern, sentence,
+                                                      true_causation_pairs)
 
                 # Tell the progress reporter how far we've gotten, so that it
                 # will know progress for patterns that have already finished.
                 self.total_bytes_output += self.output_file.tell()
 
             self.output_file = None
+
+        def _process_tregex_for_sentence(self, pattern, sentence,
+                                         true_causation_pairs):
+            # Read TRegex output for the sentence.
+            # For each sentence, we leave the file positioned at the next
+            # tree number line.
+            self.output_file.readline() # skip tree num line
+            next_line = self.output_file.readline().strip()
+            lines = []
+            while next_line:
+                lines.append(next_line)
+                next_line = self.output_file.readline().strip()
+
+            # Parse TRegex output. Argument identifiers will be printed on
+            # alternating lines (cause, then effect).
+            for line_pair in zip(lines[0::2], lines[1::2]):
+                if FLAGS.tregex_pattern_type == 'dependency':
+                    index_pair = [int(line.split("_")[-1])
+                                  for line in line_pair]
+                    index_pair = tuple(sorted(index_pair))
+                    token_1, token_2 = [sentence.tokens[i] for i in index_pair]
+                else: # constituency
+                    # We need to use treepositions, not subtrees, because this
+                    # is how TRegex gives match positions.
+                    all_treepositions = (sentence.constituency_tree
+                                          .treepositions())
+                    arg_treeposition_indices = [int(line.split(":")[1])
+                                                for line in line_pair]
+                    # TRegex node positions start from 1, so we need to
+                    # subtract 1 to get proper treeposition indices.
+                    arg_constituent_nodes = [
+                        sentence.constituency_tree[all_treepositions[pos - 1]]
+                        for pos in arg_treeposition_indices]
+                    arg_constituent_heads = [sentence.constituent_heads[node]
+                                             for node in arg_constituent_nodes]
+                    token_1, token_2 = TRegexConnectiveStage.normalize_order(
+                        [sentence.get_token_for_constituency_node(head)
+                         for head in arg_constituent_heads])
+                    index_pair = tuple(t.index for t in [token_1, token_2])
+
+                # Mark sentence if possible connective is present.
+                in_gold = index_pair in true_causation_pairs
+                possible = PossibleCausation(
+                    token_1, token_2, pattern, in_gold)
+                # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
+                # It is thread-safe, because lists are thread-safe, and
+                # we never reassign sentence.possible_causations.
+                sentence.possible_causations.append(possible)
 
         def get_progress(self):
             try:

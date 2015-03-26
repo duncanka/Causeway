@@ -115,8 +115,8 @@ class RegexConnectiveModel(Model):
     START_OF_PATTERN = '(^|([\S]+ ))'
     TokenTypes = Enum(['Connective', 'Cause', 'Effect']) # Also possible: None
     @staticmethod
-    def _get_pattern_for_instance(sentence, connective_tokens, cause_tokens,
-                                  effect_tokens):
+    def _get_pattern(sentence, connective_tokens, cause_tokens,
+                     effect_tokens):
         assert connective_tokens
 
         connective_capturing_groups = []
@@ -166,7 +166,7 @@ class RegexConnectiveModel(Model):
                     for arg in [instance.cause, instance.effect]]
 
                 pattern, connective_capturing_groups = (
-                    RegexConnectiveModel._get_pattern_for_instance(
+                    RegexConnectiveModel._get_pattern(
                         sentence, connective, cause_tokens, effect_tokens))
 
                 if pattern not in patterns_seen:

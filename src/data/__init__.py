@@ -4,13 +4,14 @@ Define basic causality datatypes
 
 from copy import copy
 import logging
-from nltk.tree import ImmutableParentedTree
+from nltk.tree import ImmutableParentedTree, Tree
 import numpy as np
 import re
 
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 from util import Enum, merge_dicts, listify
 from util.streams import *
+from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
@@ -143,7 +144,10 @@ class ParsedSentence(object):
         copy_node_indices = self.__create_tokens(token_strings, tag_strings)
         self.__align_tokens_to_text(document_text)
         self.__create_edges(edges, copy_node_indices)
+
         self.constituency_tree = ImmutableParentedTree.fromstring(penn_tree)
+        self.constituency_graph = nltk_tree_to_graph(self.constituency_tree)
+        self.constituent_heads = collins_find_heads(self.constituency_tree)
 
     def get_depth(self, token):
         return self.__depths[token.index]
@@ -329,7 +333,7 @@ class ParsedSentence(object):
             raise ValueError("Annotation %s couldn't be matched against tokens!"
                              % annotation.offsets)
 
-    def to_ptb_tree_string(self):
+    def dep_to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
         # recursion.
         visited = set()
@@ -390,7 +394,7 @@ class ParsedSentence(object):
             convert_node(0, root_child) # initial parent index is 0 for root
         return edge_graph, edge_labels, excluded_edges
 
-    def substitute_ptb_graph(self, ptb_str):
+    def substitute_dep_ptb_graph(self, ptb_str):
         '''
         Returns a shallow copy of the ParsedSentence object, whose edge graph
         has been replaced by the one represented in `ptb_str`.
@@ -403,7 +407,28 @@ class ParsedSentence(object):
         new_sentence.__initialize_graph(excluded_edges)
         return new_sentence
 
-    ''' Private support functions '''
+    def get_constituency_node_for_tokens(self, tokens):
+        indices = [token.index for token in tokens]
+        treeposition = self.constituency_tree.treeposition_spanning_leaves(
+            min(indices), max(indices) + 1)
+        node = self.constituency_tree[treeposition]
+        if not isinstance(node, Tree): # We got a treeposition of a leaf string
+            node = self.constituency_tree[treeposition[:-1]]
+        return node
+
+    def get_token_for_constituency_node(self, node):
+        if not is_parent_of_leaf(node):
+            raise ValueError("Node is not a parent of a leaf: %s" % node)
+        node_leaf = node[0]
+        for i, leaf in enumerate(node.root().leaves()):
+            if leaf is node_leaf: # identity, not equality
+                return self.tokens[i]
+        raise ValueError(
+            "Somehow you passed a node whose leaf isn't under its root. Wow.")
+
+    ###########################################
+    # Private initialization support functions
+    ###########################################
 
     def __create_tokens(self, token_strings, tag_strings):
         # We need one more node than we have token strings (for root).

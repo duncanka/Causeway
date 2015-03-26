@@ -1,7 +1,15 @@
 from __future__ import absolute_import
+from itertools import islice
 import logging
-from nltk.tree import Tree
+from nltk.tree import Tree, ImmutableTree
 from scipy.sparse import lil_matrix
+
+# Weird hack: make ImmutableTree objects return themselves on deep copy.
+# They are by definition immutable, so this should be safe. (This is exactly
+# what deepcopy already does for tuples.)
+def deepcopy_immutable_tree(self, memo):
+    return self
+setattr(ImmutableTree, '__deepcopy__', deepcopy_immutable_tree)
 
 def is_parent_of_leaf(tree):
     return isinstance(tree[0], str) or isinstance(tree[0], unicode)
@@ -28,6 +36,22 @@ def nltk_tree_to_graph(root):
         return num_processed
     convert(root, 0)
     return graph.tocsr()
+
+def subtree_at_index(tree, index):
+    return next(islice(tree.subtrees(), index, index + 1))
+
+def index_of_subtree(subtree, root=None):
+    '''
+    If root is not provided, subtree must be parented so that the root can be
+    recovered.
+    '''
+    if root is None:
+        root = subtree.root()
+    for i, root_subtree in enumerate(root.subtrees()):
+        if root_subtree is subtree:
+            return i
+    raise ValueError(
+        'Somehow you passed a subtree that was not under its root. Good job.')
 
 #########################
 # Head finding
