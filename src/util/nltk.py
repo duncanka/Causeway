@@ -1,7 +1,33 @@
+from __future__ import absolute_import
 import logging
+from nltk.tree import Tree
+from scipy.sparse import lil_matrix
 
 def is_parent_of_leaf(tree):
     return isinstance(tree[0], str) or isinstance(tree[0], unicode)
+
+def nltk_tree_to_graph(root):
+    '''
+    Creates a Scipy CSR graph representing the constituency parse tree defined
+    by `tree`. Node indices of the new graph correspond to a left-to-right
+    preorder walk of the tree, excluding leaf nodes (words). These indices can
+    be matched against nltk.tree.Tree.subtrees().
+    '''
+    subtrees = [t for t in root.subtrees()]
+    num_nodes = len(subtrees)
+    graph = lil_matrix((num_nodes, num_nodes), dtype=bool)
+    def convert(tree, tree_index):
+        # TODO: Is there a more straightforward/efficient way to do this?
+        num_processed = 0
+        for subtree in tree:
+            if isinstance(subtree, Tree):
+                num_processed += 1
+                subtree_index = tree_index + num_processed
+                graph[tree_index, subtree_index] = True
+                num_processed += convert(subtree, subtree_index)
+        return num_processed
+    convert(root, 0)
+    return graph.tocsr()
 
 #########################
 # Head finding
@@ -122,6 +148,7 @@ def add_collins_NP(tree, head_map):
 def collins_find_heads(tree, head_map=None):
     '''
     Returns a table mapping all subtrees of the tree provided to their heads.
+    ("Head" in this context means the node dominating only the head word.)
     If the tree provided is immutable (and therefore hashable), the keys will
     be the nodes themselves. Otherwise, the ids of the nodes will be used as
     keys. (Note that this means that the table will be invalidated by any
@@ -133,7 +160,7 @@ def collins_find_heads(tree, head_map=None):
     if head_map is None:
         head_map = {}
 
-    # A word is its own head
+    # A word is its own head.
     if is_parent_of_leaf(tree):
         add_head(head_map, tree, tree)
         return head_map
