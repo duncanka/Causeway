@@ -41,8 +41,13 @@ except gflags.DuplicateFlagError as e:
 # def main(argv):
 if __name__ == '__main__':
     argv = sys.argv
+
     try:
         FLAGS(argv)  # parse flags
+        # Print command line in case we ever want to re-run from output file
+        print "Command line:", " ".join(
+            [arg if ' ' not in arg else '"%s"' % arg
+             for arg in argv[:]])
     except gflags.FlagsError, e:
         print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
