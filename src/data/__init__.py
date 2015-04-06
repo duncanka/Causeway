@@ -130,7 +130,7 @@ class ParsedSentence(object):
 
         # Declare a few variables that will be overwritten later, just so that
         # it's easy to tell what's in an instance of this class.
-        self.edge_graph = csr_matrix((0, 0), dtype='bool')
+        self.edge_graph = csr_matrix((0, 0), dtype='float')
         self.document_char_offset = 0
         self.original_text = ''
         self.__depths = np.array([])
@@ -372,7 +372,7 @@ class ParsedSentence(object):
         # the graph, and even if there aren't it would take more processing
         # than it's worth to find the max node index in the PTB tree.)
         tree = ImmutableParentedTree.fromstring(ptb_str)
-        edge_graph = lil_matrix((num_tokens, num_tokens))
+        edge_graph = lil_matrix((num_tokens, num_tokens), dtype='float')
         edge_labels = {}
         excluded_edges = []
 
@@ -384,7 +384,7 @@ class ParsedSentence(object):
             if edge_label in ParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
                 excluded_edges.append((parent_index, node_index))
             else:
-                edge_graph[parent_index, node_index] = 1
+                edge_graph[parent_index, node_index] = 1.0
             edge_labels[parent_index, node_index] = edge_label
 
             for child in node[2:]: # Skip edge label (child 0) & POS (child 1).
@@ -392,7 +392,7 @@ class ParsedSentence(object):
 
         for root_child in tree:
             convert_node(0, root_child) # initial parent index is 0 for root
-        return edge_graph, edge_labels, excluded_edges
+        return edge_graph.tocsr(), edge_labels, excluded_edges
 
     def substitute_dep_ptb_graph(self, ptb_str):
         '''
@@ -586,20 +586,29 @@ class ParsedSentence(object):
             if relation in self.DEPTH_EXCLUDED_EDGE_LABELS:
                 graph_excluded_edges.append((token_1_idx, token_2_idx))
             else:
-                self.edge_graph[token_1_idx, token_2_idx] = 1
+                self.edge_graph[token_1_idx, token_2_idx] = 1.0
         self.__initialize_graph(graph_excluded_edges)
 
     def __initialize_graph(self, graph_excluded_edges):
+        # Convert to CSR for shortest path (which would do it anyway) and to
+        # make self.get_children() below work.
         self.edge_graph = self.edge_graph.tocsr()
-        # TODO: do this with breadth_first_order instead
-        shortest_distances = csgraph.shortest_path(self.edge_graph,
-                                                   unweighted=True)
-        self.__depths = shortest_distances[0]
+        # TODO: do this with breadth_first_order instead.
+        shortest_directed_distances = csgraph.shortest_path(self.edge_graph,
+                                                            unweighted=True)
+        self.__depths = shortest_directed_distances[0]
 
-        # For the directed shortest paths we save, we'll want to prefer
-        # xcomp-> ->nsubj paths over nsubj-> nsubj<- and
-        # nsubj<- xcomp-> paths. We also want to disprefer paths that rely on
-        # expletives. We reweight the graph accordingly.
+        '''
+        For the undirected shortest paths we save, we'll want to:
+         a) prefer xcomp-> ->nsubj paths over nsubj-> nsubj<- and
+            nsubj<- xcomp-> paths.
+         b) disprefer paths that rely on expletives and vmods.
+         c) treat the graph as undirected, EXCEPT for edges where we already
+            have a reverse edge, in which case that edge's weight should be
+            left alone.
+        We adjust the graph accordingly.
+        '''
+        # Adjust edge weights to make better paths preferred.
         for edge, label in self.edge_labels.iteritems():
             if label == 'xcomp':
                 self.edge_graph[edge] = 0.98
@@ -608,17 +617,32 @@ class ParsedSentence(object):
                     edge_end_token, self.SUBJECT_EDGE_LABELS)
                 for child in subj_children:
                     self.edge_graph[edge[1], child.index] = 0.985
-            elif label == 'expl':
+            elif label == 'expl' or label == 'vmod':
                 self.edge_graph[edge] = 1.01
 
-        self.path_costs, self.path_predecessors = csgraph.shortest_path(
-            self.edge_graph, return_predecessors=True, directed=False)
+        # Create duplicate edges to simulate undirectedness, EXCEPT where we
+        # already have an edge in the opposite direction. For this we use a
+        # copy of the graph, since we don't actually want to pollute edge_graph
+        # with the reverse arcs.
+        pseudo_unweighted_graph = self.edge_graph.tolil()
+        # (Copy this LIL version for later, before we add in extra edges,
+        # because we'll want to add edges to edge_graph, and sparsity structure
+        # changes are expensive.)
+        self.edge_graph = pseudo_unweighted_graph.copy()
 
-        # Add in edges that we didn't want to use for distances/shortest path.
-        # Also convert to bool.
-        self.edge_graph = lil_matrix(self.edge_graph, dtype='bool')
+        nonzero = set([(i, j) for (i, j) in zip(
+            *pseudo_unweighted_graph.nonzero())])
+        for (i, j) in nonzero:
+            if (j, i) not in nonzero:
+                pseudo_unweighted_graph[j, i] = pseudo_unweighted_graph[i, j]
+
+        self.path_costs, self.path_predecessors = csgraph.shortest_path(
+            pseudo_unweighted_graph, return_predecessors=True, directed=True)
+
+        # Add in edges that we didn't want to use for distances/shortest path,
+        # ignoring all the changes made to undirected_graph.
         for start, end in graph_excluded_edges:
-            self.edge_graph[start, end] = True
+            self.edge_graph[start, end] = 1.0
         self.edge_graph = self.edge_graph.tocsr()
 
 
