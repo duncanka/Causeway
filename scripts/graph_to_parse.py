@@ -10,4 +10,5 @@ def parsify(sentence):
     return lines
 
 def visualize_sentence(sentence):
-    make_dot(StringIO('\n'.join(parsify(sentence))), 'tmp%d' % id(sentence))
+    make_dot(StringIO('\n'.join(parsify(sentence))),
+             '/tmp/mem_%d' % id(sentence))
