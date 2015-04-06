@@ -330,7 +330,21 @@ class TRegexConnectiveModel(Model):
 
         # Start the longest path search from a node we know is actually in the
         # tree we're looking for.
-        longest_path = longest_path_in_tree(steiner_graph, path_seed_index)
+        longest_path = list(
+            longest_path_in_tree(steiner_graph, path_seed_index))
+        if FLAGS.tregex_pattern_type == 'dependency':
+            # Normalize the path so that we don't end up thinking the reverse
+            # path is a totally different pattern: always put the cause first.
+            try:
+                if (longest_path.index(cause.index) >
+                    longest_path.index(effect.index)):
+                    longest_path = longest_path[::-1]
+            except ValueError:
+                # TODO: Should we normalize in some other way if both args
+                # aren't in the longest path?
+                pass
+        # TODO: implement this for constituency?
+
         node_names = {}
         edges = [(None, longest_path[0])] + list(pairwise(longest_path))
         for edge_start, edge_end in edges:
