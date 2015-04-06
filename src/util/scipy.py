@@ -196,15 +196,21 @@ def steiner_tree(graph, terminals, *args, **kwargs):
 
 # Based on http://siekiera.mimuw.edu.pl/~paal/dreyfus__wagner_8hpp_source.html.
 def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
-                   shortest_path_predecessors=None, directed=True, start=0):
+                   shortest_path_predecessors=None, directed=True,
+                   start_terminal_index=0):
     '''
     The Dreyfus-Wagner algorithm assumes a fully connected graph. We simulate
     that by precomputing all shortest paths, or by having them supplied, and
-    using the shortest path cost between two nodes as its edge weight. Of
-    course, this means we need to do some extra work at the end to reconstruct
-    the solution in the original graph.
+    using the shortest path cost between two nodes as its edge cost. Of course,
+    this means we need to do some extra work at the end to reconstruct the
+    solution in the original graph.
+    
+    If `shortest_path_costs` and `shortest_path_predecessors` are provided,
+    `directed` is ignored, as it is only used for shortest-path computation.
+    The edge weights in `graph` must match those used to generate these two
+    variables, or the behavior may be incorrect. 
     '''
-    def get_edge_weight(w, v):
+    def get_edge_cost(w, v):
         return shortest_path_costs[w, v]
 
     def best_split(vertex, remaining, subset, index):
@@ -250,7 +256,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
             return 0
         elif n_remaining == 1:
             terminal_index = np.where(remaining == True)[0][0]
-            cost = get_edge_weight(vertex, terminals[terminal_index])
+            cost = get_edge_cost(vertex, terminals[terminal_index])
             best_candidates[(vertex, remaining.tostring())] = (
                 cost, terminals[terminal_index])
             return cost
@@ -269,7 +275,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
 
             for vertex_to_try in vertices_to_try:
                 cost = split_vertex(vertex_to_try, remaining)
-                cost += get_edge_weight(vertex, vertex_to_try)
+                cost += get_edge_cost(vertex, vertex_to_try)
                 if best_cost < 0 or cost < best_cost:
                     best_cost = cost
                     candidate_vertex = vertex_to_try
@@ -280,7 +286,7 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                     continue
                 remaining[terminal_position] = False
                 cost = connect_vertex(terminal, remaining)
-                cost += get_edge_weight(vertex, terminal)
+                cost += get_edge_cost(vertex, terminal)
                 remaining[terminal_position] = True
 
                 if best_cost < 0 or cost < best_cost:
@@ -341,39 +347,43 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
                             # achieve the specified cost)
     best_splits = {} # maps (vertex, remaining) to (cost, terminals)
     num_terminals = len(terminals)
-    start = min(start, num_terminals - 1)
-    # set all terminals except 'start' to True (they're all remaining)
+    start_terminal_index = min(start_terminal_index, num_terminals - 1)
+    # set all terminals except start to True (they're all remaining)
     remaining = np.ones(num_terminals, dtype=np.bool)
-    remaining[start] = False
+    remaining[start_terminal_index] = False
 
     # Run dynamic programming algorithm
-    connect_vertex(terminals[start], remaining)
-    retrieve_solution_connect(terminals[start], remaining)
+    connect_vertex(terminals[start_terminal_index], remaining)
+    retrieve_solution_connect(terminals[start_terminal_index], remaining)
 
     # Now we need to reconstruct the solution *without* pretending that all
     # nodes are connected via an edge with the weight of their shortest path.
     steiner_nodes = set()
     steiner_tree = lil_matrix((n, n), dtype=graph.dtype)
-    for start, end in steiner_edges:
+    def get_real_edge_cost(start, end):
+        cost = graph[start, end]
+        if cost == 0:
+            cost = np.inf
+        return cost
+    for start_terminal_index, end in steiner_edges:
         real_path = reconstruct_predecessor_path(
-            shortest_path_predecessors, start, end)
+            shortest_path_predecessors, start_terminal_index, end)
         for vertex in real_path:
             if vertex not in terminal_positions:
                 steiner_nodes.add(vertex)
         for real_start, real_end in pairwise(real_path):
             # Check whether we have a forward path in the original graph.
-            edge_weight = graph[real_start, real_end]
-            reverse_edge_weight = graph[real_end, real_start]
+            edge_cost = get_real_edge_cost(real_start, real_end)
+            reverse_edge_cost = get_real_edge_cost(real_end, real_start)
             # If so, and that edge is in fact the smaller of the two, just
             # include it in the output path.
-            if edge_weight != 0 and (reverse_edge_weight == 0 or
-                                     edge_weight < reverse_edge_weight):
-                steiner_tree[real_start, real_end] = edge_weight
+            if edge_cost < reverse_edge_cost:
+                steiner_tree[real_start, real_end] = edge_cost
             # Otherwise, the predecessors graph must have been generated in
             # an undirected way, and the reverse edge is either the only edge
             # or the smaller of the two. Include the reverse edge instead.
             else:
-                steiner_tree[real_end, real_start] = reverse_edge_weight
+                steiner_tree[real_end, real_start] = reverse_edge_cost
 
     steiner_tree = steiner_tree.tocsr()
     return list(steiner_nodes), steiner_tree

@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 import numpy as np
 from scipy.sparse import lil_matrix
-from scipy.sparse.csgraph import shortest_path
 import unittest
 
 from util.scipy import dreyfus_wagner, longest_path_in_tree, \
@@ -37,10 +36,8 @@ class ScipyTestCase(unittest.TestCase):
 
 class DreyfusWagnerTestCase(ScipyTestCase):
     def _test_graph(self, terminals, correct_nodes, correct_graph):
-        path_costs, path_predecessors = shortest_path(
-            self.graph, return_predecessors=True, directed=False)
         steiner_nodes, steiner_graph = dreyfus_wagner(
-            self.graph, terminals, path_costs, path_predecessors)
+            self.graph, terminals, directed=False)
         self.assertEqual(set(steiner_nodes), set(correct_nodes))
         self.assertArraysEqual(steiner_graph.toarray(),
                                correct_graph.toarray())
@@ -51,14 +48,9 @@ class SmallGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
         # Network topology: One path goes 0 -> 4, one goes 0 -> 1 -> 4,
         # and one goes 0 -> 2 -> 3 -> 4.
         graph = lil_matrix((5,5), dtype='bool')
-        graph[0, 4] = True
-        graph[0, 1] = True
-        graph[1, 4] = True
-        graph[0, 2] = True
-        graph[2, 3] = True
-        graph[3, 4] = True
+        for index in [(0, 4), (0, 1), (1, 4), (0, 2), (2, 3), (3, 4)]:
+            graph[index] = True
         self.graph = graph
-
 
     def test_finds_trivial_path(self):
         correct_graph = lil_matrix((5,5), dtype='bool')
@@ -87,43 +79,33 @@ class LargerGraphDreyfusWagnerTreeTest(DreyfusWagnerTestCase):
         #           5 ----
 
         graph = lil_matrix((7,7), dtype='bool')
-        graph[0, 1] = True
-        graph[1, 2] = True
-        graph[2, 3] = True
-        graph[3, 4] = True
-        graph[2, 6] = True
-        graph[2, 5] = True
-        graph[5, 6] = True
+        for index in [(0, 1), (1, 2), (2, 3), (3, 4), (2, 6), (2, 5), (5, 6)]:
+            graph[index] = True
         self.graph = graph
 
     def test_finds_6_and_4_path_regardless_of_order(self):
         correct_graph = lil_matrix((7,7), dtype='bool')
-        correct_graph[2, 6] = True
-        correct_graph[2, 3] = True
-        correct_graph[3, 4] = True
+        for index in [(2, 6), (2, 3), (3, 4)]:
+            correct_graph[index] = True
         self._test_graph([6, 4], [2, 3], correct_graph)
         self._test_graph([4, 6], [2, 3], correct_graph)
 
     def test_finds_0_6_and_4_tree(self):
         correct_graph = lil_matrix((7,7), dtype='bool')
-        correct_graph[0, 1] = True
-        correct_graph[1, 2] = True
-        correct_graph[2, 6] = True
-        correct_graph[2, 3] = True
-        correct_graph[3, 4] = True
+        for index in [(0, 1), (1, 2), (2, 6), (2, 3), (3, 4)]:
+            correct_graph[index] = True
         self._test_graph([0, 4, 6], [1, 2, 3], correct_graph)
 
     def test_handles_reverse_weighted_edges(self):
         self.graph = lil_matrix(self.graph, dtype='int')
-        # Add reverse edge from 6 -> 2 with high weight
+        # Add reverse edge from 6 -> 2 with high cost
         self.graph[6, 2] = 2
         correct_graph = lil_matrix((7,7), dtype='int')
-        correct_graph[2, 6] = 1
-        correct_graph[2, 3] = 1
-        correct_graph[3, 4] = 1
+        for index in [(2, 6), (2, 3), (3, 4)]:
+            correct_graph[index] = 1
         self._test_graph([6, 4], [2, 3], correct_graph)
 
-        # Now bump up the weight on the original edge. That should make the
+        # Now bump up the cost on the original edge. That should make the
         # algorithm prefer the reverse edge.
         self.graph[2, 6] = 3
         correct_graph[2, 6] = 0
@@ -147,6 +129,23 @@ class DreyfusWagnerRegressionsTestCase(DreyfusWagnerTestCase):
         graph = lil_matrix((4, 4), dtype='float')
         self.assertRaises(UnconnectedNodesError, dreyfus_wagner, graph,
                           [0, 1, 2])
+
+    def test_consistent_answers_with_cycle(self):
+        # Graph topology: 1 ---> 0
+        #                 ^
+        #                 |--> 2
+        graph = lil_matrix((3, 3), dtype='float')
+        for index in [(1, 0), (1, 2)]:
+            graph[index] = 1.0
+        graph[2, 1] = 1.01
+        self.graph = graph
+
+        correct_graph = lil_matrix((3, 3), dtype='float')
+        correct_graph[1, 0] = 1
+        correct_graph[1, 2] = 1
+
+        self._test_graph([2, 0], [1], correct_graph)
+        self._test_graph([0, 2], [1], correct_graph)
 
 
 class LongestPathTestCase(ScipyTestCase):
