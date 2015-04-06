@@ -207,7 +207,7 @@ class TRegexConnectiveModel(Model):
                 pos_pattern = '[<2 /^VB.*/ | < (__ <1 cop)]'
             else:
                 pos_pattern = ('<2 /^%s.*/' % token.get_gen_pos())
-    
+
             return '/.*_[0-9+]/=%s %s' % (node_name, pos_pattern)
             '''
 
@@ -261,7 +261,7 @@ class TRegexConnectiveModel(Model):
                                effect_node):
         tree = sentence.constituency_tree # for brevity
         node = subtree_at_index(tree, node_index)
-        
+
         try:
             connective_index = connective_nodes.index(node)
             assert (isinstance(node[0][0], str)
@@ -299,13 +299,13 @@ class TRegexConnectiveModel(Model):
         Both dependency-based and constituency-based pattern generation share
         the same algorithmic structure once the Steiner graph has been found.
         The only difference is how patterns are generated for each node/edge.
-        
+
         If we're in dependency mode:
          - `cause` and `effect` are the Tokens representing the argument heads.
          - `connective_nodes` is a list of token indices.
         If we're in constituency mode:
          - `cause` and `effect` are constituency nodes spanning the argument
-           annotations.  
+           annotations.
          - `connective_nodes` is a list of constituency tree nodes.
         '''
 
@@ -382,7 +382,7 @@ class TRegexConnectiveModel(Model):
         connective_indices = [token.index for token in connective_tokens]
         cause_head = sentence.get_head(cause_tokens)
         effect_head = sentence.get_head(effect_tokens)
-        required_token_indices = list(set(# Eliminate potential duplicates
+        required_token_indices = list(set( # Eliminate potential duplicates
             [cause_head.index, effect_head.index] + connective_indices))
 
         # Once the sentence has been preprocessed, it is possible some nodes
@@ -394,7 +394,7 @@ class TRegexConnectiveModel(Model):
         #       matches.
         required_token_indices_to_keep = []
         for required_index in required_token_indices:
-            if (sentence.edge_graph[:, required_index].nnz != 0 
+            if (sentence.edge_graph[:, required_index].nnz != 0
                 or sentence.edge_graph[required_index, :].nnz != 0):
                 required_token_indices_to_keep.append(required_index)
             else:

@@ -27,7 +27,7 @@ class ClassificationMetricsTest(unittest.TestCase):
         self.metrics.fn = 5
         self.metrics.fp = 0
         self.assertTrue(isnan(self.metrics.precision))
-        
+
 class ConfusionMatrixTest(unittest.TestCase):
     def setUp(self):
         # Example from:

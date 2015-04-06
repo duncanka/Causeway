@@ -85,7 +85,7 @@ class Pipeline(object):
 
             # Copy testing data so we don't overwrite original instances.
             fold_results = self.evaluate(deepcopy(testing))
-            
+
             if FLAGS.cv_print_fold_results:
                 print "Fold", i + 1, "results:"
 
@@ -96,9 +96,9 @@ class Pipeline(object):
                     print_indented(1, 'Stage', stage.name, 'results:')
                     self.print_stage_results(2, current_stage_result)
 
-            if (FLAGS.cv_debug_stop_after is not None 
+            if (FLAGS.cv_debug_stop_after is not None
                 and i + 1 >= FLAGS.cv_debug_stop_after):
-                break 
+                break
 
         if stage_aggregators:
             results = [aggregator(stage_results)

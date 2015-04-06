@@ -204,11 +204,11 @@ def dreyfus_wagner(graph, terminals, shortest_path_costs=None,
     using the shortest path cost between two nodes as its edge cost. Of course,
     this means we need to do some extra work at the end to reconstruct the
     solution in the original graph.
-    
+
     If `shortest_path_costs` and `shortest_path_predecessors` are provided,
     `directed` is ignored, as it is only used for shortest-path computation.
     The edge weights in `graph` must match those used to generate these two
-    variables, or the behavior may be incorrect. 
+    variables, or the behavior may be incorrect.
     '''
     def get_edge_cost(w, v):
         return shortest_path_costs[w, v]

@@ -91,7 +91,7 @@ class ClassificationMetrics(object):
                     sum(values) / safe_divisor(float(len(values))))
         avg._finalized = True
         return avg
-    
+
     ''' We need a bunch of extra functions to support property creation. '''
 
     @staticmethod
@@ -225,5 +225,4 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         p_macro = np.average(p_macro_fractions)
         r_macro_fractions = tp / np.sum([tp, fn], axis=0, dtype=float)
         r_macro = np.average(r_macro_fractions)
-        print p_macro, r_macro
         return f1(p_macro, r_macro)

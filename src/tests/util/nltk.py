@@ -13,7 +13,7 @@ class GraphConversionTest(ScipyTestCase):
         for start, end in correct_index_pairs:
             correct_graph[start, end] = True
         self.assertArraysEqual(correct_graph, graph.toarray())
-    
+
     def testSmallTree(self):
         tree = ImmutableParentedTree.fromstring(
             "(ROOT (S (NP (PRP I)) (VP (VB like) (NP (NN fish)))))")
