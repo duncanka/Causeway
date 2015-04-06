@@ -12,6 +12,7 @@ from scipy.sparse import lil_matrix, csr_matrix, csgraph
 from util import Enum, merge_dicts, listify
 from util.streams import *
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
+from util.scipy import bfs_shortest_path_costs
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
@@ -152,30 +153,30 @@ class ParsedSentence(object):
     def get_depth(self, token):
         return self.__depths[token.index]
 
-    def get_head(self, tokens):
-        def token_is_preferred_to(old_token, new_token):
-            # If the depths are equal, prefer verbs/copulas over nouns, and
-            # nouns over others. This helps to get the correct heads for
-            # fragmented arguments, such as arguments that consist of an xcomp
-            # and its subject, as well as a few other edge cases.
-            if self.is_clause_head(new_token):
-                return False
-            elif self.is_clause_head(old_token):
-                return True
-            elif new_token.pos in Token.NOUN_TAGS:
-                return False
-            elif old_token.pos in Token.NOUN_TAGS:
-                return True
-            else:
-                return False
+    def _token_is_preferred_for_head_to(self, old_token, new_token):
+        # If the depths are equal, prefer verbs/copulas over nouns, and
+        # nouns over others. This helps to get the correct heads for
+        # fragmented arguments, such as arguments that consist of an xcomp
+        # and its subject, as well as a few other edge cases.
+        if self.is_clause_head(new_token):
+            return False
+        elif self.is_clause_head(old_token):
+            return True
+        elif new_token.pos in Token.NOUN_TAGS:
+            return False
+        elif old_token.pos in Token.NOUN_TAGS:
+            return True
+        else:
+            return False
 
+    def get_head(self, tokens):
         min_depth = np.inf
         head = None
         # equal_replacement = None
         for token in tokens:
             depth = self.get_depth(token)
-            if depth < min_depth or (
-                depth == min_depth and token_is_preferred_to(token, head)):
+            if depth < min_depth or (depth == min_depth and
+                self._token_is_preferred_for_head_to(token, head)):
                 head = token
                 min_depth = depth
                 '''
@@ -222,11 +223,11 @@ class ParsedSentence(object):
 
     def get_children(self, token, edge_type=None):
         '''
-        If edge_type is given, returns a list of children of token related by an
-        edge with label edge_type. Otherwise, returns a list of
+        If `edge_type` is given, returns a list of children of token related by
+        an edge with label edge_type. Otherwise, returns a list of
         (edge_label, child_token) tuples.
 
-        edge_type may be a single type or a list of types.
+        `edge_type` may be a single type or a list of types.
         '''
         # Grab the sparse column of the edge matrix with the edges of this
         # token. Iterate over the edge end indices therein.
@@ -331,7 +332,7 @@ class ParsedSentence(object):
 
         except StopIteration:
             raise ValueError("Annotation %s couldn't be matched against tokens!"
-                             % annotation.offsets)
+                         " Ignoring..." % annotation.offsets)
 
     def dep_to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
@@ -593,10 +594,7 @@ class ParsedSentence(object):
         # Convert to CSR for shortest path (which would do it anyway) and to
         # make self.get_children() below work.
         self.edge_graph = self.edge_graph.tocsr()
-        # TODO: do this with breadth_first_order instead.
-        shortest_directed_distances = csgraph.shortest_path(self.edge_graph,
-                                                            unweighted=True)
-        self.__depths = shortest_directed_distances[0]
+        self.__depths = bfs_shortest_path_costs(self.edge_graph, 0)
 
         '''
         For the undirected shortest paths we save, we'll want to:
@@ -625,10 +623,6 @@ class ParsedSentence(object):
         # copy of the graph, since we don't actually want to pollute edge_graph
         # with the reverse arcs.
         pseudo_unweighted_graph = self.edge_graph.tolil()
-        # (Copy this LIL version for later, before we add in extra edges,
-        # because we'll want to add edges to edge_graph, and sparsity structure
-        # changes are expensive.)
-        self.edge_graph = pseudo_unweighted_graph.copy()
 
         nonzero = set([(i, j) for (i, j) in zip(
             *pseudo_unweighted_graph.nonzero())])
@@ -641,6 +635,10 @@ class ParsedSentence(object):
 
         # Add in edges that we didn't want to use for distances/shortest path,
         # ignoring all the changes made to undirected_graph.
+        # (Originally we were converting to LIL for efficiency, but it turned
+        # out to hurt performance more than it helped.)
+        # TODO: Should we convert if there were excluded edges?
+        # self.edge_graph = self.edge_graph.tolil()
         for start, end in graph_excluded_edges:
             self.edge_graph[start, end] = 1.0
         self.edge_graph = self.edge_graph.tocsr()

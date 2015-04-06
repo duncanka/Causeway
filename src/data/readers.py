@@ -339,9 +339,12 @@ class StandoffReader(Reader):
                 "Skipping text annotation with invalid causation type")
             instance = CausationInstance(containing_sentence)
             ids_to_instances[line_id] = instance
-            instance.connective = (
-                containing_sentence.find_tokens_for_annotation(annotation))
-            containing_sentence.add_causation_instance(instance)
+            try:
+                instance.connective = (
+                    containing_sentence.find_tokens_for_annotation(annotation))
+                containing_sentence.add_causation_instance(instance)
+            except ValueError as e: # No annotations found for token
+                logging.warn(e.message)
         elif annotation_type == 'Argument':
             unused_arg_ids.add(line_id)
 
@@ -425,8 +428,11 @@ class StandoffReader(Reader):
             # check that there's only one of each.
             for arg_type, arg_id in split_args[1:]:
                 annotation = ids_to_annotations[arg_id]
-                annotation_tokens = sentence.find_tokens_for_annotation(
-                    annotation)
+                try:
+                    annotation_tokens = sentence.find_tokens_for_annotation(
+                        annotation)
+                except ValueError as e:
+                    raise UserWarning(e.message)
                 if arg_type.startswith('Cause'):
                     instance.cause = annotation_tokens
                 elif arg_type.startswith('Effect'):

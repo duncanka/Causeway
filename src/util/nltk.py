@@ -12,7 +12,7 @@ def deepcopy_immutable_tree(self, memo):
 setattr(ImmutableTree, '__deepcopy__', deepcopy_immutable_tree)
 
 def is_parent_of_leaf(tree):
-    return isinstance(tree[0], str) or isinstance(tree[0], unicode)
+    return tree and (isinstance(tree[0], str) or isinstance(tree[0], unicode))
 
 def nltk_tree_to_graph(root):
     '''
@@ -150,7 +150,7 @@ def add_collins_NP(tree, head_map):
     after parsing. The following rules are then used to recover the NP head:
     '''
 
-    # TODO:todo handle NML properly
+    # TODO: handle NML properly
 
     last_child_head = get_head(head_map, tree[-1])
     if last_child_head.label() == 'POS':
@@ -199,16 +199,21 @@ def collins_find_heads(tree, head_map=None):
             add_collins_NP(tree, head_map)
         else:
             # TODO: Consider alternative error announcement means
-            if tree.label() not in ['ROOT', 'TOP', 'S1', '']:
-                logging.warn("Unknown label: %s\n\tin tree: %s"
-                             % (tree.label(), tree.root()))
-            add_head(head_map, tree, get_head(head_map, tree[-1]))
+            # if tree.label() not in ['ROOT', 'TOP', 'S1', '']:
+            #    logging.warn("Unknown label: %s" % tree.label())
+            if len(tree) == 0:
+                # Empty nodes are their own heads.
+                # TODO: Are these problematic??
+                add_head(head_map, tree, tree)
+                return head_map
+            else:
+                add_head(head_map, tree, get_head(head_map, tree[-1]))
         return head_map
 
     # Look through and take the first/last occurrence that matches
     info = collins_mapping_table[tree.label()]
     for label in info[1]:
-        for i in xrange(len(tree)):
+        for i in range(len(tree)):
             if info[0] == 'right':
                 i = len(tree) - i - 1
             subtree = tree[i]

@@ -6,6 +6,22 @@ from scipy.sparse.csgraph import shortest_path, breadth_first_order
 
 from util import pairwise
 
+def _find_depth(i, predecessors, depths):
+    if depths[i] == np.inf:
+        pred = predecessors[i]
+        if pred != -9999:
+            depths[i] = _find_depth(pred, predecessors, depths) + 1
+        else:
+            depths[i] = np.inf
+    return depths[i]
+
+def bfs_shortest_path_costs(graph, start):
+    predecessors = breadth_first_order(graph, start, True, True)[1]
+    depths = [0] + [np.inf] * (len(predecessors) - 1)
+    for i in range(len(predecessors)):
+        _find_depth(i, predecessors, depths)
+    return depths
+
 # See https://github.com/numpy/numpy/blob/master/numpy/lib/arraysetops.py#L96.
 def unique(mat, return_index=False, return_inverse=False, return_counts=False):
     """

@@ -43,14 +43,14 @@ class CharacterTrackingStreamWrapper(io.TextIOWrapper):
 
     @classmethod
     def __add_overriden_read__(cls, method_name):
+        # This should really be using super(), but that doesn't seem to work
+        # well with getattr unless we do it in read_fn, where we have access to
+        # self. But then it's slow.
+        super_method = getattr(io.TextIOWrapper, method_name)
         def read_fn(self, *args, **kwargs):
             # print "Executing", method_name
-            super_method = getattr(super(cls, self), method_name)
-            data = super_method(*args, **kwargs)
-            if isinstance(data, list):
-                self.character_position += sum(len(item) for item in data)
-            else:
-                self.character_position += len(data)
+            data = super_method(self, *args, **kwargs)
+            self.character_position += len(data)
             return data
         new_method = MethodType(read_fn, None, cls)
         setattr(cls, method_name, new_method)
@@ -75,7 +75,8 @@ class CharacterTrackingStreamWrapper(io.TextIOWrapper):
                                      super(CharacterTrackingStreamWrapper,
                                            self).__repr__())
 
-for name in ['read', 'readline']: # readlines() and next() just call these two
+# readlines() and next() just call these two.
+for name in ['read', 'readline']:
     CharacterTrackingStreamWrapper.__add_overriden_read__(name)
 
 for name in ['write', 'writeline', 'writelines', '__reduce__',
@@ -118,18 +119,20 @@ def peek_and_revert_unless(stream, condition=lambda char: True):
         stream.seek(position)
     return next_char, test_result
 
-def read_stream_until(stream, delimiter, case_insensitive=False,
-                      accumulate=True):
+def read_stream_until(stream, delimiter, case_insensitive=False):
     ''' NOTE: Does not work for interactive streams. '''
-    accumulator = (None, '')[accumulate]
+    accumulator = ''
 
     if not delimiter:
         return (accumulator, True)
 
     found_delimiter_until = 0  # index *after* last delim character found
-    for next_char in iter(lambda: stream.read(1), ''):
-        if accumulate:
-            accumulator += next_char
+    while True:
+        next_char = stream.read(1)
+        if next_char == '': # we've hit EOF
+            break
+
+        accumulator += next_char
         # found_delimiter_until < len(delimiter), so what follows is safe.
         if next_char == delimiter[found_delimiter_until] or (
                 case_insensitive and next_char.lower() ==
