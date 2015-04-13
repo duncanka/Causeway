@@ -106,14 +106,14 @@ collins_mapping_table = {
 }
 
 def add_head(head_map, tree, head):
-    if hasattr(tree, '__hash__'):
+    if tree.__hash__:
         key = tree
     else:
         key = id(tree)
     head_map[key] = head
 
 def get_head(head_map, tree):
-    if hasattr(tree, '__hash__'):
+    if tree.__hash__:
         key = tree
     else:
         key = id(tree)

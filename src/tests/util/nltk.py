@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from nltk.tree import ImmutableParentedTree
+from nltk.tree import ImmutableParentedTree, ParentedTree
 from numpy import zeros
 import unittest
 
@@ -23,14 +23,22 @@ class GraphConversionTest(ScipyTestCase):
             graph, [(0, 1), (1, 2), (2, 3), (1, 4), (4, 5), (4, 6), (6, 7)])
 
 class HeadFindingTest(ScipyTestCase):
-    def testSmallTree(self):
-        tree = ImmutableParentedTree.fromstring(
-            "(ROOT (S (NP (PRP I)) (VP (VB like) (NP (NN fish))) (. .)))")
+    def _testSmallTree(self, tree):
         heads = collins_find_heads(tree)
         self.assertIs(get_head(heads, tree), tree[0][1][0])
         self.assertIs(get_head(heads, tree[0]), tree[0][1][0])
         self.assertIs(get_head(heads, tree[0][1]), tree[0][1][0])
         self.assertIs(get_head(heads, tree[0][1][1]), tree[0][1][1][0])
+
+    def testSmallImmutableTree(self):
+        tree = ImmutableParentedTree.fromstring(
+            "(ROOT (S (NP (PRP I)) (VP (VB like) (NP (NN fish))) (. .)))")
+        self._testSmallTree(tree)
+
+    def testSmallMutableTree(self):
+        tree = ParentedTree.fromstring(
+            "(ROOT (S (NP (PRP I)) (VP (VB like) (NP (NN fish))) (. .)))")
+        self._testSmallTree(tree)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
