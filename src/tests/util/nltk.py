@@ -39,6 +39,50 @@ class HeadFindingTest(ScipyTestCase):
         tree = ParentedTree.fromstring(
             "(ROOT (S (NP (PRP I)) (VP (VB like) (NP (NN fish))) (. .)))")
         self._testSmallTree(tree)
+        
+    def testLargerTree(self):
+        tree_str = (
+            '''
+            (ROOT
+              (S
+                (NP
+                  (NP (RB nearly) (DT every) (NN session))
+                  (PP (IN since) (NP (NNP November))))
+                (VP
+                  (VBZ have)
+                  (VP
+                    (VBN be)
+                    (VP
+                      (VBN adjourn)
+                      (SBAR
+                        (IN because)
+                        (S
+                          (NP (QP (RB as) (JJ few) (IN as) (CD 65))
+                              (NNS member))
+                          (VP
+                            (VBD make)
+                            (S (NP (PRP it)) (VP (TO to) (VP (VB work)))))))
+                      (, ,)
+                      (SBAR
+                        (RB even)
+                        (IN as)
+                        (S
+                          (NP
+                            (NP (PRP they))
+                            (CC and)
+                            (NP (DT the) (NNS absentee)))
+                          (VP
+                            (VBD earn)
+                            (NP (NNS salary) (CC and) (NNS benefit))
+                            (PP
+                              (IN worth)
+                              (NP (QP (RB about) ($ $) (CD 120,000))))))))))
+                (. .)))
+            ''')
+        tree = ImmutableParentedTree.fromstring(tree_str)
+        heads = collins_find_heads(tree)
+        self.assertIs(get_head(heads, tree[0][1]), tree[0][1][1][1][0])
+        self.assertIs(get_head(heads, tree[0]), tree[0][1][1][1][0])
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
