@@ -529,7 +529,7 @@ class TRegexConnectiveModel(Model):
                         self.queue.task_done()
                         continue
 
-                    possible_trees = [self.ptb_strings[i]
+                    possible_trees = [self.ptb_strings[i].encode('utf-8')
                                       for i in possible_sentence_indices]
                     possible_sentences = [self.sentences[i]
                                           for i in possible_sentence_indices]
@@ -547,7 +547,7 @@ class TRegexConnectiveModel(Model):
                         self._process_pattern(
                             pattern, possible_sentences, tree_file.name,
                             possible_true_causation_pairs)
-                        self.queue.task_done()
+                    self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
 

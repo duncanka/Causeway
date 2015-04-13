@@ -92,7 +92,8 @@ class DependencyPathError(ValueError):
 
 class ParsedSentence(object):
     # TODO: Split this class into general and causality-specific
-    UNESCAPE_MAP = {'\\*': '*', '...': '. . .', '-LRB-': '(', '-RRB-': ')'}
+    PTB_UNESCAPE_MAP = {'\\*': '*', '...': '. . .', '-LRB-': '(', '-RRB-': ')'}
+    # TODO: Should we be allowing the parser to PTB-escape more things?
     PERIOD_SUBSTITUTES = '.:'
     SUBJECT_EDGE_LABELS = ['nsubj', 'csubj', 'nsubjpass', 'csubjpass']
     INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass']
@@ -102,7 +103,7 @@ class ParsedSentence(object):
 
     @staticmethod
     def unescape_token_text(token_text):
-        return ParsedSentence.UNESCAPE_MAP.get(token_text, token_text)
+        return ParsedSentence.PTB_UNESCAPE_MAP.get(token_text, token_text)
 
     @staticmethod
     def get_annotation_text(annotation_tokens):
