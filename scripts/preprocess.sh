@@ -6,7 +6,7 @@ FILESDIR=$1
 if [ $# -ge 2 ]; then
     PARSERDIR=$2
 else
-    PARSERDIR=../../../stanford-parser-full-2014-10-31
+    PARSERDIR=../../../stanford-parser
 fi
 
 find $FILESDIR -type f -name "*.txt" -exec "${0%/*}/cleanup.sh" {} \;

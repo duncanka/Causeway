@@ -45,7 +45,7 @@ def get_parsed_sentence(sentence_text, parse_text=None):
         parse_path = write_parse_results(sentence_file.name, parse_text)
     else:
         txt_path, parse_path = run_parser(
-            sentence_text, '../../../stanford-parser-full-2014-10-31/', True)
+            sentence_text, '../../../stanford-parser/', True)
 
     from data.readers import SentenceReader
     r = SentenceReader()
