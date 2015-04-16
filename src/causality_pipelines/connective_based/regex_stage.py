@@ -43,6 +43,8 @@ class RegexConnectiveModel(Model):
         start_time = time.time()
 
         for sentence in sentences:
+            sentence.possible_causations = []
+
             lemmas = [token.lemma for token in sentence.tokens[1:]] # skip ROOT
             # Remember bounds of tokens so that we can recover the correct
             # token identities from regex matches.
