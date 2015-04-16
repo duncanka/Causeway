@@ -165,7 +165,7 @@ class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
     def get_consumed_attributes(self):
         return ['possible_causations']
 
-    def _extract_parts(self, sentence):
+    def _extract_parts(self, sentence, is_train):
         parts = [PhrasePairPart(sentence, pc.arg1, pc.arg2,
                  pc.matching_pattern, pc.correct)
                  for pc in sentence.possible_causations]

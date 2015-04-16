@@ -7,6 +7,14 @@ from util.metrics import ClassificationMetrics
 # Define a bunch of shared functions that are used by various stages in the
 # pipeline.
 
+class PossibleCausation(object):
+    def __init__(self, arg1, arg2, matching_pattern, label):
+        self.arg1 = arg1
+        self.arg2 = arg2
+        self.matching_pattern = matching_pattern
+        self.correct = label
+
+
 class PairwiseCausalityStage(Stage):
     def __init__(self, print_test_instances, *args, **kwargs):
         self.print_test_instances = print_test_instances

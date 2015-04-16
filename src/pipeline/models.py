@@ -62,9 +62,10 @@ class FeaturizedModel(Model):
         selected_features is a list of names of features to extract.
         """
         super(FeaturizedModel, self).__init__(part_type)
-        self.selected_features = selected_features
         self.feature_name_dictionary = FeaturizedModel.NameDictionary()
-        self.feature_extractor_map = feature_extractor_map
+        self.feature_extractor_map = {
+            feature_name: feature_extractor_map[feature_name]
+            for feature_name in selected_features}
         self.feature_training_data = None
 
     def train(self, parts):
@@ -77,9 +78,8 @@ class FeaturizedModel(Model):
         # discover the possible values of a feature.)
         logging.info("Registering features...")
 
-        for feature_name in self.selected_features:
+        for feature_name, extractor in self.feature_extractor_map.items():
             logging.debug('Registering feature "%s"' % feature_name)
-            extractor = self.feature_extractor_map[feature_name]
             self.feature_training_data = extractor.train(parts)
             subfeature_names = extractor.extract_subfeature_names(parts)
             for subfeature_name in subfeature_names:
@@ -142,8 +142,7 @@ class ClassifierModel(FeaturizedModel):
         labels = np.fromiter((part.label for part in relevant_parts),
                              int, len(relevant_parts))
 
-        for feature_name in self.selected_features:
-            extractor = self.feature_extractor_map[feature_name]
+        for feature_name, extractor in self.feature_extractor_map.items():
             feature_values_by_part = extractor.extract_all(parts)
             for part_index, part_subfeature_values in enumerate(
                 feature_values_by_part):

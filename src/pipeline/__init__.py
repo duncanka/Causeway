@@ -219,7 +219,7 @@ class Stage(object):
     def train(self, instances):
         all_parts = []
         for instance in instances:
-            all_parts.extend(self._extract_parts(instance))
+            all_parts.extend(self._extract_parts(instance, True))
         assert all_parts, "No parts extracted for training!"
         for model in self.models:
             model.train(all_parts)
@@ -230,7 +230,7 @@ class Stage(object):
         parts_by_model = {model.part_type:[] for model in self.models}
 
         for i in range(len(instances)):
-            parts = self._extract_parts(instances[i])
+            parts = self._extract_parts(instances[i], False)
             all_parts.extend(parts)
             instance_part_counts[i] = len(parts)
             for part in parts:
@@ -265,7 +265,7 @@ class Stage(object):
     def _evaluate(self, instances):
         raise NotImplementedError
 
-    def _extract_parts(self, instance):
+    def _extract_parts(self, instance, is_train):
         raise NotImplementedError
 
     def _decode_labeled_parts(self, instance, labeled_parts):

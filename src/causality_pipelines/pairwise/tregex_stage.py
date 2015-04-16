@@ -11,7 +11,8 @@ import time
 
 from data import ParsedSentence, Token
 from pipeline.models import Model
-from causality_pipelines.pairwise import PairwiseCausalityStage
+from causality_pipelines.pairwise import PairwiseCausalityStage, \
+    PossibleCausation
 from util import pairwise
 from util.metrics import ClassificationMetrics
 from util.nltk import subtree_at_index, index_of_subtree
@@ -38,14 +39,6 @@ try:
 
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
-
-
-class PossibleCausation(object):
-    def __init__(self, arg1, arg2, matching_pattern, correct):
-        self.arg1 = arg1
-        self.arg2 = arg2
-        self.matching_pattern = matching_pattern
-        self.correct = correct
 
 class TRegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
@@ -473,6 +466,7 @@ class TRegexConnectiveModel(Model):
         preprocessed_ptb_strings, true_causation_pairs_by_sentence = (
             self._preprocess_sentences(sentences))
 
+        logging.info('Extracting patterns...')
         if FLAGS.tregex_print_patterns:
             print 'Patterns:'
         for sentence, ptb_string in zip(sentences, preprocessed_ptb_strings):
@@ -498,6 +492,7 @@ class TRegexConnectiveModel(Model):
                                              in instance.connective]
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
+        logging.info('Done extracting patterns.')
 
         return preprocessed_ptb_strings, true_causation_pairs_by_sentence
 
@@ -529,7 +524,7 @@ class TRegexConnectiveModel(Model):
                         self.queue.task_done()
                         continue
 
-                    possible_trees = [self.ptb_strings[i].encode('utf-8')
+                    possible_trees = [self.ptb_strings[i]
                                       for i in possible_sentence_indices]
                     possible_sentences = [self.sentences[i]
                                           for i in possible_sentence_indices]
@@ -684,7 +679,7 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
         return (ClassificationMetrics.average([m1 for m1, _ in metrics_pairs]),
                 ClassificationMetrics.average([m2 for _, m2 in metrics_pairs]))
 
-    def _extract_parts(self, sentence):
+    def _extract_parts(self, sentence, is_train):
         return [sentence]
 
     def _begin_evaluation(self):

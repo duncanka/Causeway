@@ -3,11 +3,11 @@ import logging
 import re
 import time
 
+from causality_pipelines.connective_based import PossibleCausation
 from data import ParsedSentence
 from pipeline import ClassifierStage
 from pipeline.models import Model
 from util import Enum
-from util.metrics import ClassificationMetrics
 
 try:
     DEFINE_bool('regex_print_patterns', False,
@@ -20,15 +20,10 @@ except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class PossibleCausation(object):
-    def __init__(self, matching_pattern, connective_tokens, correct):
-        self.matching_pattern = matching_pattern
-        self.connective_tokens = connective_tokens
-        self.correct = correct
-
 class RegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
-        super(RegexConnectiveModel, self).__init__(*args, **kwargs)
+        super(RegexConnectiveModel, self).__init__(part_type=ParsedSentence,
+                                                   *args, **kwargs)
         self.regexes = []
 
     def train(self, sentences):
@@ -47,11 +42,7 @@ class RegexConnectiveModel(Model):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        true_connective_spans_by_sentence = (
-            self._preprocess_sentences(sentences))
-
-        for sentence, true_connectives in zip(
-            sentences, true_connective_spans_by_sentence):
+        for sentence in sentences:
             lemmas = [token.lemma for token in sentence.tokens[1:]] # skip ROOT
             # Remember bounds of tokens so that we can recover the correct
             # token identities from regex matches.
@@ -70,9 +61,13 @@ class RegexConnectiveModel(Model):
                                      for i in matching_group_indices]
                     connective_tokens = [sentence.tokens[i]
                                          for i in token_indices]
+
+                    true_causation_instance = None
+                    for causation_instance in sentence.causation_instances:
+                        if causation_instance.connective == connective_tokens:
+                            true_causation_instance = causation_instance
                     possible_causation = PossibleCausation(
-                        regex.pattern, connective_tokens,
-                        connective_tokens in true_connectives)
+                        regex.pattern, connective_tokens, true_causation_instance)
                     sentence.possible_causations.append(possible_causation)
 
         elapsed_seconds = time.time() - start_time
@@ -82,17 +77,6 @@ class RegexConnectiveModel(Model):
     #####################################
     # Sentence preprocessing
     #####################################
-
-    @staticmethod
-    def _preprocess_sentences(sentences):
-        true_connective_spans_by_sentence = []
-        for sentence in sentences:
-            sentence.possible_causations = []
-            connective_spans = [i.connective
-                                for i in sentence.causation_instances]
-            true_connective_spans_by_sentence.append(connective_spans)
-
-        return true_connective_spans_by_sentence
 
     @staticmethod
     def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
@@ -185,13 +169,13 @@ class RegexConnectiveStage(ClassifierStage):
     def __init__(self, name):
         super(RegexConnectiveStage, self).__init__(
             name=name,
-            models=[RegexConnectiveModel(part_type=ParsedSentence)])
+            models=[RegexConnectiveModel()])
         self.print_test_instances = FLAGS.regex_print_test_instances
 
     def get_produced_attributes(self):
         return ['possible_causations']
 
-    def _extract_parts(self, sentence):
+    def _extract_parts(self, sentence, is_train):
         return [sentence]
 
     def _begin_evaluation(self):
