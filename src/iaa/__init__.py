@@ -1,14 +1,15 @@
 from __future__ import print_function
 from collections import defaultdict
-from gflags import *
+from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DuplicateFlagError, \
+    FLAGS
 import logging
 import os
 import sys
 
-from data import *
-from util import *
+from data import CausationInstance, ParsedSentence
+from util import Enum, print_indented, truncated_string
 from util.diff import SequenceDiff
-from util.metrics import *
+from util.metrics import ClassificationMetrics, ConfusionMatrix
 
 try:
     DEFINE_list(
