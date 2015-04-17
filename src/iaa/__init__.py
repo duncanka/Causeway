@@ -1,8 +1,10 @@
 from __future__ import print_function
 from collections import defaultdict
-from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DuplicateFlagError, \
-    FLAGS
+from copy import copy
+from StringIO import StringIO
+from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DuplicateFlagError, FLAGS
 import logging
+import operator
 import os
 import sys
 
@@ -82,7 +84,8 @@ class CausalityMetrics(object):
     ArgTypes = Enum(['Cause', 'Effect'])
 
     def __init__(self, gold, predicted, allow_partial,
-                 save_differences=False, ids_considered=None):
+                 save_differences=False, ids_considered=None,
+                 compare_degrees=True, compare_types=True):
         if ids_considered is None:
             ids_considered = CausalityMetrics.IDsConsidered.Both
         self.allow_partial = allow_partial
@@ -99,10 +102,17 @@ class CausalityMetrics(object):
         # Compute attributes that take a little more work.
         self.connective_metrics, matches = self._match_connectives(
             gold, predicted)
-        self.degree_matrix = self._compute_agreement_matrix(
-            matches, CausationInstance.Degrees, 'degree', gold)
-        self.causation_type_matrix = self._compute_agreement_matrix(
-            matches, CausationInstance.CausationTypes, 'type', gold)
+        if compare_degrees:
+            self.degree_matrix = self._compute_agreement_matrix(
+                matches, CausationInstance.Degrees, 'degree', gold)
+        else:
+            self.degree_matrix = None
+
+        if compare_types:
+            self.causation_type_matrix = self._compute_agreement_matrix(
+                matches, CausationInstance.CausationTypes, 'type', gold)
+        else:
+            self.causation_type_matrix = None
         self.arg_metrics, self.arg_label_matrix = self._match_arguments(
             matches, gold)
 
@@ -267,7 +277,7 @@ class CausalityMetrics(object):
         return arg_metrics, arg_label_matrix
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
-           indent=0):
+           indent=0, file=sys.stdout):
         # Flags aren't available as defaults when the function is created, so
         # set the defaults here.
         if log_confusion is None:
@@ -278,61 +288,116 @@ class CausalityMetrics(object):
             log_differences = FLAGS.iaa_log_differences
 
         if log_differences:
-            print_indented(indent, 'Annotation differences:')
+            print_indented(indent, 'Annotation differences:', file=file)
             for sentence_num, instance in self.gold_only_instances:
                 self._log_unique_instance(instance, sentence_num, 1,
-                                          indent + 1)
+                                          indent + 1, file)
             for sentence_num, instance in self.predicted_only_instances:
                 self._log_unique_instance(instance, sentence_num, 2,
-                                           indent + 1)
+                                           indent + 1, file)
             self._log_property_differences(CausationInstance.CausationTypes,
-                                           indent + 1)
+                                           indent + 1, file)
             self._log_property_differences(CausationInstance.Degrees,
-                                           indent + 1)
-            self._log_property_differences(self.ArgTypes, indent + 1)
+                                           indent + 1, file)
+            self._log_property_differences(self.ArgTypes, indent + 1, file)
 
         # Ignore connective-related metrics if we have nothing interesting to
         # show there.
         printing_connective_metrics = (log_stats and self.connective_metrics)
         if printing_connective_metrics or log_confusion:
-            print_indented(indent, 'Connectives:')
+            print_indented(indent, 'Connectives:', file=file)
         if printing_connective_metrics:
-            print_indented(indent + 1, self.connective_metrics)
+            print_indented(indent + 1, self.connective_metrics, file=file)
         if log_stats or log_confusion:
-            self._log_property_metrics('Degrees', self.degree_matrix,
-                                       indent + 1, log_confusion, log_stats)
-            self._log_property_metrics(
-                'Causation types', self.causation_type_matrix, indent + 1,
-                log_confusion, log_stats)
+            if self.degree_matrix is not None:
+                self._log_property_metrics(
+                    'Degrees', self.degree_matrix, indent + 1, log_confusion,
+                    log_stats, file)
+            if self.causation_type_matrix is not None:
+                self._log_property_metrics(
+                    'Causation types', self.causation_type_matrix, indent + 1,
+                    log_confusion, log_stats, file)
 
         if log_stats:
-            print_indented(indent, 'Arguments:')
-            print_indented(indent + 1, self.arg_metrics)
+            print_indented(indent, 'Arguments:', file=file)
+            print_indented(indent + 1, self.arg_metrics, file=file)
 
         if log_stats or log_confusion:
             self._log_property_metrics('Argument labels', self.arg_label_matrix,
-                                       indent + 1, log_confusion, log_stats)
+                                       indent + 1, log_confusion, log_stats, file)
+            
+    def __repr__(self):
+        '''
+        This is a dumb hack, but it's easier than trying to rewrite all of pp to
+        operate on strings, and possibly faster too (since then we'd have to
+        keep copying strings over to concatenate them).
+        '''
+        string_buffer = StringIO()
+        self.pp(True, True, True, 0, string_buffer)
+        return string_buffer.getvalue()
+
+    @staticmethod
+    def aggregate(metrics_list):
+        '''
+        Aggregates IAA statistics. Classification metrics are averaged;
+        confusion matrices are summed.
+        '''
+        assert metrics_list, "Can't aggregate empty list of causality metrics!"
+        # Copying gets us a CausalityMetrics object to work with, without having
+        # to worry about what to pass to __init__.
+        aggregated = copy(metrics_list[0])
+        # For an aggregated, it won't make sense to list all the individual
+        # sets of instances/properties processed in the individual computations.
+        for attr_name in [
+            'ids_considered', 'gold_only_instances',
+            'predicted_only_instances', 'property_differences']:
+            setattr(aggregated, attr_name, [])
+        aggregated.save_differences = None
+
+        aggregated.connective_metrics = ClassificationMetrics.average(
+            [m.connective_metrics for m in metrics_list])
+        degrees = [m.degree_matrix for m in metrics_list]
+        if None not in degrees:
+            aggregated.degree_matrix = reduce(operator.add, degrees)
+        else:
+            aggregated.degree_matrix = None
+        causation_types = [m.causation_type_matrix for m in metrics_list]
+        if None not in causation_types:
+            aggregated.causation_type_matrix = reduce(operator.add,
+                                                      causation_types)
+        else:
+            aggregated.causation_type_matrix = None
+        aggregated.arg_metrics = ClassificationMetrics.average(
+            [m.arg_metrics for m in metrics_list])
+        aggregated.arg_label_matrix = reduce(
+            operator.add, [m.arg_label_matrix for m in metrics_list])
+
+        return aggregated
 
     def _log_property_metrics(self, name, matrix, indent, log_confusion,
-                              log_stats):
-        print_indented(indent, name, ':', sep='')
+                              log_stats, file):
+        print_indented(indent, name, ':', sep='', file=file)
         if log_confusion:
-            print_indented(indent + 1, matrix.pp(metrics=log_stats))
+            print_indented(indent + 1, matrix.pretty_format(metrics=log_stats),
+                           file=file)
         else: # we must be logging just stats
-            print_indented(indent + 1, matrix.pp_metrics())
+            print_indented(indent + 1, matrix.pretty_format_metrics(),
+                           file=file)
 
 
     @staticmethod
-    def _log_unique_instance(instance, sentence_num, annotator_num, indent):
+    def _log_unique_instance(instance, sentence_num, annotator_num, indent,
+                             file):
         connective_text = ParsedSentence.get_annotation_text(
             instance.connective)
         filename = os.path.split(instance.source_sentence.source_file_path)[-1]
         print_indented(
             indent, "Annotation", annotator_num,
             'only: "%s"' % connective_text.encode('utf-8'), '(%s:%d: "%s")'
-            % (filename, sentence_num, get_truncated_sentence(instance)))
+            % (filename, sentence_num, get_truncated_sentence(instance)),
+            file=file)
 
-    def _log_property_differences(self, property_enum, indent):
+    def _log_property_differences(self, property_enum, indent, file):
         if property_enum is self.ArgTypes:
             property_name = 'Argument label'
             value_extractor = None
@@ -359,4 +424,5 @@ class CausalityMetrics(object):
                 '" differ',
                 (': %s vs. %s' % values if value_extractor else ''),
                 ' (', filename, ':', sentence_num, ': "',
-                get_truncated_sentence(instance_1), '")', sep='')
+                get_truncated_sentence(instance_1), '")',
+                sep='', file=file)
