@@ -3,8 +3,10 @@
 import gflags
 import logging
 import numpy as np
+import pycrfsuite
 from scipy.sparse import lil_matrix, vstack
 import time
+from types import MethodType
 
 from util.metrics import diff_binary_vectors
 
@@ -67,6 +69,8 @@ class FeaturizedModel(Model):
             feature_name: feature_extractor_map[feature_name]
             for feature_name in selected_features}
         self.feature_training_data = None
+        # TODO: Make feature_extractor_map simply a feature extractor list (we
+        # never do any lookups anyway)
 
     def train(self, parts):
         # Reset state in case we've been previously trained.
@@ -237,3 +241,73 @@ class ClassBalancingModelWrapper(object):
 
     def predict(self, data):
         return self.classifier.predict(data)
+
+class CRFModel(Model):
+    class ObservationWithContext(object):
+        '''
+        In a CRF model, the feature extractors will have to operate not just on
+        a single part (which may have many observations), but on each
+        observation, *with* the context of the surrounding observations. This
+        class encapsulates the data a CRF feature extractor may need.
+        '''
+        def __init__(self, observation, sequence, index, part):
+            self.observation = observation
+            self.sequence = sequence
+            self.index = index
+            self.part = part
+
+    def __init__(self, part_type, model_file_path, feature_extractor_map,
+                 selected_features, training_algorithm, training_params):
+        super(CRFModel, self).__init__(part_type)
+        self.model_file_path = model_file_path
+        self.feature_extractor_map = {
+            feature_name: feature_extractor_map[feature_name]
+            for feature_name in selected_features}
+        self.training_algorithm = training_algorithm
+        self.training_params = training_params
+
+    def _sequences_for_part(self, part):
+        ''' Returns the observation and label sequences for the part. '''
+        raise NotImplementedError
+
+    def _label_part(self, part, crf_labels):
+        '''
+        Applies the labels to the part as appropriate. Must be overridden.
+        (In many cases with CRFs, this will involve interpreting the labels
+        as spans.)
+        '''
+        raise NotImplementedError
+
+    def __featurize_observation_sequence(self, observation_sequence, part):
+        observation_features = []
+        for i, observation in enumerate(observation_sequence):
+            feature_values = {}
+            for feature_extractor in self.feature_extractor_map.values():
+                extractor_arg = self.ObservationWithContext(
+                    observation, observation_sequence, i, part)
+                feature_values.update(feature_extractor.extract(extractor_arg))
+            observation_features.append(feature_values)
+        return observation_features
+
+    def train(self, parts):
+        trainer = pycrfsuite.Trainer(verbose=True)
+        for part in parts:
+            observation_sequence, labels = self._sequences_for_part(part)
+            observation_features = self.__featurize_observation_sequence(
+                observation_sequence, part)
+            trainer.append(observation_features, labels)
+        trainer.select(self.training_algorithm)
+        trainer.set_params(self.training_params)
+        trainer.on_iteration = MethodType(lambda self, log, info: None, trainer)
+        logging.info("Training CRF model...")
+        trainer.train(self.model_file_path)
+        logging.info('CRF model saved to %s' % self.model_file_path)
+
+    def test(self, parts):
+        tagger = pycrfsuite.Tagger()
+        tagger.open(self.model_file_path)
+        for part in parts:
+            observation_sequence, _ = self._sequences_for_part(part)
+            observation_features = self.__featurize_observation_sequence(
+                observation_sequence, part)
+            self._label_part(part, tagger.tag(observation_features))
