@@ -3,7 +3,6 @@ from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, FLAGS, \
     DuplicateFlagError
 import logging
 
-from data import CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage
 from pipeline.models import CRFModel
@@ -104,6 +103,19 @@ class ArgumentLabelerStage(Stage):
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
+    PERMISSIVE_KEY = 'Allowing partial matches'
+    STRICT_KEY = 'Not allowing partial matches'
+    @staticmethod
+    def aggregate_eval_results(results_list):
+        permissive = CausalityMetrics.aggregate(
+            [result_dict[ArgumentLabelerStage.PERMISSIVE_KEY]
+             for result_dict in results_list])
+        strict = CausalityMetrics.aggregate(
+            [result_dict[ArgumentLabelerStage.STRICT_KEY]
+             for result_dict in results_list])
+        return {ArgumentLabelerStage.PERMISSIVE_KEY: permissive,
+                ArgumentLabelerStage.STRICT_KEY: strict}
+
     def _begin_evaluation(self):
         self._predicted_sentences = []
 
@@ -137,4 +149,5 @@ class ArgumentLabelerStage(Stage):
 
         del self._gold_sentences
         del self._predicted_sentences
-        return (with_partial, without_partial)
+        return {self.PERMISSIVE_KEY: with_partial,
+                self.STRICT_KEY: without_partial}

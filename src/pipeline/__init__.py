@@ -51,19 +51,13 @@ class Pipeline(object):
         self.reader.close()
         return instances
 
-    def cross_validate(self, num_folds=None, stage_aggregators=None):
+    def cross_validate(self, num_folds=None):
         '''
-        Returns a list of results, organized by stage. If stage_aggregators is
-        provided, each list item is an aggregate result for the corresponding
-        stage. Otherwise, each list item is a list of the results achieved on
-        each fold.
-
-        stage_aggregators is a list of functions, each of which takes a list of
-        results for the corresponding pipeline stage (one result per fold) and
-        aggregates them into a single result for the stage.
+        Returns a list of results, organized by stage. Results are also saved in
+        self.eval_results. Results are aggregated across all folds using the
+        aggregator function provided by the stage (see
+        Stage.aggregate_eval_results).
         '''
-        if stage_aggregators:
-            assert len(stage_aggregators) == len(self.stages)
         if num_folds is None:
             num_folds = FLAGS.cv_folds
 
@@ -98,26 +92,25 @@ class Pipeline(object):
                 and i + 1 >= FLAGS.cv_debug_stop_after):
                 break
 
-        if stage_aggregators:
-            results = [aggregator(stage_results)
-                       for aggregator, stage_results
-                        in zip(stage_aggregators, results)]
+        results = [stage.aggregate_eval_results(stage_results)
+                   for stage, stage_results in zip(self.stages, results)]
         self.eval_results = results
         return results
 
     @staticmethod
-    def print_stage_results(indent_baseline, results, result_names=[]):
-        # TODO: Make result names something a stage can define for itself
-        if isinstance(results, list) or isinstance(results, tuple):
-            for i, r in enumerate(results):
-                try:
-                    result_name = result_names[i]
-                except IndexError:
-                    result_name = 'Evaluation result %d' % i
+    def print_stage_results(indent_baseline, results):
+        if isinstance(results, dict): # special case: treat as named sub-metrics
+            for result_name, result in results.items():
                 print_indented(indent_baseline, result_name, ':', sep='')
-                print_indented(indent_baseline + 1, str(r))
+                print_indented(indent_baseline + 1, str(result))
         else:
             print_indented(indent_baseline, results)
+
+    def print_eval_results(self, indent_baseline=0):
+        for stage, result in zip(self.stages, self.eval_results):
+            print_indented(indent_baseline, "Evaluation for stage ",
+                           stage.name, ':', sep='')
+            self.print_stage_results(indent_baseline + 1, result)
 
     def train(self, instances=None):
         if instances is None:
@@ -132,11 +125,13 @@ class Pipeline(object):
             print "Finished training stage", stage.name
 
     def evaluate(self, instances=FLAGS.test_batch_size):
+        '''
+        Evaluates a single batch of instances. In addition to being returned,
+        the resulting evaluation metrics are stored in self.eval_results.
+        '''
         self.eval_results = []
         self.test(instances)
-        results = self.eval_results
-        self.eval_results = None
-        return results
+        return self.eval_results
 
     def __test_instances(self, instances):
         for stage in self.stages:
@@ -271,6 +266,16 @@ class Stage(object):
     '''
     CONSUMED_ATTRIBUTES = []
 
+    @staticmethod
+    def aggregate_eval_results(results_list):
+        '''
+        Aggregates a list of evaluation results, e.g., from cross-validation.
+        Should generally do some kind of averaging. By default this just returns
+        the original list of results; if any kind of processing should be done,
+        this method must be overridden.
+        '''
+        return results_list
+
     def _evaluate(self, instances):
         raise NotImplementedError
 
@@ -284,6 +289,11 @@ class Stage(object):
         pass
 
     def _complete_evaluation(self):
+        '''
+        Should return the evaluation results for this stage. If a dict is
+        returned, it will be treated as a collection of named result metrics,
+        where each key indicates the name of the corresponding metric.
+        '''
         pass
 
     def _prepare_for_evaluation(self, instances):
@@ -297,6 +307,10 @@ class ClassifierStage(Stage):
         self.tn = 0
         self.fp = 0
         self.fn = 0
+
+    @staticmethod
+    def aggregate_eval_results(results_list):
+        return ClassificationMetrics.average(results_list)
 
     def _begin_evaluation(self):
         self.tp = 0

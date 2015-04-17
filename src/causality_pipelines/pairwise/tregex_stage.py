@@ -673,10 +673,18 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
 
     PRODUCED_ATTRIBUTES = ['possible_causations']
 
+    ALL_INSTANCES_KEY = 'All instances'
+    PAIRWISE_KEY = 'Pairwise only'
     @staticmethod
-    def average_eval_pairs(metrics_pairs):
-        return (ClassificationMetrics.average([m1 for m1, _ in metrics_pairs]),
-                ClassificationMetrics.average([m2 for _, m2 in metrics_pairs]))
+    def aggregate_eval_results(results_list):
+        all_instances = ClassificationMetrics.average(
+            [metrics_dict[TRegexConnectiveStage.ALL_INSTANCES_KEY]
+             for metrics_dict in results_list])
+        pairwise_only = ClassificationMetrics.average(
+            [metrics_dict[TRegexConnectiveStage.PAIRWISE_KEY]
+             for metrics_dict in results_list])
+        return {TRegexConnectiveStage.ALL_INSTANCES_KEY: all_instances,
+                TRegexConnectiveStage.PAIRWISE_KEY: pairwise_only}
 
     def _extract_parts(self, sentence, is_train):
         return [sentence]
@@ -690,7 +698,8 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
             self)
         pairwise_only_metrics = self.pairwise_only_metrics
         del self.pairwise_only_metrics
-        return (all_instances_metrics, pairwise_only_metrics)
+        return {TRegexConnectiveStage.ALL_INSTANCES_KEY: all_instances_metrics,
+                TRegexConnectiveStage.PAIRWISE_KEY: pairwise_only_metrics}
 
     def _evaluate(self, sentences):
         for sentence in sentences:

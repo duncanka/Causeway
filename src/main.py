@@ -6,7 +6,6 @@ import logging
 import numpy as np
 import os
 import sys
-from iaa import CausalityMetrics
 from causality_pipelines.connective_based.crf_stage import ArgumentLabelerStage
 FLAGS = gflags.FLAGS
 
@@ -16,7 +15,6 @@ from pipeline.models import ClassBalancingModelWrapper
 from causality_pipelines.pairwise.candidate_classifier import CandidateClassifierStage
 from causality_pipelines.connective_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.pairwise.tregex_stage import TRegexConnectiveStage
-from util.metrics import ClassificationMetrics
 
 try:
     gflags.DEFINE_enum('pw_classifier_model', 'tree',
@@ -82,46 +80,25 @@ if __name__ == '__main__':
         candidate_classifier_stage = CandidateClassifierStage(
             candidate_classifier, 'Candidate classifier')
         stages = [connective_stage, candidate_classifier_stage]
-        results_names = ['All instances', 'Pairwise instances only']
-        stage_aggregators = [TRegexConnectiveStage.average_eval_pairs,
-                             ClassificationMetrics.average]
-        # TODO: replace passing in aggregators with class-level variables
-        # pointing to aggregator functions.
     else: # regex
         stages = [RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler')]
-        results_names = ['Allowing partial matches',
-                         'Not allowing partial matches']
-        stage_aggregators = [ClassificationMetrics.average,
-                             lambda tups: (CausalityMetrics.aggregate(
-                                               [tup[0] for tup in tups]),
-                                           CausalityMetrics.aggregate(
-                                               [tup[1] for tup in tups]))]
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()))
 
-    def print_eval(eval_results):
-        stage_names = [p.name for p in causality_pipeline.stages]
-        for stage_name, result in zip(stage_names, eval_results):
-            print "Evaluation for stage %s:" % stage_name
-            # The labels will be used for eval results of the connective stage.
-            causality_pipeline.print_stage_results(
-                1, result, results_names)
-
     if FLAGS.eval_with_cv:
         logging.info("Evaluating with %d-fold cross-validation"
                      % FLAGS.cv_folds)
-        eval_results = causality_pipeline.cross_validate(
-            stage_aggregators=stage_aggregators)
-        print_eval(eval_results)
+        causality_pipeline.cross_validate()
+        causality_pipeline.print_eval_results()
     else:
         if FLAGS.train_paths:
             causality_pipeline.train()
 
         if FLAGS.evaluate:
             eval_results = causality_pipeline.evaluate()
-            print_eval(eval_results)
+            causality_pipeline.print_eval_results()
         elif FLAGS.test_paths:
             causality_pipeline.test()
 

@@ -2,11 +2,11 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 
 import logging
 
+from causality_pipelines.pairwise import PairwiseCausalityStage
 from data import Token, CausationInstance
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
-from causality_pipelines.pairwise import PairwiseCausalityStage
 
 try:
     DEFINE_list(
