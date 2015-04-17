@@ -199,8 +199,10 @@ class ParsedSentence(object):
                          % tokens);
         return head
 
-    def add_causation_instance(self, instance):
+    def add_causation_instance(self, *args, **kwargs):
+        instance = CausationInstance(self, *args, **kwargs)
         self.causation_instances.append(instance)
+        return instance
 
     def count_words_between(self, token1, token2):
         ''' Counts words between tokens based purely on the token IDs,

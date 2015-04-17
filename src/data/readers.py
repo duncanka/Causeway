@@ -337,14 +337,14 @@ class StandoffReader(Reader):
             self.__raise_warning_if(
                 annotation_type not in CausationInstance.CausationTypes,
                 "Skipping text annotation with invalid causation type")
-            instance = CausationInstance(containing_sentence)
-            ids_to_instances[line_id] = instance
             try:
-                instance.connective = (
-                    containing_sentence.find_tokens_for_annotation(annotation))
-                containing_sentence.add_causation_instance(instance)
-            except ValueError as e: # No annotations found for token
-                logging.warn(e.message)
+                connective = containing_sentence.find_tokens_for_annotation(
+                    annotation)
+                instance = containing_sentence.add_causation_instance(
+                    connective=connective)
+                ids_to_instances[line_id] = instance
+            except ValueError as e: # No tokens found for annotation
+                raise UserWarning(e.message)
         elif annotation_type == 'Argument':
             unused_arg_ids.add(line_id)
 
