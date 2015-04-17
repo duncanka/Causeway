@@ -287,7 +287,9 @@ class CausalityMetrics(object):
         if log_differences is None:
             log_differences = FLAGS.iaa_log_differences
 
-        if log_differences:
+        if log_differences and (
+            self.gold_only_instances or self.predicted_only_instances
+            or self.property_differences):
             print_indented(indent, 'Annotation differences:', file=file)
             for sentence_num, instance in self.gold_only_instances:
                 self._log_unique_instance(instance, sentence_num, 1,
