@@ -671,8 +671,7 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
             print_test_instances=FLAGS.tregex_print_test_instances, name=name,
             models=[TRegexConnectiveModel(part_type=ParsedSentence)])
 
-    def get_produced_attributes(self):
-        return ['possible_causations']
+    PRODUCED_ATTRIBUTES = ['possible_causations']
 
     @staticmethod
     def average_eval_pairs(metrics_pairs):

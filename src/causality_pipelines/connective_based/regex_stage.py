@@ -174,8 +174,7 @@ class RegexConnectiveStage(ClassifierStage):
             models=[RegexConnectiveModel()])
         self.print_test_instances = FLAGS.regex_print_test_instances
 
-    def get_produced_attributes(self):
-        return ['possible_causations']
+    PRODUCED_ATTRIBUTES = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
         return [sentence]

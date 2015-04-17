@@ -30,8 +30,6 @@ try:
     DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
     DEFINE_boolean('cv_print_fold_results', True,
                    "Whether to print each fold's results as they are computed")
-    #DEFINE_boolean('metrics_log_raw_counts', False, "Log raw counts"
-    #               " (TP, agreement, etc.) for evaluation or IAA metrics.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -220,6 +218,11 @@ class Stage(object):
         all_parts = []
         for instance in instances:
             all_parts.extend(self._extract_parts(instance, True))
+            # In general, consumed attributes are only used for part extraction.
+            # If they are needed for some reason in further processing, the
+            # relevant information should simply be attached to the parts.
+            self.__consume_attributes(instance)
+
         assert all_parts, "No parts extracted for training!"
         for model in self.models:
             model.train(all_parts)
@@ -229,8 +232,9 @@ class Stage(object):
         instance_part_counts = [0 for _ in instances]
         parts_by_model = {model.part_type:[] for model in self.models}
 
-        for i in range(len(instances)):
-            parts = self._extract_parts(instances[i], False)
+        for i, instance in enumerate(instances):
+            parts = self._extract_parts(instance, False)
+            self.__consume_attributes(instance)
             all_parts.extend(parts)
             instance_part_counts[i] = len(parts)
             for part in parts:
@@ -248,19 +252,24 @@ class Stage(object):
                 instance, all_parts[parts_processed:next_parts_processed])
             parts_processed = next_parts_processed
 
-    def get_produced_attributes(self):
-        '''
-        Returns a list of attributes the stage adds to instances. Override if
-        a stage adds any attributes.
-        '''
-        return []
+    def __consume_attributes(self, instance):
+        for attribute_name in self.CONSUMED_ATTRIBUTES:
+            logging.debug('Consuming', attribute_name)
+            delattr(instance, attribute_name)
 
-    def get_consumed_attributes(self):
-        '''
-        Returns a list of attributes the stage removes from instances. Override
-        if a stage removes any attributes.
-        '''
-        return []
+    '''
+    Default list of attributes the stage adds to instances. Add a class-wide
+    field by the same name in the class for a stage that adds any attributes
+    to instances.
+    '''
+    PRODUCED_ATTRIBUTES = []
+
+    '''
+    Default list of attributes the stage removes from instances. Add a
+    class-wide field by the same name in the class for a stage that removes any
+    attributes from instances.
+    '''
+    CONSUMED_ATTRIBUTES = []
 
     def _evaluate(self, instances):
         raise NotImplementedError

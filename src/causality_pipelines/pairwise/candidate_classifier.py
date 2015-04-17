@@ -162,14 +162,12 @@ class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
             print_test_instances=FLAGS.pw_candidate_print_instances)
         self._expected_causations = []
 
-    def get_consumed_attributes(self):
-        return ['possible_causations']
+    CONSUMED_ATTRIBUTES = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
         parts = [PhrasePairPart(sentence, pc.arg1, pc.arg2,
                  pc.matching_pattern, pc.correct)
                  for pc in sentence.possible_causations]
-        delattr(sentence, 'possible_causations')
         return parts
 
     def _decode_labeled_parts(self, sentence, labeled_parts):
