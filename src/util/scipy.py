@@ -6,6 +6,44 @@ from scipy.sparse.csgraph import shortest_path, breadth_first_order
 
 from util import pairwise
 
+def add_rows_and_cols_to_matrix(matrix, indices_to_add):
+    '''
+    Returns a new matrix with rows and columns inserted in the specified
+    locations.
+    
+    `matrix`: a square Numpy matrix.
+    `indices_to_add`: a sequence of length matrix.shape[0] + 1. The value at
+                      each index indicates the number of empty rows/columns to
+                      insert before that index. 
+    '''
+    # Add rows
+    assert matrix.shape[0] == matrix.shape[1], (
+        "Can't add equivalen rows/columns in non-square matrix")
+    assert len(indices_to_add) == matrix.shape[0] + 1, (
+        "Number of indices must be 1 greater than dimension of matrix")
+    new_column = np.zeros((matrix.shape[0], 1))
+    columns = [matrix[:, [i]] for i in range(matrix.shape[1])]
+    matrix_chunks = []
+    for column, to_insert_count in zip(columns, indices_to_add):
+        if to_insert_count:
+            matrix_chunks.extend([new_column] * to_insert_count)
+        matrix_chunks.append(column)
+    matrix_chunks.extend([new_column] * indices_to_add[-1])
+    new_matrix = np.hstack(matrix_chunks)
+
+    new_row = np.zeros((1, new_matrix.shape[1]))
+    rows = [new_matrix[i, :] for i in range(new_matrix.shape[0])]
+    matrix_chunks = []
+    for row, to_insert_count in zip(rows, indices_to_add):
+        if to_insert_count:
+            matrix_chunks.extend([new_row] * to_insert_count)
+        matrix_chunks.append(row)
+    matrix_chunks.extend([new_row] * indices_to_add[-1])
+    new_matrix = np.vstack(matrix_chunks)
+
+    return new_matrix
+
+
 def _find_depth(i, predecessors, depths):
     if depths[i] == np.inf:
         pred = predecessors[i]

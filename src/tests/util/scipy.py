@@ -3,8 +3,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 import unittest
 
-from util.scipy import dreyfus_wagner, longest_path_in_tree, \
-    UnconnectedNodesError
+from util.scipy import add_rows_and_cols_to_matrix, dreyfus_wagner, longest_path_in_tree, UnconnectedNodesError
 
 class ScipyTestCase(unittest.TestCase):
     def assertArraysEqual(self, array1, array2):
@@ -33,6 +32,27 @@ class ScipyTestCase(unittest.TestCase):
                    % (num_differing, array1, array2))
             self.fail(msg)
 
+
+class MatrixInsertionTest(ScipyTestCase):
+    TEST_MATRIX = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+    def test_append_multiple(self):
+        result = add_rows_and_cols_to_matrix(self.TEST_MATRIX, [0, 0, 0, 2])
+        correct = np.array([[1, 2, 3, 0, 0], [4, 5, 6, 0, 0], [7, 8, 9, 0, 0],
+                            [0] * 5, [0] * 5])
+        self.assertArraysEqual(correct, result)
+
+    def test_prepend_multiple(self):
+        result = add_rows_and_cols_to_matrix(self.TEST_MATRIX, [2, 0, 0, 0])
+        correct = np.array([[0] * 5, [0] * 5, [0, 0, 1, 2, 3], [0, 0, 4, 5, 6],
+                           [0, 0, 7, 8, 9]])
+        self.assertArraysEqual(correct, result)
+
+    def test_interspersed(self):
+        result = add_rows_and_cols_to_matrix(self.TEST_MATRIX, [0, 2, 1, 0])
+        correct = np.array([[1, 0, 0, 2, 0, 3], [0] * 6, [0] * 6,
+                            [4, 0, 0, 5, 0, 6], [0] * 6, [7, 0, 0, 8, 0, 9]])
+        self.assertArraysEqual(correct, result)
 
 class DreyfusWagnerTestCase(ScipyTestCase):
     def _test_graph(self, terminals, correct_nodes, correct_graph):
