@@ -6,15 +6,15 @@ import logging
 import numpy as np
 import os
 import sys
+from iaa import CausalityMetrics
+from causality_pipelines.connective_based.crf_stage import ArgumentLabelerStage
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from causality_pipelines.pairwise.candidate_classifier \
-    import CandidateClassifierStage
-from causality_pipelines.connective_based.regex_stage \
-    import RegexConnectiveStage
+from causality_pipelines.pairwise.candidate_classifier import CandidateClassifierStage
+from causality_pipelines.connective_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.pairwise.tregex_stage import TRegexConnectiveStage
 from util.metrics import ClassificationMetrics
 
@@ -85,10 +85,18 @@ if __name__ == '__main__':
         results_names = ['All instances', 'Pairwise instances only']
         stage_aggregators = [TRegexConnectiveStage.average_eval_pairs,
                              ClassificationMetrics.average]
+        # TODO: replace passing in aggregators with class-level variables
+        # pointing to aggregator functions.
     else: # regex
-        stages = [RegexConnectiveStage('Regex connectives')]
-        results_names = []
-        stage_aggregators = [ClassificationMetrics.average]
+        stages = [RegexConnectiveStage('Regex connectives'),
+                  ArgumentLabelerStage('CRF arg labeler')]
+        results_names = ['Allowing partial matches',
+                         'Not allowing partial matches']
+        stage_aggregators = [ClassificationMetrics.average,
+                             lambda tups: (CausalityMetrics.aggregate(
+                                               [tup[0] for tup in tups]),
+                                           CausalityMetrics.aggregate(
+                                               [tup[1] for tup in tups]))]
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()))

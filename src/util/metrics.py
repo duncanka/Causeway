@@ -203,13 +203,13 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
     def __radd__(self, other):
         return other.__add__(self)
 
-    def pp_metrics(self):
+    def pretty_format_metrics(self):
         return ('% Agreement: {:.2}\nKappa: {:.2}\n'
                 'Micro F1: {:.2}\nMacro F1: {:.2}'.format(
                     self.pct_agreement(), self.kappa(), self.f1_micro(),
                     self.f1_macro()))
 
-    def pp(self, *args, **kwargs):
+    def pretty_format(self, *args, **kwargs):
         """
         Accepts a 'metrics' keyword argument (or fifth positional argument)
         indicating whether to print the agreement metrics, as well.
@@ -218,9 +218,9 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
             log_metrics = kwargs.pop('metrics')
         except KeyError:
             log_metrics = False
-        pp = super(ConfusionMatrix, self).pp(*args, **kwargs)
+        pp = super(ConfusionMatrix, self).pretty_format(*args, **kwargs)
         if (len(args) > 4 and args[4] == True) or log_metrics:
-            pp += self.pp_metrics()
+            pp += self.pretty_format_metrics()
         return pp
 
     def num_agreements(self):
