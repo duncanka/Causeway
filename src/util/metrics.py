@@ -1,10 +1,10 @@
 from __future__ import absolute_import
 import copy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
-# import itertools
 import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
+from util.scipy import add_rows_and_cols_to_matrix
 
 try:
     DEFINE_bool('metrics_log_raw_counts', False,
@@ -95,7 +95,7 @@ class ClassificationMetrics(object):
     ''' We need a bunch of extra functions to support property creation. '''
 
     @staticmethod
-    def make_mutable_getter(property_name):
+    def _make_mutable_getter(property_name):
         def getter(self):
             if not self._finalized:
                 self._finalize_counts()
@@ -103,18 +103,18 @@ class ClassificationMetrics(object):
         return getter
 
     @staticmethod
-    def make_derived_getter(property_name):
+    def _make_derived_getter(property_name):
         return lambda self: getattr(self, '_' + property_name)
 
     @staticmethod
-    def make_real_setter(property_name):
+    def _make_real_setter(property_name):
         def setter(self, value):
             setattr(self, '_' + property_name, value)
             self._finalized = False
         return setter
 
     @staticmethod
-    def make_derived_setter(property_name):
+    def _make_derived_setter(property_name):
         def setter(self, value):
             raise ValueError('%s property is not directly modifiable'
                              % property_name)
@@ -124,12 +124,12 @@ class ClassificationMetrics(object):
     DERIVED_PROPERTY_NAMES = ['accuracy', 'precision', 'recall', 'f1']
 
 for property_name in ClassificationMetrics.MUTABLE_PROPERTY_NAMES:
-    getter = ClassificationMetrics.make_derived_getter(property_name)
-    setter = ClassificationMetrics.make_real_setter(property_name)
+    getter = ClassificationMetrics._make_derived_getter(property_name)
+    setter = ClassificationMetrics._make_real_setter(property_name)
     setattr(ClassificationMetrics, property_name, property(getter, setter))
 for property_name in ClassificationMetrics.DERIVED_PROPERTY_NAMES:
-    getter = ClassificationMetrics.make_mutable_getter(property_name)
-    setter = ClassificationMetrics.make_derived_setter(property_name)
+    getter = ClassificationMetrics._make_mutable_getter(property_name)
+    setter = ClassificationMetrics._make_derived_setter(property_name)
     setattr(ClassificationMetrics, property_name, property(getter, setter))
 
 
@@ -151,19 +151,57 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         super(ConfusionMatrix, self).__init__(*args, **kwargs)
         self._confusion = np.array(self._confusion)
         self.class_names = self._values
-
+        
     def __add__(self, other):
-        if set(self._values) != set(other._values):
-            raise ValueError(
-                "Can't add confusion matrices with different label sets")
+        # First, create the merged labels list, and figure out what columns
+        # we'll need to insert in the respective matrices.
+        # Because we've disabled sort by count, _values is already sorted in
+        # alphabetical order. 
+        i = 0
+        j = 0
+        self_cols_to_add = [0 for _ in range(len(self._values) + 1)]
+        other_cols_to_add = [0 for _ in range(len(other._values) + 1)]
+        merged_values = []
+        while i < len(self._values) and j < len(other._values):
+            if self._values[i] < other._values[j]:
+                # I have an item other doesn't. Record where to insert it.
+                merged_values.append(self._values[i])
+                other_cols_to_add[j] += 1
+                i += 1
+            elif self._values[i] > other._values[j]:
+                # Other has an item I don't. Record where to insert it.
+                merged_values.append(other._values[j])
+                self_cols_to_add[i] += 1
+                j += 1
+            else:
+                merged_values.append(self._values[i])
+                i += 1
+                j += 1
+        if i < len(self._values): # still some self values left
+            merged_values.extend(self._values[i:])
+            other_cols_to_add[-1] = len(self._values) - i
+        if j < len(other._values): # still some other values left
+            merged_values.extend(other._values[j:])
+            self_cols_to_add[-1] = len(other._values) - j
+
+        augmented_self_matrix = add_rows_and_cols_to_matrix(self._confusion,
+                                                            self_cols_to_add)
+        augmented_other_matrix = add_rows_and_cols_to_matrix(other._confusion,
+                                                             other_cols_to_add)
 
         new_matrix = copy.copy(self)
-        new_matrix._confusion = self._confusion + other._confusion
+        new_matrix._values = merged_values
+        new_matrix.class_names = merged_values
+        new_matrix._indices = {val: i for i, val in enumerate(merged_values)}
+        new_matrix._confusion = augmented_self_matrix + augmented_other_matrix
         new_matrix._max_conf = max(self._max_conf, other._max_conf)
         new_matrix._total = self._total + other._total
         new_matrix._correct = self._correct + other._correct
 
         return new_matrix
+    
+    def __radd__(self, other):
+        return other.__add__(self)
 
     def pp_metrics(self):
         return ('% Agreement: {:.2}\nKappa: {:.2}\n'
