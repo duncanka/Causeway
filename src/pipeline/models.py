@@ -1,6 +1,6 @@
 """ Define standard machine-learned model framework for pipelines. """
 
-import gflags
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 import numpy as np
 import pycrfsuite
@@ -11,10 +11,12 @@ from types import MethodType
 from util.metrics import diff_binary_vectors
 
 try:
-    gflags.DEFINE_bool(
+    DEFINE_bool(
         'rebalance_stochastically', False,
         'Rebalance classes by stochastically choosing samples to replicate')
-except gflags.DuplicateFlagError as e:
+    DEFINE_bool('disable_pycrfsuite_logging', True,
+                       'Disable logging output from python-crfsuite trainer')
+except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
@@ -212,7 +214,7 @@ class ClassBalancingModelWrapper(object):
         slices = np.concatenate(([0], np.cumsum(counts_to_add)))
         for j in xrange(len(label_set)):
             label_row_indices = np.where(label_indices==j)[0]
-            if gflags.FLAGS.rebalance_stochastically:
+            if FLAGS.rebalance_stochastically:
                 indices = np.random.choice(label_row_indices,
                                            counts_to_add[j])
             else:
@@ -298,7 +300,17 @@ class CRFModel(Model):
             trainer.append(observation_features, labels)
         trainer.select(self.training_algorithm)
         trainer.set_params(self.training_params)
-        trainer.on_iteration = MethodType(lambda self, log, info: None, trainer)
+        if FLAGS.disable_pycrfsuite_logging:
+            null_info_logger = MethodType(lambda self, log, info: None, trainer)
+            for method_name in ['on_iteration', 'on_featgen_progress']:
+                setattr(trainer, method_name, null_info_logger)
+            null_no_info_logger = MethodType(lambda self, log: None, trainer)
+            for method_name in ['on_end', 'on_featgen_end',
+                                'on_optimization_end', 'on_prepared',
+                                'on_start']:
+                setattr(trainer, method_name, null_no_info_logger)
+
+
         logging.info("Training CRF model...")
         trainer.train(self.model_file_path)
         logging.info('CRF model saved to %s' % self.model_file_path)
