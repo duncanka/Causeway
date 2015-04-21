@@ -17,8 +17,8 @@ def add_rows_and_cols_to_matrix(matrix, indices_to_add):
                       insert before that index. 
     '''
     # Add rows
-    assert matrix.shape[0] == matrix.shape[1], (
-        "Can't add equivalen rows/columns in non-square matrix")
+    assert len(matrix.shape) == 2 and matrix.shape[0] == matrix.shape[1], (
+        "Can't add equivalent rows/columns in non-square matrix")
     assert len(indices_to_add) == matrix.shape[0] + 1, (
         "Number of indices must be 1 greater than dimension of matrix")
     new_column = np.zeros((matrix.shape[0], 1))
