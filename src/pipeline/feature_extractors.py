@@ -18,7 +18,7 @@ class FeatureExtractor(object):
     def extract_subfeature_names(self, parts):
         if self.feature_type == self.FeatureTypes.Categorical:
             value_set = set(self._extractor_fn(part) for part in parts)
-            return [FeatureExtractor.get_categorical_feature_name(
+            return [FeatureExtractor._get_categorical_feature_name(
                         self.name, value)
                     for value in value_set]
         else: # feature_type == Numerical
@@ -31,7 +31,7 @@ class FeatureExtractor(object):
         '''
         feature_value = self._extractor_fn(part)
         if self.feature_type == self.FeatureTypes.Categorical:
-            feature_name = FeatureExtractor.get_categorical_feature_name(
+            feature_name = FeatureExtractor._get_categorical_feature_name(
                 self.name, feature_value)
             return {feature_name: 1.0}
         else: # feature_type == Numerical
@@ -41,7 +41,7 @@ class FeatureExtractor(object):
         return [self.extract(part) for part in parts]
 
     @staticmethod
-    def get_categorical_feature_name(base_name, value):
+    def _get_categorical_feature_name(base_name, value):
         return '%s=%s' % (base_name, value)
 
 
@@ -60,7 +60,7 @@ class KnownValuesFeatureExtractor(FeatureExtractor):
 
     def extract_subfeature_names(self, parts):
         ''' Ignore `parts` and just use known values from initialization. '''
-        return [FeatureExtractor.get_categorical_feature_name(
+        return [FeatureExtractor._get_categorical_feature_name(
                     self.name, value)
                 for value in self.feature_values]
 
