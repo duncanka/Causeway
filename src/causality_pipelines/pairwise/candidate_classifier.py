@@ -141,7 +141,8 @@ FEATURE_EXTRACTORS = [
     FeatureExtractor('deppath', PhrasePairModel.extract_dep_path),
     FeatureExtractor('deplen',
                      lambda part: len(part.instance.extract_dependency_path(
-                        part.head_token_1, part.head_token_2))),
+                        part.head_token_1, part.head_token_2)),
+                     FeatureExtractor.FeatureTypes.Numerical),
     # TODO: This assumes that we will not have to worry about multiple patterns
     # matching simultaneously. Should we make that assumption?
     FeatureExtractor('connective', lambda part: part.connective_pattern),
