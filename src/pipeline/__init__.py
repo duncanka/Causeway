@@ -249,7 +249,6 @@ class Stage(object):
 
     def __consume_attributes(self, instance):
         for attribute_name in self.CONSUMED_ATTRIBUTES:
-            logging.debug('Consuming', attribute_name)
             delattr(instance, attribute_name)
 
     '''
