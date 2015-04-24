@@ -14,8 +14,8 @@ try:
     DEFINE_bool(
         'rebalance_stochastically', False,
         'Rebalance classes by stochastically choosing samples to replicate')
-    DEFINE_bool('disable_pycrfsuite_logging', True,
-                       'Disable logging output from python-crfsuite trainer')
+    DEFINE_bool('pycrfsuite_verbose', False,
+                'Verbose logging output from python-crfsuite trainer')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -245,6 +245,9 @@ class ClassBalancingModelWrapper(object):
         return self.classifier.predict(data)
 
 class CRFModel(Model):
+    class CRFTrainingError(Exception):
+        pass
+
     class ObservationWithContext(object):
         '''
         In a CRF model, the feature extractors will have to operate not just on
@@ -291,29 +294,29 @@ class CRFModel(Model):
             observation_features.append(feature_values)
         return observation_features
 
+    @staticmethod
+    def __handle_training_error(trainer, log):
+        raise CRFModel.CRFTrainingError('CRF training failed: %s' % log)
+
     def train(self, parts):
-        trainer = pycrfsuite.Trainer(verbose=True)
+        trainer = pycrfsuite.Trainer(verbose=FLAGS.pycrfsuite_verbose)
+        trainer.select(self.training_algorithm)
+        trainer.set_params(self.training_params)
+        error_handler = MethodType(self.__handle_training_error, trainer)
+        trainer.on_prepare_error = error_handler
+
         for part in parts:
             observation_sequence, labels = self._sequences_for_part(part)
             observation_features = self.__featurize_observation_sequence(
                 observation_sequence, part)
             trainer.append(observation_features, labels)
-        trainer.select(self.training_algorithm)
-        trainer.set_params(self.training_params)
-        if FLAGS.disable_pycrfsuite_logging:
-            null_info_logger = MethodType(lambda self, log, info: None, trainer)
-            for method_name in ['on_iteration', 'on_featgen_progress']:
-                setattr(trainer, method_name, null_info_logger)
-            null_no_info_logger = MethodType(lambda self, log: None, trainer)
-            for method_name in ['on_end', 'on_featgen_end',
-                                'on_optimization_end', 'on_prepared',
-                                'on_start']:
-                setattr(trainer, method_name, null_no_info_logger)
 
-
+        start_time = time.time()
         logging.info("Training CRF model...")
         trainer.train(self.model_file_path)
-        logging.info('CRF model saved to %s' % self.model_file_path)
+        elapsed_seconds = time.time() - start_time
+        logging.info('CRF model saved to %s (training took %0.2f seconds)'
+                     % (self.model_file_path, elapsed_seconds))
 
     def test(self, parts):
         tagger = pycrfsuite.Tagger()
@@ -322,4 +325,5 @@ class CRFModel(Model):
             observation_sequence, _ = self._sequences_for_part(part)
             observation_features = self.__featurize_observation_sequence(
                 observation_sequence, part)
-            self._label_part(part, tagger.tag(observation_features))
+            crf_labels = tagger.tag(observation_features)
+            self._label_part(part, crf_labels)

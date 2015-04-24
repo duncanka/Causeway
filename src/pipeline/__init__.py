@@ -120,9 +120,9 @@ class Pipeline(object):
             logging.info("Training on %d instances" % len(instances))
 
         for stage in self.stages:
-            print "Training stage %s..." % stage.name
+            logging.info("Training stage %s..." % stage.name)
             stage.train(instances)
-            print "Finished training stage", stage.name
+            logging.info("Finished training stage %s" % stage.name)
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''
