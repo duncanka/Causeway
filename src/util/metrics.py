@@ -153,6 +153,12 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         self.class_names = self._values
         
     def __add__(self, other):
+        # Deal with the possibility of an empty matrix.
+        if self._confusion.shape[0] == 0:
+            return copy.deepcopy(other)
+        elif other._confusion.shape[0] == 0:
+            return copy.deepcopy(self)
+
         # First, create the merged labels list, and figure out what columns
         # we'll need to insert in the respective matrices.
         # Because we've disabled sort by count, _values is already sorted in
@@ -218,9 +224,12 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
             log_metrics = kwargs.pop('metrics')
         except KeyError:
             log_metrics = False
-        pp = super(ConfusionMatrix, self).pretty_format(*args, **kwargs)
-        if (len(args) > 4 and args[4] == True) or log_metrics:
-            pp += self.pretty_format_metrics()
+        if self._values:
+            pp = super(ConfusionMatrix, self).pretty_format(*args, **kwargs)
+            if (len(args) > 4 and args[4] == True) or log_metrics:
+                pp += self.pretty_format_metrics()
+        else:
+            pp = repr(self) # <ConfusionMatrix: 0/0 correct>
         return pp
 
     def num_agreements(self):
