@@ -271,8 +271,11 @@ class CRFModel(Model):
         self.training_algorithm = training_algorithm
         self.training_params = training_params
 
-    def _sequences_for_part(self, part):
-        ''' Returns the observation and label sequences for the part. '''
+    def _sequences_for_part(self, part, is_train):
+        '''
+        Returns the observation and label sequences for the part. Should return
+        None for labels at test time.
+        '''
         raise NotImplementedError
 
     def _label_part(self, part, crf_labels):
@@ -306,7 +309,7 @@ class CRFModel(Model):
         trainer.on_prepare_error = error_handler
 
         for part in parts:
-            observation_sequence, labels = self._sequences_for_part(part)
+            observation_sequence, labels = self._sequences_for_part(part, True)
             observation_features = self.__featurize_observation_sequence(
                 observation_sequence, part)
             trainer.append(observation_features, labels)
@@ -322,7 +325,7 @@ class CRFModel(Model):
         tagger = pycrfsuite.Tagger()
         tagger.open(self.model_file_path)
         for part in parts:
-            observation_sequence, _ = self._sequences_for_part(part)
+            observation_sequence, _ = self._sequences_for_part(part, False)
             observation_features = self.__featurize_observation_sequence(
                 observation_sequence, part)
             crf_labels = tagger.tag(observation_features)

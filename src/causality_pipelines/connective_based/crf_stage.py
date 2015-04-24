@@ -1,7 +1,7 @@
 from copy import copy
-from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, FLAGS, \
-    DuplicateFlagError
+from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_enum
 import logging
+import numpy as np
 
 from iaa import CausalityMetrics
 from pipeline import Stage
@@ -10,13 +10,21 @@ from pipeline.feature_extractors import FeatureExtractor
 from causality_pipelines.connective_based import PossibleCausation
 
 try:
-    DEFINE_list('arg_label_features', ['lemma', 'pos', 'isconnective'],
+    DEFINE_list('arg_label_features',
+                ['lemma', 'pos', 'isconnective', # 'conn_parse_dist',
+                 'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree'],
                 'Features for the argument-labeling CRF')
     DEFINE_string('arg_label_model_path', 'arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
     DEFINE_bool('arg_label_log_differences', False,
                 'Whether to log differences between gold and predicted results'
                 ' for each round of argument labeling evaluation')
+    DEFINE_integer('arg_label_max_dep_path_len', 4,
+                   "Maximum number of dependency path steps to allow before"
+                   " just making the value 'LONG-RANGE'")
+    DEFINE_enum('arg_label_training_alg', 'lbfgs',
+                ['lbfgs', 'l2sgd', 'ap', 'pa', 'arow'],
+                'Algorithm for training argument labeling CRF')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -24,21 +32,18 @@ except DuplicateFlagError as e:
 class ArgumentLabelerModel(CRFModel):
     CAUSE_LABEL = 'Cause'
     EFFECT_LABEL = 'Effect'
-    CONNECTIVE_LABEL = 'Connective'
-    
+
     def __init__(self, training_algorithm, training_params):
         super(ArgumentLabelerModel, self).__init__(
             PossibleCausation, FLAGS.arg_label_model_path,
             self.FEATURE_EXTRACTOR_MAP, FLAGS.arg_label_features,
             training_algorithm, training_params)
-    
-    def _sequences_for_part(self, part):
+
+    def _sequences_for_part(self, part, is_train):
         # part for this model is a PossibleCausation.
         observations = part.sentence.tokens
-        if part.true_causation_instance:
+        if is_train:
             labels = ['None'] * len(observations)
-            for connective_token in part.connective_tokens:
-                labels[connective_token.index] = self.CONNECTIVE_LABEL
             if part.true_causation_instance.cause:
                 for cause_token in part.true_causation_instance.cause:
                     labels[cause_token.index] = self.CAUSE_LABEL
@@ -58,26 +63,75 @@ class ArgumentLabelerModel(CRFModel):
             elif label == self.EFFECT_LABEL:
                 part.effect_tokens.append(token)
 
+    @staticmethod
+    def get_connective_parse_distance(observation):
+        sentence = observation.part.sentence
+        _, closest_connective_distance = sentence.get_closest_of_tokens(
+            observation.observation, observation.part.connective_tokens)
+        return closest_connective_distance
+
+    @staticmethod
+    def get_connective_parse_path(observation):
+        word = observation.observation
+        sentence = observation.part.sentence
+        closest_connective_token, _ = sentence.get_closest_of_tokens(
+            word, observation.part.connective_tokens)
+        if closest_connective_token is None:
+            return 'NO_PATH'
+
+        deps = sentence.extract_dependency_path(word, closest_connective_token,
+                                                False)
+        if len(deps) > FLAGS.arg_label_max_dep_path_len:
+            return 'LONG-RANGE'
+        else:
+            return str(deps)
+
+    @staticmethod
+    def get_connective_lexical_distance(observation):
+        word = observation.observation
+        # TODO: make this function return a signed value?
+        min_distance = np.inf
+        for connective_token in observation.part.connective_tokens:
+            new_distance = abs(connective_token.index - word.index)
+            if new_distance < min_distance:
+                min_distance = new_distance
+        return min_distance
+
 # Because this is a CRF model operating on sequences of tokens, the input to
-# each feature extractor will be a CRFModel.ExtractorPart. The observation
-# will be a Token object, and the sequence will be a sequence of Tokens.
+# each feature extractor will be a CRFModel.ObservationWithContext.
+# observation.observation will be a Token object, and observation.sequence will
+# be a sequence of Tokens. observation.part will be a PossibleCausation.
 FEATURE_EXTRACTORS = [
-    FeatureExtractor('lemma', lambda contextful_observation: ( 
-                                  contextful_observation.observation.lemma)),
-    FeatureExtractor('pos', lambda contextful_observation: (
-                                contextful_observation.observation.pos)),
-    FeatureExtractor('isconnective',
-                     lambda contextful_observation: (
-                         contextful_observation.observation in
-                         contextful_observation.part.connective_tokens))]
-# TODO: These are really sucky features. Add some more.
+    FeatureExtractor(
+        'lemma', lambda observation: observation.observation.lemma),
+    FeatureExtractor(
+        'pos', lambda observation: observation.observation.pos),
+    FeatureExtractor(
+        'isconnective',
+        lambda observation: (observation.observation in
+                             observation.part.connective_tokens)),
+    FeatureExtractor(
+        'conn_parse_dist', ArgumentLabelerModel.get_connective_parse_distance,
+        FeatureExtractor.FeatureTypes.Numerical),
+    FeatureExtractor(
+        'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
+    FeatureExtractor(
+        'lexical_conn_dist',
+        ArgumentLabelerModel.get_connective_lexical_distance,
+        FeatureExtractor.FeatureTypes.Numerical),
+    FeatureExtractor('in_parse_tree',
+                     lambda observation: (observation.part.sentence.get_depth(
+                                            observation.observation) < np.inf))
+]
 
 ArgumentLabelerModel.FEATURE_EXTRACTOR_MAP = {
     extractor.name: extractor for extractor in FEATURE_EXTRACTORS}
 
 
 class ArgumentLabelerStage(Stage):
-    def __init__(self, name, training_algorithm='lbfgs', training_params={}):
+    def __init__(self, name, training_algorithm=None, training_params={}):
+        if training_algorithm is None:
+            training_algorithm = FLAGS.arg_label_training_alg
         super(ArgumentLabelerStage, self).__init__(
             name=name,
             models=[ArgumentLabelerModel(training_algorithm, training_params)])
