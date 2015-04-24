@@ -11,8 +11,9 @@ from causality_pipelines.connective_based import PossibleCausation
 
 try:
     DEFINE_list('arg_label_features',
-                ['lemma', 'pos', 'isconnective', # 'conn_parse_dist',
-                 'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree'],
+                ['lemma', 'pos', 'is_connective', # 'conn_parse_dist',
+                 'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree',
+                 'pattern'],
                 'Features for the argument-labeling CRF')
     DEFINE_string('arg_label_model_path', 'arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
@@ -107,7 +108,7 @@ FEATURE_EXTRACTORS = [
     FeatureExtractor(
         'pos', lambda observation: observation.observation.pos),
     FeatureExtractor(
-        'isconnective',
+        'is_connective',
         lambda observation: (observation.observation in
                              observation.part.connective_tokens)),
     FeatureExtractor(
@@ -121,7 +122,9 @@ FEATURE_EXTRACTORS = [
         FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor('in_parse_tree',
                      lambda observation: (observation.part.sentence.get_depth(
-                                            observation.observation) < np.inf))
+                                            observation.observation) < np.inf)),
+    FeatureExtractor('pattern',
+                     lambda observation: observation.part.matching_pattern)
 ]
 
 ArgumentLabelerModel.FEATURE_EXTRACTOR_MAP = {
