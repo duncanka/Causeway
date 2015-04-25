@@ -3,17 +3,18 @@ from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAG
 import logging
 import numpy as np
 
+from causality_pipelines.connective_based import PossibleCausation
 from iaa import CausalityMetrics
 from pipeline import Stage
 from pipeline.models import CRFModel
 from pipeline.feature_extractors import FeatureExtractor
-from causality_pipelines.connective_based import PossibleCausation
+from util import Enum
 
 try:
     DEFINE_list('arg_label_features',
                 ['lemma', 'pos', 'is_connective', # 'conn_parse_dist',
                  'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree',
-                 'pattern'],
+                 'pattern', 'pattern+conn_parse_path', 'conn_rel_pos'],
                 'Features for the argument-labeling CRF')
     DEFINE_string('arg_label_model_path', 'arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
@@ -87,6 +88,20 @@ class ArgumentLabelerModel(CRFModel):
         else:
             return str(deps)
 
+    RELATIVE_POSITIONS = Enum(['Before', 'Same', 'After'])
+    @staticmethod
+    def get_connective_relative_position(observation):
+        word = observation.observation
+        sentence = observation.part.sentence
+        closest_connective_token, _ = sentence.get_closest_of_tokens(
+            word, observation.part.connective_tokens, False) # lexically closest
+        if word.index < closest_connective_token.index:
+            return ArgumentLabelerModel.RELATIVE_POSITIONS.Before
+        elif word.index > closest_connective_token.index:
+            return ArgumentLabelerModel.RELATIVE_POSITIONS.After
+        else:
+            return ArgumentLabelerModel.RELATIVE_POSITIONS.Same
+
     @staticmethod
     def get_connective_lexical_distance(observation):
         word = observation.observation
@@ -124,7 +139,14 @@ FEATURE_EXTRACTORS = [
                      lambda observation: (observation.part.sentence.get_depth(
                                             observation.observation) < np.inf)),
     FeatureExtractor('pattern',
-                     lambda observation: observation.part.matching_pattern)
+                     lambda observation: observation.part.matching_pattern),
+    FeatureExtractor(
+        'pattern+conn_parse_path',
+        lambda observation: (
+            observation.part.matching_pattern,
+            ArgumentLabelerModel.get_connective_parse_path(observation))),
+    FeatureExtractor('conn_rel_pos',
+                     ArgumentLabelerModel.get_connective_relative_position)
 ]
 
 ArgumentLabelerModel.FEATURE_EXTRACTOR_MAP = {

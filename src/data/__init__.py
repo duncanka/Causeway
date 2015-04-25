@@ -290,23 +290,33 @@ class ParsedSentence(object):
             target = predecessor
         return DependencyPath(reversed(edges))
 
-    def get_closest_of_tokens(self, source, possible_targets):
+    def get_closest_of_tokens(self, source, possible_targets, use_tree=True):
         '''
-        Finds the token among possible_targets closest in the dependency tree
-        to source. Returns the token, along with its distance. If none of the
-        possible targets is reachable, returns (None, np.inf).
+        Finds the token among possible_targets closest to source. If use_tree
+        is True, distance is determined by distance in the parse tree;
+        otherwise, distance is simple lexical distance (which may be negative).
+        Returns the token, along with its distance. If none of the possible
+        targets is reachable, returns (None, np.inf).
         '''
         if not possible_targets:
             raise ValueError("Can't find closest of 0 tokens")
+
+        if use_tree:
+            dist = lambda source, target: self.path_costs[source.index,
+                                                          target.index]
+        else:
+            dist = lambda source, target: target.index - source.index
+
         closest = possible_targets[0]
-        min_distance = self.path_costs[source.index, closest.index]
+        min_distance = dist(source, closest)
         for target in possible_targets[1:]:
-            next_distance = self.path_costs[source.index, target.index]
+            next_distance = dist(source, target)
             if next_distance < min_distance:
                 closest = target
                 min_distance = next_distance
-        if min_distance == np.inf:
+        if min_distance == np.inf: # source or all targets aren't in tree
             closest = None
+
         return closest, min_distance
 
     def find_tokens_for_annotation(self, annotation):
