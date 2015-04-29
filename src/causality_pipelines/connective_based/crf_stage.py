@@ -88,7 +88,7 @@ class ArgumentLabelerModel(CRFModel):
         else:
             return str(deps)
 
-    RELATIVE_POSITIONS = Enum(['Before', 'Same', 'After'])
+    RELATIVE_POSITIONS = Enum(['Before', 'Overlapping', 'After'])
     @staticmethod
     def get_connective_relative_position(observation):
         word = observation.observation
@@ -100,18 +100,33 @@ class ArgumentLabelerModel(CRFModel):
         elif word.index > closest_connective_token.index:
             return ArgumentLabelerModel.RELATIVE_POSITIONS.After
         else:
-            return ArgumentLabelerModel.RELATIVE_POSITIONS.Same
+            return ArgumentLabelerModel.RELATIVE_POSITIONS.Overlapping
 
-    @staticmethod
-    def get_connective_lexical_distance(observation):
-        word = observation.observation
-        # TODO: make this function return a signed value?
-        min_distance = np.inf
-        for connective_token in observation.part.connective_tokens:
-            new_distance = abs(connective_token.index - word.index)
-            if new_distance < min_distance:
-                min_distance = new_distance
-        return min_distance
+    class LexicalDistanceFeatureExtractor(FeatureExtractor):
+        ABS_DIST_NAME = 'absdist'
+        DIRECTED_DIST_NAME = 'dirdist'
+
+        def __init__(self, name):
+            self.name = name
+            self.feature_type = self.FeatureTypes.Numerical
+
+        def extract_subfeature_names(self, parts):
+            return [self.ABS_DIST_NAME, self.DIRECTED_DIST_NAME]
+
+        def extract(self, observation):
+            word = observation.observation
+            # TODO: make this function return a signed value?
+            min_distance = np.inf
+            min_abs_distance = np.inf
+            for connective_token in observation.part.connective_tokens:
+                new_distance = connective_token.index - word.index
+                new_abs_distance = abs(new_distance)
+                if new_abs_distance < min_abs_distance:
+                    min_distance = new_distance
+                    min_abs_distance = new_abs_distance
+            return {self.ABS_DIST_NAME: min_abs_distance,
+                    self.DIRECTED_DIST_NAME: min_distance}
+
 
 # Because this is a CRF model operating on sequences of tokens, the input to
 # each feature extractor will be a CRFModel.ObservationWithContext.
@@ -127,14 +142,11 @@ FEATURE_EXTRACTORS = [
         lambda observation: (observation.observation in
                              observation.part.connective_tokens)),
     FeatureExtractor(
-        'conn_parse_dist', ArgumentLabelerModel.get_connective_parse_distance,
-        FeatureExtractor.FeatureTypes.Numerical),
-    FeatureExtractor(
         'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
     FeatureExtractor(
-        'lexical_conn_dist',
-        ArgumentLabelerModel.get_connective_lexical_distance,
+        'conn_parse_dist', ArgumentLabelerModel.get_connective_parse_distance,
         FeatureExtractor.FeatureTypes.Numerical),
+    ArgumentLabelerModel.LexicalDistanceFeatureExtractor('lexical_conn_dist'),
     FeatureExtractor('in_parse_tree',
                      lambda observation: (observation.part.sentence.get_depth(
                                             observation.observation) < np.inf)),
