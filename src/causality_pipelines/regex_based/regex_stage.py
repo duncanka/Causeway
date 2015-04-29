@@ -30,13 +30,6 @@ class RegexConnectiveModel(Model):
         self.regexes = [
             (re.compile(pattern), matching_groups)
             for pattern, matching_groups in self._extract_patterns(sentences)]
-        # Now that we have all the patterns, we also need to make sure all the
-        # instances we pass along to the next stage have input matching what
-        # will be passed along at test time. That means we need false negatives
-        # in exactly the same places that they'll be at test time, so we just
-        # run test() to find all the correct and spurious matches.
-        logging.debug("Running test to generate input for next stage")
-        self.test(sentences)
 
     def test(self, sentences):
         logging.info('Tagging possible connectives...')

@@ -169,7 +169,6 @@ class ArgumentLabelerStage(IAAEvaluatedStage):
         super(ArgumentLabelerStage, self).__init__(
             name, [ArgumentLabelerModel(training_algorithm, training_params)],
             False, False, FLAGS.arg_label_log_differences)
-        self.print_test_instances = FLAGS.regex_print_test_instances
 
     def _extract_parts(self, sentence, is_train):
         if is_train:

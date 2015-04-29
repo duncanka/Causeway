@@ -123,6 +123,16 @@ class Pipeline(object):
             logging.info("Training stage %s..." % stage.name)
             stage.train(instances)
             logging.info("Finished training stage %s" % stage.name)
+            # For training, each stage needs a realistic view of what its inputs
+            # will look like. So now that we've trained the stage, if there is
+            # another stage after it we run the trained stage as though we were
+            # in testing mode.
+            # TODO: Should we allow disabling this somehow?
+            if stage is not self.stages[-1]:
+                logging.info("Testing stage %s for input to next stage..."
+                             % stage.name)
+                stage.test(instances)
+                logging.info("Done testing stage %s" % stage.name)
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''

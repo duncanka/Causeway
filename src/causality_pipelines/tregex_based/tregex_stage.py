@@ -44,24 +44,31 @@ class TRegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
         super(TRegexConnectiveModel, self).__init__(*args, **kwargs)
         self.tregex_patterns = []
+        # Internal hackery properties, used for training.
+        self._ptb_strings = None
+        self._true_causation_pairs_by_sentence = None
 
     def train(self, sentences):
         ptb_strings, true_causation_pairs_by_sentence = (
             self._extract_patterns(sentences))
-        # Now that we have all the patterns, we also need to make sure all the
-        # instances we pass along to the next stage have input matching what
-        # will be passed along at test time. That means we need false negatives
-        # in exactly the same places that they'll be at test time, so we just
-        # run test() to find all the correct and spurious matches.
-        logging.debug("Running test to generate input for next stage")
-        self.test(sentences, ptb_strings, true_causation_pairs_by_sentence)
+        # Dirty hack to avoid redoing all the preprocessing when test() is
+        # called to provide input to the next stage.
+        self._ptb_strings = ptb_strings
+        self._true_causation_pairs_by_sentence = (
+            true_causation_pairs_by_sentence)
 
-    def test(self, sentences, ptb_strings=None,
-             true_causation_pairs_by_sentence=None):
+    def test(self, sentences):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        if ptb_strings is None or true_causation_pairs_by_sentence is None:
+        if (self._ptb_strings is not None and
+            self._true_causation_pairs_by_sentence is not None):
+            ptb_strings = self._ptb_strings
+            true_causation_pairs_by_sentence = (
+                self._true_causation_pairs_by_sentence)
+            self._ptb_strings = None
+            self._true_causation_pairs_by_sentence = None
+        else:
             ptb_strings, true_causation_pairs_by_sentence = (
                 self._preprocess_sentences(sentences))
 
