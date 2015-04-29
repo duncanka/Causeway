@@ -38,7 +38,7 @@ class PhrasePairModel(ClassifierModel):
         super(PhrasePairModel, self).__init__(
             PhrasePairPart,
             # Avoid any potential harm that could come to our class variable.
-            PhrasePairModel.FEATURE_EXTRACTOR_MAP.copy(),
+            PhrasePairModel.FEATURE_EXTRACTORS,
             FLAGS.pw_candidate_features, classifier)
 
     # First define longer feature extraction functions.
@@ -121,10 +121,10 @@ class PhrasePairModel(ClassifierModel):
         return '_'.join(aux_token_strings)
 
     # We can't initialize this properly yet because we don't have access to the
-    # class' static methods to define the mapping.
-    FEATURE_EXTRACTOR_MAP = {}
+    # class' static methods to define the list.
+    FEATURE_EXTRACTORS = []
 
-FEATURE_EXTRACTORS = [
+PhrasePairModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor('pos1', lambda part: part.head_token_1.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('pos2', lambda part: part.head_token_2.pos,
@@ -151,9 +151,6 @@ FEATURE_EXTRACTORS = [
                         [PhrasePairModel.extract_tense(head)
                          for head in part.head_token_1, part.head_token_2])),
 ]
-
-PhrasePairModel.FEATURE_EXTRACTOR_MAP = {extractor.name: extractor
-                                         for extractor in FEATURE_EXTRACTORS}
 
 
 class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):

@@ -181,7 +181,7 @@ def collins_find_heads(tree, head_map=None):
     changes to the tree.) It's probably advisable to simply convert the tree to
     an immutable tree before using this function.
     '''
-    # TODO: Is it even a good idea to allow non-immutable trees.
+    # TODO: Is it even a good idea to allow non-immutable trees?
 
     if head_map is None:
         head_map = {}

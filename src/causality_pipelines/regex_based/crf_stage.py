@@ -38,7 +38,7 @@ class ArgumentLabelerModel(CRFModel):
     def __init__(self, training_algorithm, training_params):
         super(ArgumentLabelerModel, self).__init__(
             PossibleCausation, FLAGS.arg_label_model_path,
-            self.FEATURE_EXTRACTOR_MAP, FLAGS.arg_label_features,
+            self.FEATURE_EXTRACTORS, FLAGS.arg_label_features,
             training_algorithm, training_params)
 
     def _sequences_for_part(self, part, is_train):
@@ -132,7 +132,7 @@ class ArgumentLabelerModel(CRFModel):
 # each feature extractor will be a CRFModel.ObservationWithContext.
 # observation.observation will be a Token object, and observation.sequence will
 # be a sequence of Tokens. observation.part will be a PossibleCausation.
-FEATURE_EXTRACTORS = [
+ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     FeatureExtractor(
         'lemma', lambda observation: observation.observation.lemma),
     FeatureExtractor(
@@ -160,9 +160,6 @@ FEATURE_EXTRACTORS = [
     FeatureExtractor('conn_rel_pos',
                      ArgumentLabelerModel.get_connective_relative_position)
 ]
-
-ArgumentLabelerModel.FEATURE_EXTRACTOR_MAP = {
-    extractor.name: extractor for extractor in FEATURE_EXTRACTORS}
 
 
 class ArgumentLabelerStage(Stage):

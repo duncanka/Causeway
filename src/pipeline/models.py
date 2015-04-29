@@ -57,22 +57,19 @@ class FeaturizedModel(Model):
         def __contains__(self, entry):
             return self.names_to_ids.has_key(entry)
 
-    def __init__(self, part_type, feature_extractor_map, selected_features):
+    def __init__(self, part_type, feature_extractors, selected_features):
         """
         part_type is the class object corresponding to the part type this model
         is for.
-        feature_extractor_map is a map from feature names to
+        feature_extractors is a list of
         `pipeline.feature_extractors.FeatureExtractor` objects.
         selected_features is a list of names of features to extract.
         """
         super(FeaturizedModel, self).__init__(part_type)
         self.feature_name_dictionary = FeaturizedModel.NameDictionary()
-        self.feature_extractor_map = {
-            feature_name: feature_extractor_map[feature_name]
-            for feature_name in selected_features}
+        self.feature_extractors = [extractor for extractor in feature_extractors
+                                   if extractor.name in selected_features]
         self.feature_training_data = None
-        # TODO: Make feature_extractor_map simply a feature extractor list (we
-        # never do any lookups anyway)
 
     def train(self, parts):
         # Reset state in case we've been previously trained.
@@ -84,14 +81,14 @@ class FeaturizedModel(Model):
         # discover the possible values of a feature.)
         logging.info("Registering features...")
 
-        for feature_name, extractor in self.feature_extractor_map.items():
-            logging.debug('Registering feature "%s"' % feature_name)
+        for extractor in self.feature_extractors:
+            logging.debug('Registering feature "%s"' % extractor.name)
             self.feature_training_data = extractor.train(parts)
             subfeature_names = extractor.extract_subfeature_names(parts)
             for subfeature_name in subfeature_names:
                 self.feature_name_dictionary.insert(subfeature_name)
             logging.debug("%d features registered in map for '%s'" % (
-                            len(subfeature_names), feature_name))
+                            len(subfeature_names), extractor.name))
 
         logging.info('Done registering features.')
 
@@ -111,13 +108,13 @@ class FeaturizedModel(Model):
 
 
 class ClassifierModel(FeaturizedModel):
-    def __init__(self, part_type, feature_extractor_map, selected_features,
+    def __init__(self, part_type, feature_extractors, selected_features,
                  classifier):
         """
         Note that classifier must support the fit and predict methods in the
         style of scikit-learn.
         """
-        super(ClassifierModel, self).__init__(part_type, feature_extractor_map,
+        super(ClassifierModel, self).__init__(part_type, feature_extractors,
                                               selected_features)
         self.classifier = classifier
 
@@ -148,7 +145,7 @@ class ClassifierModel(FeaturizedModel):
         labels = np.fromiter((part.label for part in relevant_parts),
                              int, len(relevant_parts))
 
-        for feature_name, extractor in self.feature_extractor_map.items():
+        for extractor in self.feature_extractors:
             feature_values_by_part = extractor.extract_all(parts)
             for part_index, part_subfeature_values in enumerate(
                 feature_values_by_part):
@@ -245,6 +242,10 @@ class ClassBalancingModelWrapper(object):
         return self.classifier.predict(data)
 
 class CRFModel(Model):
+    # Theoretically, this class ought to be a type of FeaturizedModel. But that
+    # class assumes we're doing all the feature management in class, and in
+    # practice we're offloading CRF feature management to CRFSuite.
+
     class CRFTrainingError(Exception):
         pass
 
@@ -261,13 +262,12 @@ class CRFModel(Model):
             self.index = index
             self.part = part
 
-    def __init__(self, part_type, model_file_path, feature_extractor_map,
+    def __init__(self, part_type, model_file_path, feature_extractors,
                  selected_features, training_algorithm, training_params):
         super(CRFModel, self).__init__(part_type)
         self.model_file_path = model_file_path
-        self.feature_extractor_map = {
-            feature_name: feature_extractor_map[feature_name]
-            for feature_name in selected_features}
+        self.feature_extractors = [extractor for extractor in feature_extractors
+                                   if extractor.name in selected_features]
         self.training_algorithm = training_algorithm
         self.training_params = training_params
 
@@ -290,7 +290,7 @@ class CRFModel(Model):
         observation_features = []
         for i, observation in enumerate(observation_sequence):
             feature_values = {}
-            for feature_extractor in self.feature_extractor_map.values():
+            for feature_extractor in self.feature_extractors:
                 extractor_arg = self.ObservationWithContext(
                     observation, observation_sequence, i, part)
                 feature_values.update(feature_extractor.extract(extractor_arg))
