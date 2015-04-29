@@ -1,11 +1,8 @@
-from copy import copy
 from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_enum
 import logging
 import numpy as np
 
-from causality_pipelines.regex_based import PossibleCausation
-from iaa import CausalityMetrics
-from pipeline import Stage
+from causality_pipelines.regex_based import PossibleCausation, IAAEvaluatedStage
 from pipeline.models import CRFModel
 from pipeline.feature_extractors import FeatureExtractor
 from util import Enum
@@ -127,6 +124,9 @@ class ArgumentLabelerModel(CRFModel):
             return {self.ABS_DIST_NAME: min_abs_distance,
                     self.DIRECTED_DIST_NAME: min_distance}
 
+    # We can't initialize this properly yet because we don't have access to the
+    # class' static methods to define the list.
+    FEATURE_EXTRACTORS = []
 
 # Because this is a CRF model operating on sequences of tokens, the input to
 # each feature extractor will be a CRFModel.ObservationWithContext.
@@ -162,13 +162,13 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
 ]
 
 
-class ArgumentLabelerStage(Stage):
+class ArgumentLabelerStage(IAAEvaluatedStage):
     def __init__(self, name, training_algorithm=None, training_params={}):
         if training_algorithm is None:
             training_algorithm = FLAGS.arg_label_training_alg
         super(ArgumentLabelerStage, self).__init__(
-            name=name,
-            models=[ArgumentLabelerModel(training_algorithm, training_params)])
+            name, [ArgumentLabelerModel(training_algorithm, training_params)],
+            False, False, FLAGS.arg_label_log_differences)
         self.print_test_instances = FLAGS.regex_print_test_instances
 
     def _extract_parts(self, sentence, is_train):
@@ -190,52 +190,3 @@ class ArgumentLabelerStage(Stage):
                 effect=possible_causation.effect_tokens)
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
-
-    PERMISSIVE_KEY = 'Allowing partial matches'
-    STRICT_KEY = 'Not allowing partial matches'
-    @staticmethod
-    def aggregate_eval_results(results_list):
-        permissive = CausalityMetrics.aggregate(
-            [result_dict[ArgumentLabelerStage.PERMISSIVE_KEY]
-             for result_dict in results_list])
-        strict = CausalityMetrics.aggregate(
-            [result_dict[ArgumentLabelerStage.STRICT_KEY]
-             for result_dict in results_list])
-        return {ArgumentLabelerStage.PERMISSIVE_KEY: permissive,
-                ArgumentLabelerStage.STRICT_KEY: strict}
-
-    def _begin_evaluation(self):
-        self._predicted_sentences = []
-
-    def _prepare_for_evaluation(self, sentences):
-        # Copy over the existing ParsedSentence objects, with their pointers to
-        # their causation instance lists. That way we can pass them to
-        # CausalityMetrics as gold sentences.
-        # We also need to tell each CausationInstance that it has a new parent,
-        # or bad things will happen when we try to run IAA for evaluation.
-        self._gold_sentences = []
-        for sentence in sentences:
-            new_sentence = copy(sentence)
-            self._gold_sentences.append(new_sentence)
-            for causation_instance in new_sentence.causation_instances:
-                causation_instance.source_sentence = new_sentence
-
-    def _evaluate(self, sentences):
-        self._predicted_sentences.extend(sentences)
-        
-    def _complete_evaluation(self):
-        with_partial = CausalityMetrics(
-            self._gold_sentences, self._predicted_sentences, True,
-            FLAGS.arg_label_log_differences,
-            compare_degrees=False, compare_types=False)
-        without_partial = CausalityMetrics(
-            self._gold_sentences, self._predicted_sentences, False,
-            FLAGS.arg_label_log_differences,
-            compare_degrees=False, compare_types=False)
-
-        # TODO: actually log differences here
-
-        del self._gold_sentences
-        del self._predicted_sentences
-        return {self.PERMISSIVE_KEY: with_partial,
-                self.STRICT_KEY: without_partial}
