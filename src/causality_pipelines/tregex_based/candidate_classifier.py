@@ -2,7 +2,7 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 
 import logging
 
-from causality_pipelines.pairwise import PairwiseCausalityStage
+from causality_pipelines.tregex_based import PairwiseCausalityStage
 from data import Token, CausationInstance
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel

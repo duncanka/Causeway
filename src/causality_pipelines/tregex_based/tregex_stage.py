@@ -11,7 +11,7 @@ import time
 
 from data import ParsedSentence, Token
 from pipeline.models import Model
-from causality_pipelines.pairwise import PairwiseCausalityStage, \
+from causality_pipelines.tregex_based import PairwiseCausalityStage, \
     PossibleCausation
 from util import pairwise
 from util.metrics import ClassificationMetrics
@@ -143,7 +143,7 @@ class TRegexConnectiveModel(Model):
                 'normalize_vmod_no_agent_2',
                 'normalize_vmod_no_agent_3']
             tsurgeon_script_names = [
-                os.path.join('causality_pipelines', 'pairwise', 'tsurgeon_dep',
+                os.path.join('causality_pipelines', 'tregex_based', 'tsurgeon_dep',
                              script_name) + '.ts'
                 for script_name in tsurgeon_script_names]
 

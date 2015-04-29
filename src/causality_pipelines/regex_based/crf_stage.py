@@ -3,7 +3,7 @@ from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAG
 import logging
 import numpy as np
 
-from causality_pipelines.connective_based import PossibleCausation
+from causality_pipelines.regex_based import PossibleCausation
 from iaa import CausalityMetrics
 from pipeline import Stage
 from pipeline.models import CRFModel

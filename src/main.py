@@ -6,15 +6,15 @@ import logging
 import numpy as np
 import os
 import sys
-from causality_pipelines.connective_based.crf_stage import ArgumentLabelerStage
+from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from causality_pipelines.pairwise.candidate_classifier import CandidateClassifierStage
-from causality_pipelines.connective_based.regex_stage import RegexConnectiveStage
-from causality_pipelines.pairwise.tregex_stage import TRegexConnectiveStage
+from causality_pipelines.tregex_based.candidate_classifier import CandidateClassifierStage
+from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
+from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
 try:
     gflags.DEFINE_enum('pw_classifier_model', 'tree',

@@ -3,7 +3,7 @@ import logging
 import re
 import time
 
-from causality_pipelines.connective_based import PossibleCausation
+from causality_pipelines.regex_based import PossibleCausation
 from data import ParsedSentence
 from pipeline import ClassifierStage
 from pipeline.models import Model
