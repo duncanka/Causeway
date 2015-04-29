@@ -14,14 +14,14 @@ try:
                                   'deplen', 'tenses', 'connective'],
         'Features to use for simple causality model')
     DEFINE_integer('pw_candidate_max_wordsbtw', 10,
-                   "Maximum number of words between phrases before just making"
-                   " the value the max");
+                   "Pairwise classifier: maximum number of words between"
+                   " phrases before just making the value the max");
     DEFINE_integer('pw_candidate_max_dep_path_len', 3,
-                   "Maximum number of dependency path steps to allow before"
-                   " just making the value 'LONG-RANGE'");
+                   "Pairwise classifier: Maximum number of dependency path steps"
+                   " to allow before just making the value 'LONG-RANGE'");
     DEFINE_bool('pw_candidate_print_instances', False,
-                'Whether to print true positive, false positive, and false'
-                ' negative instances after testing')
+                'Pairwise classifier: Whether to print true positive, false'
+                ' positive, and false negative instances after testing')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -37,7 +37,6 @@ class PhrasePairModel(ClassifierModel):
     def __init__(self, classifier):
         super(PhrasePairModel, self).__init__(
             PhrasePairPart,
-            # Avoid any potential harm that could come to our class variable.
             PhrasePairModel.FEATURE_EXTRACTORS,
             FLAGS.pw_candidate_features, classifier)
 
@@ -153,9 +152,9 @@ PhrasePairModel.FEATURE_EXTRACTORS = [
 ]
 
 
-class CandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
+class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
     def __init__(self, classifier, name):
-        super(CandidateClassifierStage, self).__init__(
+        super(PairwiseCandidateClassifierStage, self).__init__(
             name=name, models=[PhrasePairModel(classifier)],
             print_test_instances=FLAGS.pw_candidate_print_instances)
         self._expected_causations = []

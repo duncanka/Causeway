@@ -12,7 +12,7 @@ FLAGS = gflags.FLAGS
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from causality_pipelines.tregex_based.candidate_classifier import CandidateClassifierStage
+from causality_pipelines.tregex_based.candidate_classifier import PairwiseCandidateClassifierStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
@@ -76,10 +76,9 @@ if __name__ == '__main__':
         candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
                                                           FLAGS.rebalance_ratio)
 
-        connective_stage = TRegexConnectiveStage('TRegex connectives')
-        candidate_classifier_stage = CandidateClassifierStage(
-            candidate_classifier, 'Candidate classifier')
-        stages = [connective_stage, candidate_classifier_stage]
+        stages = [TRegexConnectiveStage('TRegex connectives'),
+                  PairwiseCandidateClassifierStage(
+                      candidate_classifier, 'Candidate classifier')]
     else: # regex
         stages = [RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler')]
