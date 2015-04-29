@@ -16,7 +16,7 @@ try:
                  'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree',
                  'pattern', 'pattern+conn_parse_path', 'conn_rel_pos'],
                 'Features for the argument-labeling CRF')
-    DEFINE_string('arg_label_model_path', 'arg-labeler-crf.model',
+    DEFINE_string('arg_label_model_path', '../arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
     DEFINE_bool('arg_label_log_differences', False,
                 'Whether to log differences between gold and predicted results'
