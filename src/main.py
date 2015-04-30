@@ -89,15 +89,15 @@ if __name__ == '__main__':
     if FLAGS.eval_with_cv:
         logging.info("Evaluating with %d-fold cross-validation"
                      % FLAGS.cv_folds)
-        causality_pipeline.cross_validate()
-        causality_pipeline.print_eval_results()
+        eval_results = causality_pipeline.cross_validate()
+        causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:
             causality_pipeline.train()
 
         if FLAGS.evaluate:
             eval_results = causality_pipeline.evaluate()
-            causality_pipeline.print_eval_results()
+            causality_pipeline.print_eval_results(eval_results)
         elif FLAGS.test_paths:
             causality_pipeline.test()
 

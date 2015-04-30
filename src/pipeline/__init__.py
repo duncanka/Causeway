@@ -39,7 +39,7 @@ class Pipeline(object):
         self.stages = listify(stages)
         self.reader = reader
         self.writer = writer
-        self.eval_results = None
+        self._evaluating = False
 
     def _read_instances(self, paths=None):
         logging.info("Creating instances...")
@@ -106,8 +106,8 @@ class Pipeline(object):
         else:
             print_indented(indent_baseline, results)
 
-    def print_eval_results(self, indent_baseline=0):
-        for stage, result in zip(self.stages, self.eval_results):
+    def print_eval_results(self, eval_results, indent_baseline=0):
+        for stage, result in zip(self.stages, eval_results):
             print_indented(indent_baseline, "Evaluation for stage ",
                            stage.name, ':', sep='')
             self.print_stage_results(indent_baseline + 1, result)
@@ -136,19 +136,27 @@ class Pipeline(object):
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''
-        Evaluates a single batch of instances. In addition to being returned,
-        the resulting evaluation metrics are stored in self.eval_results.
+        Evaluates a single batch of instances. Returns evaluation metrics.
         '''
-        self.eval_results = []
+        eval_results = []
+        self._evaluating = True
+        for stage in self.stages:
+            stage._begin_evaluation()
+
         self.test(instances)
-        return self.eval_results
+
+        for stage in self.stages:
+            eval_results.append(stage._complete_evaluation())
+        self._evaluating = False
+
+        return eval_results
 
     def __test_instances(self, instances):
         for stage in self.stages:
-            if self.eval_results is not None:
+            if self._evaluating:
                 stage._prepare_for_evaluation(instances)
             stage.test(instances)
-            if self.eval_results is not None:
+            if self._evaluating:
                 stage._evaluate(instances)
 
     def __set_up_paths(self):
@@ -195,11 +203,8 @@ class Pipeline(object):
         If instances is an integer, instances are read from the files specified
         in the test_path flags, and the parameter is interpreted as the number
         of instances to read/process per batch. If instances is a list, it is
-        used instead of reading instances from files.
+        used instead of reading instances from files. 
         """
-        if self.eval_results is not None:
-            for stage in self.stages:
-                stage._begin_evaluation()
 
         if isinstance(instances, list):
             print 'Testing', len(instances), 'instances'
@@ -208,11 +213,6 @@ class Pipeline(object):
             batch_size = instances
             self.__set_up_paths()
             self.__test_instances_from_reader(batch_size)
-
-        if self.eval_results is not None:
-            for stage in self.stages:
-                self.eval_results.append(stage._complete_evaluation())
-
 
 class Stage(object):
     def __init__(self, name, models):
