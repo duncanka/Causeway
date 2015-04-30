@@ -2,9 +2,10 @@ import os
 import sklearn
 from sklearn import tree
 import subprocess
+import sys
 
 def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot'):
-    sklearn.tree.export_graphviz(
+    tree.export_graphviz(
         tree_classifier, out_file=filename, max_depth=20,
         feature_names=model.feature_name_dictionary.ids_to_names)
 
@@ -25,4 +26,4 @@ def vis_pipeline_trees(pipeline):
         vis_tree(model, classifier)
     else:
         for i, estimator in classifier.estimators_:
-            vis_tree(m, estimator, '/tmp/tree_%d.dot' % i)
+            vis_tree(model, estimator, '/tmp/tree_%d.dot' % i)
