@@ -41,11 +41,15 @@ def truncated_string(string, truncate_to=25):
         truncated += '...'
     return truncated
 
-def partition(some_list, num_partitions):
-    ''' From http://stackoverflow.com/a/2660034/4044809 '''
-    division = len(some_list) / float(num_partitions)
-    partitions = [some_list[int(round(division * i)):
-                            int(round(division * (i + 1)))]
+def partition(list_to_partition, num_partitions):
+    '''
+    Returns a list of lists, dividing list_to_partition as evenly as possible
+    into sublists.
+    From http://stackoverflow.com/a/2660034/4044809
+    '''
+    division = len(list_to_partition) / float(num_partitions)
+    partitions = [list_to_partition[int(round(division * i)):
+                                    int(round(division * (i + 1)))]
                   for i in xrange(num_partitions)]
     return partitions
 
