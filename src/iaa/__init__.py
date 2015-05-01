@@ -126,8 +126,7 @@ class CausalityMetrics(object):
                 (not is_given_id and
                  self.ids_considered == self.IDsConsidered.NonGivenOnly)):
                 causations.append(instance)
-        sort_key = lambda inst: inst.connective[0].start_offset
-        return sorted(causations, key=sort_key)
+        return causations
 
     def _match_connectives(self, gold, predicted):
         matching_instances = []
@@ -143,8 +142,9 @@ class CausalityMetrics(object):
                         "Can't compare annotations on non-identical sentences")
             gold_causations = self.__get_causations(gold_sentence)
             predicted_causations = self.__get_causations(predicted_sentence)
+            sort_key = lambda inst: inst.connective[0].start_offset
             diff = SequenceDiff(gold_causations, predicted_causations,
-                                compare_connectives)
+                                compare_connectives, sort_key)
             matching_instances.extend(diff.get_matching_pairs())
             gold_only_instances.extend(diff.get_a_only_elements())
             predicted_only_instances.extend(diff.get_b_only_elements())

@@ -1,7 +1,10 @@
 # Based on http://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Longest_common_subsequence#Python
 
 class SequenceDiff(object):
-    def __init__(self, a, b, comparator=lambda x,y: x==y):
+    def __init__(self, a, b, comparator=lambda x, y: x == y, sort_by_key=None):
+        if sort_by_key:
+            a = sorted(a, key=sort_by_key)
+            b = sorted(b, key=sort_by_key)
         self.a = a
         self.b = b
         self.comparator = comparator
