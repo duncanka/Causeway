@@ -7,6 +7,7 @@ import numpy as np
 import os
 import sys
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
+from data import ParsedSentence
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
@@ -84,7 +85,8 @@ if __name__ == '__main__':
                   ArgumentLabelerStage('CRF arg labeler')]
 
     causality_pipeline = Pipeline(
-        stages, DirectoryReader((r'.*\.ann$',), StandoffReader()))
+        stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
+        copy_fn=ParsedSentence.shallow_copy_with_causations)
 
     if FLAGS.eval_with_cv:
         logging.info("Evaluating with %d-fold cross-validation"

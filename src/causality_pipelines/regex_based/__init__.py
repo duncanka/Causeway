@@ -26,24 +26,18 @@ class IAAEvaluatedStage(Stage):
         self.log_differences = log_differences
         self.compare_degrees = compare_degrees
         self.compare_types = compare_types
+        # Used during evaluation
+        self._predicted_sentences = None
+        self._gold_sentences = None
 
     def _begin_evaluation(self):
         self._predicted_sentences = []
-
-    def _prepare_for_evaluation(self, sentences):
-        # Copy over the existing ParsedSentence objects, with their pointers to
-        # their causation instance lists. That way we can pass them to
-        # CausalityMetrics as gold sentences.
-        # We also need to tell each CausationInstance that it has a new parent,
-        # or bad things will happen when we try to run IAA for evaluation.
         self._gold_sentences = []
-        for sentence in sentences:
-            new_sentence = copy(sentence)
-            self._gold_sentences.append(new_sentence)
-            for causation_instance in new_sentence.causation_instances:
-                causation_instance.source_sentence = new_sentence
 
-    def _evaluate(self, sentences):
+    def _evaluate(self, sentences, original_sentences):
+        # TODO: replace storing everything with incrementally building
+        # CausalityMetrics.
+        self._gold_sentences.extend(original_sentences)
         self._predicted_sentences.extend(sentences)
 
     _PERMISSIVE_KEY = 'Allowing partial matches'
@@ -61,8 +55,8 @@ class IAAEvaluatedStage(Stage):
 
         # TODO: actually log differences here
 
-        del self._gold_sentences
-        del self._predicted_sentences
+        self._gold_sentences = []
+        self._predicted_sentences = []
         return {self._PERMISSIVE_KEY: with_partial,
                 self._STRICT_KEY: without_partial}
 

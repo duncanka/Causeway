@@ -157,7 +157,6 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
         super(PairwiseCandidateClassifierStage, self).__init__(
             name=name, models=[PhrasePairModel(classifier)],
             print_test_instances=FLAGS.pw_candidate_print_instances)
-        self._expected_causations = []
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
@@ -191,13 +190,11 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
         ''' Select correct ancestor for this method '''
         return PairwiseCausalityStage._complete_evaluation(self)
 
-    def _prepare_for_evaluation(self, sentences):
-        self._expected_causations = [set(sentence.causation_instances)
-                                     for sentence in sentences]
-
-    def _evaluate(self, sentences):
+    def _evaluate(self, sentences, original_sentences):
+        expected_causations = [sentence.causation_instances
+                                     for sentence in original_sentences]
         for sentence, expected_causation_set in zip(sentences,
-                                                    self._expected_causations):
+                                                    expected_causations):
             predicted_cause_effect_pairs = [i.get_cause_and_effect_heads() for
                                             i in sentence.causation_instances]
             expected_cause_effect_pairs = [i.get_cause_and_effect_heads() for
@@ -206,5 +203,3 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
                 expected_cause_effect_pairs, predicted_cause_effect_pairs,
                 self.tp_pairs, self.fp_pairs, self.fn_pairs,
                 self.all_instances_metrics)
-
-        self._expected_causations = []

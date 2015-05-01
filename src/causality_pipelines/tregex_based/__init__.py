@@ -62,7 +62,9 @@ class PairwiseCausalityStage(Stage):
                               fn_pairs, metrics):
         '''
         Match expected and predicted cause/effect pairs from a single sentence.
-        expected_pairs and found_pairs are lists of Token tuples.
+        expected_pairs and found_pairs are lists of Token tuples. For Tokens to
+        match, they must have come from the same original sentence object
+        (though this will still work if they came from shallow-copied objects).
         tp_pairs, fp_pairs, and fn_pairs are all lists in which to record the
         pairs of various sorts for later examination (ignored for any that are
         None).

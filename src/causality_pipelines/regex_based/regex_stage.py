@@ -177,7 +177,7 @@ class RegexConnectiveStage(ClassifierStage):
         self._tp_connectives, self._fp_connectives, self._fn_connectives = (
             [], [], [])
 
-    def _evaluate(self, sentences):
+    def _evaluate(self, sentences, original_sentences):
         for sentence in sentences:
             expected_connectives = set(
                 tuple(sorted(t.index for t in instance.connective))

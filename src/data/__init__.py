@@ -461,6 +461,23 @@ class ParsedSentence(object):
         raise ValueError(
             "Somehow you passed a node whose leaf isn't under its root. Wow.")
 
+    @staticmethod
+    def shallow_copy_with_causations(sentence):
+        '''
+        Creates a shallow copy of sentence, but with causation_instances on the
+        new object set to copies of the CausationInstance objects, so that they
+        can know their correct source sentence.
+        '''
+        cls = sentence.__class__
+        new_sentence = cls.__new__(cls)
+        new_sentence.__dict__.update(sentence.__dict__)
+        new_sentence.causation_instances = []
+        for causation_instance in sentence.causation_instances:
+            new_instance = copy(causation_instance)
+            new_instance.source_sentence = new_sentence
+            new_sentence.causation_instances.append(new_instance)
+        return new_sentence
+
     ###########################################
     # Private initialization support functions
     ###########################################

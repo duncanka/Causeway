@@ -677,6 +677,7 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
         super(TRegexConnectiveStage, self).__init__(
             print_test_instances=FLAGS.tregex_print_test_instances, name=name,
             models=[TRegexConnectiveModel(part_type=ParsedSentence)])
+        self.pairwise_only_metrics = None # used during evaluation
 
     PRODUCED_ATTRIBUTES = ['possible_causations']
 
@@ -704,11 +705,11 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
         all_instances_metrics = PairwiseCausalityStage._complete_evaluation(
             self)
         pairwise_only_metrics = self.pairwise_only_metrics
-        del self.pairwise_only_metrics
+        self.pairwise_only_metrics = None
         return {TRegexConnectiveStage.ALL_INSTANCES_KEY: all_instances_metrics,
                 TRegexConnectiveStage.PAIRWISE_KEY: pairwise_only_metrics}
 
-    def _evaluate(self, sentences):
+    def _evaluate(self, sentences, original_sentences):
         for sentence in sentences:
             predicted_pairs = [(pc.arg1, pc.arg2)
                                for pc in sentence.possible_causations]
@@ -721,5 +722,5 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
 
             self.pairwise_only_metrics.tp += tp
             self.pairwise_only_metrics.fp += fp
-            fns_to_ignore = sum(1 for pair in expected_pairs if None in pair)
+            fns_to_ignore = sum([1 for pair in expected_pairs if None in pair])
             self.pairwise_only_metrics.fn += fn - fns_to_ignore

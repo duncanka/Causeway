@@ -35,11 +35,21 @@ except DuplicateFlagError as e:
 
 
 class Pipeline(object):
-    def __init__(self, stages, reader, writer=None):
+    def __init__(self, stages, reader, writer=None, copy_fn=deepcopy):
+        '''
+        copy_fn is the function to use when copying over instances to avoid
+        lasting impacts of modification during testing. Defaults to built-in
+        deep copy; providing an alternative function can make copying faster if
+        not all elements need to be copied to protect originals from
+        modification. Clients should make certain that the copy function
+        provided duplicates all instance properties that may be modified by
+        testing at *any point* in the pipeline. 
+        '''
         self.stages = listify(stages)
         self.reader = reader
         self.writer = writer
         self._evaluating = False
+        self._copy_fn = copy_fn
 
     def _read_instances(self, paths=None):
         logging.info("Creating instances...")
@@ -75,8 +85,9 @@ class Pipeline(object):
                 *[f for f in folds if f is not fold]))
             self.train(training)
 
-            # Copy testing data so we don't overwrite original instances.
-            fold_results = self.evaluate(deepcopy(testing))
+            # Evaluation copies the data for testing, so we don't have to worry
+            # about overwriting our original instances.
+            fold_results = self.evaluate(testing)
 
             if FLAGS.cv_print_fold_results:
                 print "Fold", i + 1, "results:"
@@ -113,11 +124,23 @@ class Pipeline(object):
             self.print_stage_results(indent_baseline + 1, result)
 
     def train(self, instances=None):
+        '''
+        Trains all stages in the pipeline. Each stage is trained on instances
+        on which the previous stage has been tested on, so that it sees a
+        realistic view of what its inputs will look like. The instance objects
+        provided in instances are not modified in this process.
+        '''
         if instances is None:
             instances = self._read_instances(FLAGS.train_paths)
             logging.info("%d instances found" % len(instances))
         else:
-            logging.info("Training on %d instances" % len(instances))
+            # Copy over instances so that when test() is called below, it won't
+            # overwrite the originals. This is especially important during
+            # cross-validation, when we could otherwise overwrite data that will
+            # later be used again for both training and testing.
+            if len(self.stages) > 1:
+                instances = [self._copy_fn(instance) for instance in instances]
+                logging.info("Training on %d instances" % len(instances))
 
         for stage in self.stages:
             logging.info("Training stage %s..." % stage.name)
@@ -152,12 +175,13 @@ class Pipeline(object):
         return eval_results
 
     def __test_instances(self, instances):
+        original_instances = instances
+        if self._evaluating:
+            instances = [self._copy_fn(instance) for instance in instances]
         for stage in self.stages:
-            if self._evaluating:
-                stage._prepare_for_evaluation(instances)
             stage.test(instances)
             if self._evaluating:
-                stage._evaluate(instances)
+                stage._evaluate(instances, original_instances)
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
@@ -203,7 +227,9 @@ class Pipeline(object):
         If instances is an integer, instances are read from the files specified
         in the test_path flags, and the parameter is interpreted as the number
         of instances to read/process per batch. If instances is a list, it is
-        used instead of reading instances from files. 
+        used instead of reading instances from files, and the original instances
+        are modified during testing. (Note that the original instance are NOT
+        modified during evaluation.)
         """
 
         if isinstance(instances, list):
@@ -285,7 +311,12 @@ class Stage(object):
         '''
         return results_list
 
-    def _evaluate(self, instances):
+    def _evaluate(self, instances, original_instances):
+        '''
+        Evaluates a single batch of instances. original_instances is the
+        list of instances unmodified by testing, and from which instances were
+        copied before testing.
+        '''
         raise NotImplementedError
 
     def _extract_parts(self, instance, is_train):
@@ -299,14 +330,12 @@ class Stage(object):
 
     def _complete_evaluation(self):
         '''
-        Should return the evaluation results for this stage. If a dict is
-        returned, it will be treated as a collection of named result metrics,
-        where each key indicates the name of the corresponding metric.
+        Should return the evaluation results for this stage, incorporating the
+        results of all calls to self._evaluate. If a dict is returned, it will
+        be treated as a collection of named result metrics, where each key
+        indicates the name of the corresponding metric.
         '''
-        pass
-
-    def _prepare_for_evaluation(self, instances):
-        pass
+        raise NotImplementedError
 
 class ClassifierStage(Stage):
     def __init__(self, name, models, *args, **kwargs):
