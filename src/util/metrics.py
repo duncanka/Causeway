@@ -34,6 +34,18 @@ class ClassificationMetrics(object):
         #assert tp >= 0 and fp >= 0 and fn >= 0 and (tn is None or tn >= 0), (
         #    'Invalid raw metrics values (%s)' % ((tp, fp, fn, tn),))
 
+    def __add__(self, other):
+        summed = copy.copy(self)
+        summed._tp += other._tp
+        summed._fp += other._fp
+        summed._tn += other._tn
+        if summed._fn is None or other._fn is None:
+            summed._fn = None
+        else:
+            summed._fn += other._fn
+        summed._finalized = False
+        return summed
+
     def _finalize_counts(self):
         tp = float(self._tp)
         self._precision = tp / safe_divisor(tp + self._fp)

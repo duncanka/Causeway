@@ -86,6 +86,9 @@ class CausalityMetrics(object):
     def __init__(self, gold, predicted, allow_partial,
                  save_differences=False, ids_considered=None,
                  compare_degrees=True, compare_types=True):
+        assert len(gold) == len(predicted), (
+            "Cannot compute IAA for different-sized datasets")
+
         if ids_considered is None:
             ids_considered = CausalityMetrics.IDsConsidered.Both
         self.allow_partial = allow_partial
@@ -95,9 +98,6 @@ class CausalityMetrics(object):
         self.gold_only_instances = []
         self.predicted_only_instances = []
         self.property_differences = []
-
-        assert len(gold) == len(predicted), (
-            "Cannot compute IAA for different-sized datasets")
 
         # Compute attributes that take a little more work.
         self.connective_metrics, matches = self._match_connectives(
@@ -115,6 +115,31 @@ class CausalityMetrics(object):
             self.causation_type_matrix = None
         self.arg_metrics, self.arg_label_matrix = self._match_arguments(
             matches, gold)
+
+    def __add__(self, other):
+        if (self.allow_partial != other.allow_partial or
+            [self.degree_matrix, other.degree_matrix].count(None) == 1 or
+            [self.causation_type_matrix,
+             other.causation_type_matrix].count(None) == 1):
+            raise ValueError("Can't add causality metrics with different"
+                             " comparison criteria")
+
+        sum_metrics = copy(self)
+        # Add recorded instances/differences
+        sum_metrics.gold_only_instances.extend(other.gold_only_instances)
+        sum_metrics.predicted_only_instances.extend(
+            other.predicted_only_instances)
+        sum_metrics.property_differences.extend(other.property_differences)
+        # Add together submetrics, if they exist
+        sum_metrics.connective_metrics += other.connective_metrics
+        if sum_metrics.degree_matrix is not None:
+            sum_metrics.degree_matrix += other.degree_matrix
+        if sum_metrics.causation_type_matrix is not None:
+            sum_metrics.causation_type_matrix += other.causation_type_matrix
+        sum_metrics.arg_metrics += other.arg_metrics
+        sum_metrics.arg_label_matrix += other.arg_label_matrix
+
+        return sum_metrics
 
     def __get_causations(self, sentence):
         causations = []
