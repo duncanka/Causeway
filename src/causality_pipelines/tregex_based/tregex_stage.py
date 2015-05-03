@@ -717,8 +717,8 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
                               for i in sentence.causation_instances]
             assert (None, None) not in expected_pairs
             tp, fp, fn = self.match_causation_pairs(
-                expected_pairs, predicted_pairs, self.tp_pairs, self.fp_pairs,
-                self.fn_pairs, self.all_instances_metrics)
+                expected_pairs, predicted_pairs, self._tp_pairs, self._fp_pairs,
+                self._fn_pairs, self._all_instances_metrics)
 
             self.pairwise_only_metrics.tp += tp
             self.pairwise_only_metrics.fp += fp

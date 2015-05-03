@@ -19,24 +19,25 @@ class PairwiseCausalityStage(Stage):
     def __init__(self, print_test_instances, *args, **kwargs):
         self.print_test_instances = print_test_instances
         super(PairwiseCausalityStage, self).__init__(*args, **kwargs)
+        # Used in evaluation
+        self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
+        self._all_instances_metrics = None
 
     def _begin_evaluation(self):
-        self.all_instances_metrics = ClassificationMetrics(finalize=False)
+        self._all_instances_metrics = ClassificationMetrics(finalize=False)
         if self.print_test_instances:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = [], [], []
+            self._tp_pairs, self._fp_pairs, self._fn_pairs = [], [], []
         else:
-            self.tp_pairs, self.fp_pairs, self.fn_pairs = None, None, None
+            self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
 
     def _complete_evaluation(self):
-        self.all_instances_metrics._finalize_counts()
+        self._all_instances_metrics._finalize_counts()
         if self.print_test_instances:
             PairwiseCausalityStage.print_instances_by_eval_result(
-                self.tp_pairs, self.fp_pairs, self.fn_pairs)
-        del self.tp_pairs
-        del self.fp_pairs
-        del self.fn_pairs
-        all_instances_metrics = self.all_instances_metrics
-        del self.all_instances_metrics
+                self._tp_pairs, self._fp_pairs, self._fn_pairs)
+        self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
+        all_instances_metrics = self._all_instances_metrics
+        self._all_instances_metrics = None
         return all_instances_metrics
 
     @staticmethod
