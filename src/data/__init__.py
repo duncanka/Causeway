@@ -177,6 +177,7 @@ class ParsedSentence(object):
         for token in tokens:
             depth = self.get_depth(token)
             if depth < min_depth or (depth == min_depth and
+                head is not None and
                 self._token_is_preferred_for_head_to(token, head)):
                 head = token
                 min_depth = depth
@@ -477,6 +478,40 @@ class ParsedSentence(object):
             new_instance.source_sentence = new_sentence
             new_sentence.causation_instances.append(new_instance)
         return new_sentence
+
+    def get_auxiliaries_string(self, head):
+        # If it's not a copular construction and it's a noun phrase, the whole
+        # argument is a noun phrase, so the notion of tense doesn't apply.
+        copulas = self.get_children(head, 'cop')
+        if not copulas and head.pos in Token.NOUN_TAGS:
+            return '<NOM>'
+
+        auxiliaries = self.get_children(head, 'aux')
+        passive_auxes = self.get_children(head, 'auxpass')
+        auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
+        auxes_plus_head.sort(key=lambda token: token.start_offset)
+
+        CONTRACTION_DICT = {
+            "'s": 'is',
+             "'m": 'am',
+             "'d": 'would',
+             "'re": 'are',
+             'wo': 'will', # from "won't"
+             'ca': 'can' # from "can't"
+        }
+        aux_token_strings = []
+        for token in auxes_plus_head:
+            if token is head:
+                aux_token_strings.append(token.pos)
+            else:
+                if token in copulas:
+                    aux_token_strings.append('COP.' + token.pos)
+                else:
+                    aux_token_strings.append(
+                         CONTRACTION_DICT.get(token.original_text,
+                                              token.original_text))
+
+        return '_'.join(aux_token_strings)
 
     ###########################################
     # Private initialization support functions

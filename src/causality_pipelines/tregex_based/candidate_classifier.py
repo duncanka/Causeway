@@ -15,10 +15,10 @@ try:
         'Features to use for simple causality model')
     DEFINE_integer('pw_candidate_max_wordsbtw', 10,
                    "Pairwise classifier: maximum number of words between"
-                   " phrases before just making the value the max");
+                   " phrases before just making the value the max")
     DEFINE_integer('pw_candidate_max_dep_path_len', 3,
                    "Pairwise classifier: Maximum number of dependency path steps"
-                   " to allow before just making the value 'LONG-RANGE'");
+                   " to allow before just making the value 'LONG-RANGE'")
     DEFINE_bool('pw_candidate_print_instances', False,
                 'Pairwise classifier: Whether to print true positive, false'
                 ' positive, and false negative instances after testing')
@@ -40,7 +40,6 @@ class PhrasePairModel(ClassifierModel):
             PhrasePairModel.FEATURE_EXTRACTORS,
             FLAGS.pw_candidate_features, classifier)
 
-    # First define longer feature extraction functions.
     @staticmethod
     def words_btw_heads(part):
         words_btw = part.instance.count_words_between(
@@ -80,44 +79,10 @@ class PhrasePairModel(ClassifierModel):
             PhrasePairModel.__cached_tenses_sentence = head.parent_sentence
             PhrasePairModel.__cached_tenses = {}
 
-        tense = PhrasePairModel.__extract_tense_helper(head)
+        tense = head.parent_sentence.get_auxiliaries_string(head)
         PhrasePairModel.__cached_tenses[head] = tense
         return tense
 
-    @staticmethod
-    def __extract_tense_helper(head):
-        # If it's not a copular construction and it's a noun phrase, the whole
-        # argument is a noun phrase, so the notion of tense doesn't apply.
-        copulas = head.parent_sentence.get_children(head, 'cop')
-        if not copulas and head.pos in Token.NOUN_TAGS:
-            return '<NOM>'
-
-        auxiliaries = head.parent_sentence.get_children(head, 'aux')
-        passive_auxes = head.parent_sentence.get_children(head, 'auxpass')
-        auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
-        auxes_plus_head.sort(key=lambda token: token.start_offset)
-
-        CONTRACTION_DICT = {
-            "'s": 'is',
-             "'m": 'am',
-             "'d": 'would',
-             "'re": 'are',
-             'wo': 'will',  # from "won't"
-             'ca': 'can'  # from "can't"
-        }
-        aux_token_strings = []
-        for token in auxes_plus_head:
-            if token is head:
-                aux_token_strings.append(token.pos)
-            else:
-                if token in copulas:
-                    aux_token_strings.append('COP.' + token.pos)
-                else:
-                    aux_token_strings.append(
-                         CONTRACTION_DICT.get(token.original_text,
-                                              token.original_text))
-
-        return '_'.join(aux_token_strings)
 
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
@@ -148,7 +113,7 @@ PhrasePairModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [PhrasePairModel.extract_tense(head)
-                         for head in part.head_token_1, part.head_token_2])),
+                         for head in part.head_token_1, part.head_token_2]))
 ]
 
 
