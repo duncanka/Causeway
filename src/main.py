@@ -8,6 +8,7 @@ import os
 import sys
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from data import ParsedSentence
+from causality_pipelines.regex_based.candidate_classifier import RegexCandidateClassifierStage
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
@@ -18,7 +19,7 @@ from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
 try:
-    gflags.DEFINE_enum('pw_classifier_model', 'tree',
+    gflags.DEFINE_enum('classifier_model', 'tree',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
@@ -62,27 +63,29 @@ if __name__ == '__main__':
     np.random.seed(seed)
     print "Using seed:", seed
 
+    if FLAGS.classifier_model == 'tree':
+        candidate_classifier = tree.DecisionTreeClassifier()
+    elif FLAGS.classifier_model == 'knn':
+        candidate_classifier = neighbors.KNeighborsClassifier()
+    elif FLAGS.classifier_model == 'logistic':
+        candidate_classifier = linear_model.LogisticRegression()
+    elif FLAGS.classifier_model == 'svm':
+        candidate_classifier = svm.SVC()
+    elif FLAGS.classifier_model == 'forest':
+        candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
+    
+    candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
+                                                      FLAGS.rebalance_ratio)
+
     if FLAGS.pipeline_type == 'tregex':
-        if FLAGS.pw_classifier_model == 'tree':
-            candidate_classifier = tree.DecisionTreeClassifier()
-        elif FLAGS.pw_classifier_model == 'knn':
-            candidate_classifier = neighbors.KNeighborsClassifier()
-        elif FLAGS.pw_classifier_model == 'logistic':
-            candidate_classifier = linear_model.LogisticRegression()
-        elif FLAGS.pw_classifier_model == 'svm':
-            candidate_classifier = svm.SVC()
-        elif FLAGS.pw_classifier_model == 'forest':
-            candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
-
-        candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
-                                                          FLAGS.rebalance_ratio)
-
         stages = [TRegexConnectiveStage('TRegex connectives'),
                   PairwiseCandidateClassifierStage(
                       candidate_classifier, 'Candidate classifier')]
     else: # regex
         stages = [RegexConnectiveStage('Regex connectives'),
-                  ArgumentLabelerStage('CRF arg labeler')]
+                  ArgumentLabelerStage('CRF arg labeler'),
+                  RegexCandidateClassifierStage(candidate_classifier,
+                                                'Candidate classifier')]
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
