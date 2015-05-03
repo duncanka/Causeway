@@ -11,7 +11,8 @@ try:
     DEFINE_list('arg_label_features',
                 ['lemma', 'pos', 'is_connective', # 'conn_parse_dist',
                  'conn_parse_path', 'lexical_conn_dist', 'in_parse_tree',
-                 'pattern', 'pattern+conn_parse_path', 'conn_rel_pos'],
+                 'pattern', 'pattern+conn_parse_path', 'conn_rel_pos',
+                 'is_alnum'],
                 'Features for the argument-labeling CRF')
     DEFINE_string('arg_label_model_path', '../arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
@@ -158,7 +159,9 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
             observation.part.matching_pattern,
             ArgumentLabelerModel.get_connective_parse_path(observation))),
     FeatureExtractor('conn_rel_pos',
-                     ArgumentLabelerModel.get_connective_relative_position)
+                     ArgumentLabelerModel.get_connective_relative_position),
+    FeatureExtractor('is_alnum', lambda observation: (
+                                    observation.observation.lemma.isalnum()))
 ]
 
 
