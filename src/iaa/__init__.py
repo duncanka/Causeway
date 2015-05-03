@@ -360,7 +360,7 @@ class CausalityMetrics(object):
         keep copying strings over to concatenate them).
         '''
         string_buffer = StringIO()
-        self.pp(True, True, True, 0, string_buffer)
+        self.pp(None, None, None, 0, string_buffer)
         return string_buffer.getvalue()
 
     @staticmethod
