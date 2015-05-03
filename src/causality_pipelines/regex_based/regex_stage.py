@@ -183,7 +183,7 @@ class RegexConnectiveStage(ClassifierStage):
                 tuple(sorted(t.index for t in instance.connective))
                 for instance in sentence.causation_instances)
             predicted_connectives = [
-                tuple(sorted(t.index for t in pc.connective_tokens))
+                tuple(sorted(t.index for t in pc.connective))
                 for pc in sentence.possible_causations]
 
             for predicted in predicted_connectives:

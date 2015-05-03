@@ -54,19 +54,19 @@ class ArgumentLabelerModel(CRFModel):
         return observations, labels
     
     def _label_part(self, part, crf_labels):
-        part.cause_tokens = []
-        part.effect_tokens = []
+        part.cause = []
+        part.effect = []
         for token, label in zip(part.sentence.tokens, crf_labels):
             if label == self.CAUSE_LABEL:
-                part.cause_tokens.append(token)
+                part.cause.append(token)
             elif label == self.EFFECT_LABEL:
-                part.effect_tokens.append(token)
+                part.effect.append(token)
 
     @staticmethod
     def get_connective_parse_distance(observation):
         sentence = observation.part.sentence
         _, closest_connective_distance = sentence.get_closest_of_tokens(
-            observation.observation, observation.part.connective_tokens)
+            observation.observation, observation.part.connective)
         return closest_connective_distance
 
     @staticmethod
@@ -74,7 +74,7 @@ class ArgumentLabelerModel(CRFModel):
         word = observation.observation
         sentence = observation.part.sentence
         closest_connective_token, _ = sentence.get_closest_of_tokens(
-            word, observation.part.connective_tokens)
+            word, observation.part.connective)
         if closest_connective_token is None:
             return 'NO_PATH'
 
@@ -91,7 +91,7 @@ class ArgumentLabelerModel(CRFModel):
         word = observation.observation
         sentence = observation.part.sentence
         closest_connective_token, _ = sentence.get_closest_of_tokens(
-            word, observation.part.connective_tokens, False) # lexically closest
+            word, observation.part.connective, False) # lexically closest
         if word.index < closest_connective_token.index:
             return ArgumentLabelerModel.RELATIVE_POSITIONS.Before
         elif word.index > closest_connective_token.index:
@@ -115,7 +115,7 @@ class ArgumentLabelerModel(CRFModel):
             # TODO: make this function return a signed value?
             min_distance = np.inf
             min_abs_distance = np.inf
-            for connective_token in observation.part.connective_tokens:
+            for connective_token in observation.part.connective:
                 new_distance = connective_token.index - word.index
                 new_abs_distance = abs(new_distance)
                 if new_abs_distance < min_abs_distance:
@@ -140,7 +140,7 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     FeatureExtractor(
         'is_connective',
         lambda observation: (observation.observation in
-                             observation.part.connective_tokens)),
+                             observation.part.connective)),
     FeatureExtractor(
         'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
     FeatureExtractor(
@@ -168,7 +168,7 @@ class ArgumentLabelerStage(IAAEvaluatedStage):
             training_algorithm = FLAGS.arg_label_training_alg
         super(ArgumentLabelerStage, self).__init__(
             name, [ArgumentLabelerModel(training_algorithm, training_params)],
-            False, False, FLAGS.arg_label_log_differences)
+            False, False, FLAGS.arg_label_log_differences, True)
 
     def _extract_parts(self, sentence, is_train):
         if is_train:
@@ -179,13 +179,3 @@ class ArgumentLabelerStage(IAAEvaluatedStage):
                     if possible_causation.true_causation_instance]
         else:
             return sentence.possible_causations
-
-    def _decode_labeled_parts(self, sentence, labeled_parts):
-        sentence.causation_instances = []
-        for possible_causation in labeled_parts:
-            sentence.add_causation_instance(
-                connective=possible_causation.connective_tokens,
-                cause=possible_causation.cause_tokens,
-                effect=possible_causation.effect_tokens)
-
-    CONSUMED_ATTRIBUTES = ['possible_causations']
