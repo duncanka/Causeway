@@ -182,9 +182,9 @@ class RegexConnectiveStage(ClassifierStage):
             expected_connectives = set(
                 tuple(sorted(t.index for t in instance.connective))
                 for instance in sentence.causation_instances)
-            predicted_connectives = [
+            predicted_connectives = set([
                 tuple(sorted(t.index for t in pc.connective))
-                for pc in sentence.possible_causations]
+                for pc in sentence.possible_causations])
 
             for predicted in predicted_connectives:
                 if predicted in expected_connectives:
