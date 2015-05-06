@@ -44,15 +44,15 @@ class ArgumentLabelerModel(CRFModel):
 
     def _sequences_for_part(self, part, is_train):
         # part for this model is a PossibleCausation.
-        observations = part.sentence.tokens
+        observations = part.sentence.tokens[1:] # Exclude ROOT (hence -1s below)
         if is_train:
             labels = ['None'] * len(observations)
             if part.true_causation_instance.cause:
                 for cause_token in part.true_causation_instance.cause:
-                    labels[cause_token.index] = self.CAUSE_LABEL
+                    labels[cause_token.index - 1] = self.CAUSE_LABEL
             if part.true_causation_instance.effect:
                 for effect_token in part.true_causation_instance.effect:
-                    labels[effect_token.index] = self.EFFECT_LABEL
+                    labels[effect_token.index - 1] = self.EFFECT_LABEL
         else: # testing time
             labels = None
         return observations, labels
@@ -60,7 +60,8 @@ class ArgumentLabelerModel(CRFModel):
     def _label_part(self, part, crf_labels):
         part.cause = []
         part.effect = []
-        for token, label in zip(part.sentence.tokens, crf_labels):
+        # Labels exclude ROOT token.
+        for token, label in zip(part.sentence.tokens[1:], crf_labels):
             if label == self.CAUSE_LABEL:
                 part.cause.append(token)
             elif label == self.EFFECT_LABEL:
@@ -82,7 +83,7 @@ class ArgumentLabelerModel(CRFModel):
         if closest_connective_token is None:
             return 'NO_PATH'
 
-        deps = sentence.extract_dependency_path(word, closest_connective_token,
+        deps = sentence.extract_dependency_path(closest_connective_token, word,
                                                 False)
         if len(deps) > FLAGS.arg_label_max_dep_path_len:
             return 'LONG-RANGE'
