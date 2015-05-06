@@ -4,7 +4,7 @@ import numpy as np
 
 from causality_pipelines.regex_based import PossibleCausation, IAAEvaluatedStage
 from pipeline.models import CRFModel
-from pipeline.feature_extractors import FeatureExtractor
+from pipeline.feature_extractors import FeatureExtractor, SetValuedFeatureExtractor
 from util import Enum
 
 try:
@@ -159,13 +159,15 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
                      FeatureExtractor.FeatureTypes.Numerical),
     # Use repr to get around issues with ws at the end of feature names (breaks
     # CRFSuite dump parser)
-    FeatureExtractor('pattern', lambda observation: repr(
-                                    observation.part.matching_pattern)),
-    FeatureExtractor(
+    SetValuedFeatureExtractor(
+        'pattern', lambda observation: [repr(pattern) for pattern in
+                                         observation.part.matching_patterns]),
+    SetValuedFeatureExtractor(
         'pattern+conn_parse_path',
-        lambda observation: (
-            observation.part.matching_pattern,
-            ArgumentLabelerModel.get_connective_parse_path(observation))),
+        lambda observation: [ # Use quotes to work around stupid ws issue
+            '%s / "%s"' % (pattern, ArgumentLabelerModel.get_connective_parse_path(
+                           observation))
+            for pattern in observation.part.matching_patterns]),
     FeatureExtractor('conn_rel_pos',
                      ArgumentLabelerModel.get_connective_relative_position),
     FeatureExtractor('is_alnum', lambda observation: (

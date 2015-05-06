@@ -1,3 +1,4 @@
+from collections import defaultdict
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 import re
@@ -40,7 +41,7 @@ class RegexConnectiveModel(Model):
 
             lemmas = [token.lemma for token in sentence.tokens[1:]] # skip ROOT
             # Remember bounds of tokens so that we can recover the correct
-            # token identities from regex matches.
+            # tokens from regex matches.
             token_bounds = []
             lemmas_string = ' '.join(lemmas) + ' ' # Final space eases matching
             next_start = 0
@@ -48,22 +49,28 @@ class RegexConnectiveModel(Model):
                 token_bounds.append((next_start, next_start + len(lemma)))
                 next_start += len(lemma) + 1
 
+            # More than one pattern may match a given connective. We record
+            # which patterns matched which sets of connective words.
+            matches = defaultdict(list)
             for regex, matching_group_indices in self.regexes:
                 match = regex.match(lemmas_string)
                 if match:
                     # We need to add 1 to indices to account for root.
-                    token_indices = [token_bounds.index(match.span(i)) + 1
-                                     for i in matching_group_indices]
-                    connective_tokens = [sentence.tokens[i]
-                                         for i in token_indices]
+                    token_indices = tuple(token_bounds.index(match.span(i)) + 1
+                                          for i in matching_group_indices)
+                    matches[token_indices].append(regex.pattern)
 
-                    true_causation_instance = None
-                    for causation_instance in sentence.causation_instances:
-                        if causation_instance.connective == connective_tokens:
-                            true_causation_instance = causation_instance
-                    possible_causation = PossibleCausation(
-                        regex.pattern, connective_tokens, true_causation_instance)
-                    sentence.possible_causations.append(possible_causation)
+            for token_indices, matching_patterns in matches.items():
+                connective_tokens = [sentence.tokens[i] for i in token_indices]
+                true_causation_instance = None
+                for causation_instance in sentence.causation_instances:
+                    if causation_instance.connective == connective_tokens:
+                        true_causation_instance = causation_instance
+
+                possible_causation = PossibleCausation(
+                    matching_patterns, connective_tokens,
+                    true_causation_instance)
+                sentence.possible_causations.append(possible_causation)
 
         elapsed_seconds = time.time() - start_time
         logging.info("Done tagging possible connectives in %0.2f seconds"
@@ -179,12 +186,16 @@ class RegexConnectiveStage(ClassifierStage):
 
     def _evaluate(self, sentences, original_sentences):
         for sentence in sentences:
-            expected_connectives = set(
+            # Duplicates have already been eliminated by merging all patterns
+            # that match the same connective tokens. So unless we have two
+            # identical connectives in the gold data (which we shouldn't),
+            # it's safe to compare lists.
+            expected_connectives = [
                 tuple(sorted(t.index for t in instance.connective))
-                for instance in sentence.causation_instances)
-            predicted_connectives = set([
+                for instance in sentence.causation_instances]
+            predicted_connectives = [
                 tuple(sorted(t.index for t in pc.connective))
-                for pc in sentence.possible_causations])
+                for pc in sentence.possible_causations]
 
             for predicted in predicted_connectives:
                 if predicted in expected_connectives:

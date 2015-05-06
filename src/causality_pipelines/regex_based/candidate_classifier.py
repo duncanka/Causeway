@@ -6,7 +6,7 @@ from data import Token, CausationInstance
 from iaa import make_annotation_comparator
 from pipeline import ClassifierStage
 from pipeline.models import ClassifierPart, ClassifierModel
-from pipeline.feature_extractors import FeatureExtractor, KnownValuesFeatureExtractor
+from pipeline.feature_extractors import FeatureExtractor, KnownValuesFeatureExtractor, SetValuedFeatureExtractor
 from util.diff import SequenceDiff
 
 try:
@@ -129,13 +129,11 @@ RegexCandidateClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('args_dep_len',
                      RegexCandidateClassifierModel.extract_dep_path_length,
                      FeatureExtractor.FeatureTypes.Numerical),
-    # TODO: This assumes that we will not have to worry about multiple patterns
-    # matching simultaneously. Should we make that assumption?
     FeatureExtractor('connective',
                      lambda part: ' '.join(
                         [t.lemma for t in part.possible_causation.connective])),
-    FeatureExtractor('pattern',
-                     lambda part: part.possible_causation.matching_pattern),
+    SetValuedFeatureExtractor(
+        'patterns', lambda observation: observation.part.matching_patterns),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [RegexCandidateClassifierModel.extract_tense(head)
