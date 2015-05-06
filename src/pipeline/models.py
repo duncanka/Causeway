@@ -263,13 +263,16 @@ class CRFModel(Model):
             self.part = part
 
     def __init__(self, part_type, model_file_path, feature_extractors,
-                 selected_features, training_algorithm, training_params):
+                 selected_features, training_algorithm, training_params,
+                 save_model_info=False):
         super(CRFModel, self).__init__(part_type)
         self.model_file_path = model_file_path
         self.feature_extractors = [extractor for extractor in feature_extractors
                                    if extractor.name in selected_features]
         self.training_algorithm = training_algorithm
         self.training_params = training_params
+        self.save_model_info = save_model_info
+        self.model_info = None
 
     def _sequences_for_part(self, part, is_train):
         '''
@@ -320,6 +323,11 @@ class CRFModel(Model):
         elapsed_seconds = time.time() - start_time
         logging.info('CRF model saved to %s (training took %0.2f seconds)'
                      % (self.model_file_path, elapsed_seconds))
+        if self.save_model_info:
+            tagger = pycrfsuite.Tagger()
+            tagger.open(self.model_file_path)
+            self.model_info = tagger.info()
+            tagger.close()
 
     def test(self, parts):
         tagger = pycrfsuite.Tagger()
@@ -330,3 +338,4 @@ class CRFModel(Model):
                 observation_sequence, part)
             crf_labels = tagger.tag(observation_features)
             self._label_part(part, crf_labels)
+        tagger.close()

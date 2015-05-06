@@ -3,7 +3,7 @@ import itertools
 from util import Enum, merge_dicts
 
 class FeatureExtractor(object):
-    FeatureTypes = Enum(['Categorical', 'Numerical'])
+    FeatureTypes = Enum(['Categorical', 'Numerical']) # Numerical includes bool
 
     def __init__(self, name, extractor_fn, feature_type=None):
         if feature_type is None:

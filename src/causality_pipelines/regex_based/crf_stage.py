@@ -25,6 +25,9 @@ try:
     DEFINE_enum('arg_label_training_alg', 'lbfgs',
                 ['lbfgs', 'l2sgd', 'ap', 'pa', 'arow'],
                 'Algorithm for training argument labeling CRF')
+    DEFINE_bool('arg_label_save_crf_info', False,
+                'Whether to read in and save an accessible version of the CRF'
+                ' model parameters in the model (useful for debugging)')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -37,7 +40,7 @@ class ArgumentLabelerModel(CRFModel):
         super(ArgumentLabelerModel, self).__init__(
             PossibleCausation, FLAGS.arg_label_model_path,
             self.FEATURE_EXTRACTORS, FLAGS.arg_label_features,
-            training_algorithm, training_params)
+            training_algorithm, training_params, FLAGS.arg_label_save_crf_info)
 
     def _sequences_for_part(self, part, is_train):
         # part for this model is a PossibleCausation.
@@ -141,7 +144,8 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     FeatureExtractor(
         'is_connective',
         lambda observation: (observation.observation in
-                             observation.part.connective)),
+                             observation.part.connective),
+        FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor(
         'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
     FeatureExtractor(
@@ -150,9 +154,12 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     ArgumentLabelerModel.LexicalDistanceFeatureExtractor('lexical_conn_dist'),
     FeatureExtractor('in_parse_tree',
                      lambda observation: (observation.part.sentence.get_depth(
-                                            observation.observation) < np.inf)),
-    FeatureExtractor('pattern',
-                     lambda observation: observation.part.matching_pattern),
+                                            observation.observation) < np.inf),
+                     FeatureExtractor.FeatureTypes.Numerical),
+    # Use repr to get around issues with ws at the end of feature names (breaks
+    # CRFSuite dump parser)
+    FeatureExtractor('pattern', lambda observation: repr(
+                                    observation.part.matching_pattern)),
     FeatureExtractor(
         'pattern+conn_parse_path',
         lambda observation: (
@@ -161,7 +168,8 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('conn_rel_pos',
                      ArgumentLabelerModel.get_connective_relative_position),
     FeatureExtractor('is_alnum', lambda observation: (
-                                    observation.observation.lemma.isalnum()))
+                                    observation.observation.lemma.isalnum()),
+                     FeatureExtractor.FeatureTypes.Numerical)
 ]
 
 

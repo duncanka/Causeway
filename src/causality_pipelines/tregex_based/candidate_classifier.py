@@ -157,7 +157,7 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
 
     def _evaluate(self, sentences, original_sentences):
         expected_causations = [sentence.causation_instances
-                                     for sentence in original_sentences]
+                               for sentence in original_sentences]
         for sentence, expected_causation_set in zip(sentences,
                                                     expected_causations):
             predicted_cause_effect_pairs = [i.get_cause_and_effect_heads() for
