@@ -92,8 +92,6 @@ if __name__ == '__main__':
         copy_fn=ParsedSentence.shallow_copy_with_causations)
 
     if FLAGS.eval_with_cv:
-        logging.info("Evaluating with %d-fold cross-validation"
-                     % FLAGS.cv_folds)
         eval_results = causality_pipeline.cross_validate()
         causality_pipeline.print_eval_results(eval_results)
     else:

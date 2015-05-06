@@ -71,6 +71,12 @@ class Pipeline(object):
         if num_folds is None:
             num_folds = FLAGS.cv_folds
 
+        logging.info("Evaluating with %d-fold cross-validation" % num_folds)
+        if FLAGS.cv_debug_stop_after:
+            logging.info('(Stopping after %d fold%s)'
+                         % (FLAGS.cv_debug_stop_after,
+                            '' if FLAGS.cv_debug_stop_after == 1 else 's'))
+
         instances = self._read_instances(FLAGS.train_paths + FLAGS.test_paths)
         random.shuffle(instances)
         if num_folds < 0:
