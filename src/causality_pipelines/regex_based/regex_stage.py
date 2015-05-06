@@ -53,12 +53,18 @@ class RegexConnectiveModel(Model):
             # which patterns matched which sets of connective words.
             matches = defaultdict(list)
             for regex, matching_group_indices in self.regexes:
-                match = regex.match(lemmas_string)
-                if match:
+                match = regex.search(lemmas_string)
+                while match is not None:
                     # We need to add 1 to indices to account for root.
                     token_indices = tuple(token_bounds.index(match.span(i)) + 1
                                           for i in matching_group_indices)
                     matches[token_indices].append(regex.pattern)
+                    # Skip past the first token that matched to start looking
+                    # for the next match. This ensures that we won't match the
+                    # same connective twice with this pattern.
+                    # (We start from the end of the first group *after* the
+                    # pattern start group.)
+                    match = regex.search(lemmas_string, pos=match.span(2)[1])
 
             for token_indices, matching_patterns in matches.items():
                 connective_tokens = [sentence.tokens[i] for i in token_indices]
@@ -97,8 +103,9 @@ class RegexConnectiveModel(Model):
     # Pattern generation
     #####################################
 
-    ARG_WORDS_PATTERN = '([\S]+ )+'
-    START_OF_PATTERN = '(^|([\S]+ ))'
+    ARG_WORDS_PATTERN = '([\S]+ )+?'
+    # Pattern can start after another word, or @ start of sentence
+    PATTERN_START = '(^| )'
     TokenTypes = Enum(['Connective', 'Cause', 'Effect']) # Also possible: None
     @staticmethod
     def _get_pattern(sentence, connective_tokens, cause_tokens,
@@ -106,13 +113,12 @@ class RegexConnectiveModel(Model):
         assert connective_tokens
 
         connective_capturing_groups = []
-        # Pattern can start after another word or @ start of sentence
-        pattern = ''
-        next_group_index = 1 # whole match is 0
+        pattern = RegexConnectiveModel.PATTERN_START
+        next_group_index = 2 # whole match is 0, and pattern start will add 1
 
         previous_token_type = None
         # TODO: Is there a more efficient way to do this?
-        for token in sentence.tokens:
+        for token in sentence.tokens[1:]:
             if token in connective_tokens:
                 # We ensure above that every token lemma in the tested string
                 # has a space after it, even the last token, so space is safe.
