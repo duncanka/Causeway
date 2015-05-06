@@ -3,6 +3,7 @@ Define basic causality datatypes
 '''
 
 from copy import copy
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 from nltk.tree import ImmutableParentedTree, Tree
 import numpy as np
@@ -13,6 +14,14 @@ from util import Enum, merge_dicts, listify
 from util.streams import *
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
+
+try:
+    DEFINE_bool('use_constituency_parse', False,
+                'Whether to build constituency parse trees from the provided'
+                ' constituency parse string when constructing ParsedSentences.'
+                ' Setting to false makes reading in data more efficient.')
+except DuplicateFlagError:
+    pass
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
@@ -147,9 +156,14 @@ class ParsedSentence(object):
         self.__align_tokens_to_text(document_text)
         self.__create_edges(edges, copy_node_indices)
 
-        self.constituency_tree = ImmutableParentedTree.fromstring(penn_tree)
-        self.constituency_graph = nltk_tree_to_graph(self.constituency_tree)
-        self.constituent_heads = collins_find_heads(self.constituency_tree)
+        if FLAGS.use_constituency_parse:
+            self.constituency_tree = ImmutableParentedTree.fromstring(penn_tree)
+            self.constituency_graph = nltk_tree_to_graph(self.constituency_tree)
+            self.constituent_heads = collins_find_heads(self.constituency_tree)
+        else:
+            self.constituency_tree = None
+            self.constituency_graph = None
+            self.constituent_heads = None
 
     def get_depth(self, token):
         return self.__depths[token.index]
@@ -445,8 +459,15 @@ class ParsedSentence(object):
         # Token indices include ROOT, so we subtract 1 to get indices that will
         # match NLTK's leaf indices.
         indices = [token.index - 1 for token in tokens]
-        treeposition = self.constituency_tree.treeposition_spanning_leaves(
-            min(indices), max(indices) + 1) # +1 because of Python-style ranges
+        try:
+            treeposition = self.constituency_tree.treeposition_spanning_leaves(
+                min(indices), max(indices) + 1) # +1 b/c of Python-style ranges
+        except AttributeError: # self.constituency_tree is None
+            if not FLAGS.use_constituency_parse:
+                raise ValueError('Constituency parses not in use')
+            else:
+                raise
+
         node = self.constituency_tree[treeposition]
         if not isinstance(node, Tree): # We got a treeposition of a leaf string
             node = self.constituency_tree[treeposition[:-1]]
@@ -459,8 +480,11 @@ class ParsedSentence(object):
         for i, leaf in enumerate(node.root().leaves()):
             if leaf is node_leaf: # identity, not equality
                 return self.tokens[i]
-        raise ValueError(
-            "Somehow you passed a node whose leaf isn't under its root. Wow.")
+        if not FLAGS.use_constituency_parse:
+            raise ValueError('Constituency parses not in use')
+        else:
+            raise ValueError("Somehow you passed a node whose leaf isn't under"
+                             " its root. Wow.")
 
     @staticmethod
     def shallow_copy_with_causations(sentence):
