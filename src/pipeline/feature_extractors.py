@@ -17,10 +17,10 @@ class FeatureExtractor(object):
 
     def extract_subfeature_names(self, parts):
         if self.feature_type == self.FeatureTypes.Categorical:
-            value_set = set(self._extractor_fn(part) for part in parts)
+            values_set = set(self._extractor_fn(part) for part in parts)
             return [FeatureExtractor._get_categorical_feature_name(
                         self.name, value)
-                    for value in value_set]
+                    for value in values_set]
         else: # feature_type == Numerical
             return [self.name]
 
@@ -96,3 +96,36 @@ class TrainableFeatureExtractor(FeatureExtractor):
         subfeature_values = [e.extract(part)
                              for e in self._subfeature_extractors]
         return merge_dicts(subfeature_values)
+
+class SetValuedFeatureExtractor(FeatureExtractor):
+    '''
+    Class for extracting features where the same feature name can legally take
+    on multiple values simultaneously -- i.e., the feature is set-valued -- but
+    where we want to represent that set as a collection of individual indicator
+    features, rather than a single indicator for each possible set value.  
+    '''
+
+    def __init__(self, name, extractor_fn):
+        '''
+        Unlike a traditional feature extractor, extractor_fn for a
+        SetValuedFeatureExtractor should return a list (or tuple) of values.
+        '''
+        super(SetValuedFeatureExtractor, self).__init__(
+            name, extractor_fn, self.FeatureTypes.Categorical)
+
+    def extract_subfeature_names(self, parts):
+        values_set = set()
+        for part in parts:
+            values_set.update(self._extractor_fn(part))
+        return [FeatureExtractor._get_categorical_feature_name(self.name, value)
+                for value in values_set]
+
+    def extract(self, part):
+        '''
+        Returns a dictionary of subfeature name -> subfeature value. More
+        complex feature extractor classes should override this function.
+        '''
+        feature_values = self._extractor_fn(part)
+        feature_names = [self._get_categorical_feature_name(self.name, value)
+                         for value in feature_values]
+        return {feature_name: 1.0 for feature_name in feature_names}
