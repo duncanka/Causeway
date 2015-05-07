@@ -103,23 +103,23 @@ class RegexConnectiveModel(Model):
     # Pattern generation
     #####################################
 
-    ARG_WORDS_PATTERN = '([\S]+ )+?'
+    CONNECTIVE_INTERJECTION_PATTERN = ARG_WORDS_PATTERN = '([\S]+ )+?'
     # Pattern can start after another word, or @ start of sentence
     PATTERN_START = '(^| )'
     TokenTypes = Enum(['Connective', 'Cause', 'Effect']) # Also possible: None
     @staticmethod
     def _get_pattern(sentence, connective_tokens, cause_tokens,
                      effect_tokens):
-        assert connective_tokens
-
         connective_capturing_groups = []
         pattern = RegexConnectiveModel.PATTERN_START
         next_group_index = 2 # whole match is 0, and pattern start will add 1
 
         previous_token_type = None
-        # TODO: Is there a more efficient way to do this?
+        connective_tokens.sort(key=lambda token: token.index) # just in case
+        next_connective_index = 0
         for token in sentence.tokens[1:]:
-            if token in connective_tokens:
+            if (next_connective_index < len(connective_tokens) and
+                token.index == connective_tokens[next_connective_index].index):
                 # We ensure above that every token lemma in the tested string
                 # has a space after it, even the last token, so space is safe.
                 pattern += '(%s) ' % token.lemma
@@ -127,6 +127,7 @@ class RegexConnectiveModel(Model):
                     RegexConnectiveModel.TokenTypes.Connective)
                 connective_capturing_groups.append(next_group_index)
                 next_group_index += 1
+                next_connective_index += 1
             else:
                 if token in cause_tokens:
                     token_type = RegexConnectiveModel.TokenTypes.Cause
@@ -135,9 +136,20 @@ class RegexConnectiveModel(Model):
                 else:
                     token_type = None
 
-                if previous_token_type != token_type and token_type is not None:
-                    pattern += RegexConnectiveModel.ARG_WORDS_PATTERN
-                    next_group_index += 1
+                if previous_token_type != token_type:
+                    if token_type is None:
+                        # It's possible for a connective to be interrupted by a
+                        # word that's not consistent enough to make it count as
+                        # a connective token (e.g., a determiner).
+                        if (token.index > connective_tokens[0].index
+                            and next_connective_index < len(connective_tokens)):
+                            # We're in the middle of the connective
+                            pattern += (RegexConnectiveModel.
+                                        CONNECTIVE_INTERJECTION_PATTERN)
+                            next_group_index += 1
+                    else: # we've transitioned from non-argument to argument
+                        pattern += RegexConnectiveModel.ARG_WORDS_PATTERN
+                        next_group_index += 1
                 previous_token_type = token_type
 
         return pattern, connective_capturing_groups
