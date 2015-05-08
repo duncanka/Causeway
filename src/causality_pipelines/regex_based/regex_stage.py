@@ -16,6 +16,8 @@ try:
     DEFINE_bool('regex_print_test_instances', False,
                 'Whether to print true positive, false positive, and false'
                 ' negative instances after testing')
+    DEFINE_bool('regex_include_pos', True,
+                'Whether to include POS tags in the strings matched by regex')
 
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -39,13 +41,19 @@ class RegexConnectiveModel(Model):
         for sentence in sentences:
             sentence.possible_causations = []
 
-            lemmas = [token.lemma for token in sentence.tokens[1:]] # skip ROOT
+            tokens = sentence.tokens[1:] # skip ROOT
+            if FLAGS.regex_include_pos:
+                lemmas_to_match = ['%s/%s' % (token.lemma, token.get_gen_pos())
+                                 for token in tokens]
+            else:
+                lemmas_to_match = [token.lemma for token in tokens]
             # Remember bounds of tokens so that we can recover the correct
             # tokens from regex matches.
             token_bounds = []
-            lemmas_string = ' '.join(lemmas) + ' ' # Final space eases matching
+            # Final space eases matching
+            string_to_match = ' '.join(lemmas_to_match) + ' '
             next_start = 0
-            for lemma in lemmas:
+            for lemma in lemmas_to_match:
                 token_bounds.append((next_start, next_start + len(lemma)))
                 next_start += len(lemma) + 1
 
@@ -53,7 +61,7 @@ class RegexConnectiveModel(Model):
             # which patterns matched which sets of connective words.
             matches = defaultdict(list)
             for regex, matching_group_indices in self.regexes:
-                match = regex.search(lemmas_string)
+                match = regex.search(string_to_match)
                 while match is not None:
                     # We need to add 1 to indices to account for root.
                     token_indices = tuple(token_bounds.index(match.span(i)) + 1
@@ -64,7 +72,7 @@ class RegexConnectiveModel(Model):
                     # same connective twice with this pattern.
                     # (We start from the end of the first group *after* the
                     # pattern start group.)
-                    match = regex.search(lemmas_string, pos=match.span(2)[1])
+                    match = regex.search(string_to_match, pos=match.span(2)[1])
 
             for token_indices, matching_patterns in matches.items():
                 connective_tokens = [sentence.tokens[i] for i in token_indices]
@@ -122,7 +130,10 @@ class RegexConnectiveModel(Model):
                 token.index == connective_tokens[next_connective_index].index):
                 # We ensure above that every token lemma in the tested string
                 # has a space after it, even the last token, so space is safe.
-                pattern += '(%s) ' % token.lemma
+                if FLAGS.regex_include_pos:
+                    pattern += '(%s/%s) ' % (token.lemma, token.get_gen_pos())
+                else:
+                    pattern += '(%s) ' % token.lemma
                 previous_token_type = (
                     RegexConnectiveModel.TokenTypes.Connective)
                 connective_capturing_groups.append(next_group_index)
