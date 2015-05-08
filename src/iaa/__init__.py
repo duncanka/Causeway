@@ -1,15 +1,19 @@
 from __future__ import print_function
 from collections import defaultdict
+import colorama
+colorama.init()
+colorama.deinit()
 from copy import copy
 from StringIO import StringIO
-from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DuplicateFlagError, FLAGS
+from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DEFINE_string, DuplicateFlagError, FLAGS
 import logging
 import operator
 import os
 import sys
+from textwrap import wrap
 
 from data import CausationInstance, ParsedSentence
-from util import Enum, print_indented, truncated_string
+from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
 from util.metrics import ClassificationMetrics, ConfusionMatrix
 
@@ -25,6 +29,15 @@ try:
     DEFINE_bool('iaa_log_stats', True, 'Log IAA statistics.')
     DEFINE_bool('iaa_log_differences', False,
                 'Log differing annotations during IAA comparison.')
+    DEFINE_string('iaa_cause_color', 'Blue',
+                  'ANSI color to use for formatting cause words in IAA'
+                  ' comparison output')
+    DEFINE_string('iaa_effect_color', 'Red',
+                  'ANSI color to use for formatting cause words in IAA'
+                  ' comparison output')
+    DEFINE_bool('iaa_force_color', False,
+                "Force ANSI color in IAA comparisons even when we're not"
+                " outputting to a TTY")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -312,6 +325,9 @@ class CausalityMetrics(object):
         if log_differences is None:
             log_differences = FLAGS.iaa_log_differences
 
+        if log_differences:
+            colorama.reinit()
+
         if log_differences and (
             self.gold_only_instances or self.predicted_only_instances
             or self.property_differences):
@@ -353,6 +369,9 @@ class CausalityMetrics(object):
             self._log_property_metrics('Argument labels', self.arg_label_matrix,
                                        indent + 1, log_confusion, log_stats, file)
             
+        if log_differences:
+            colorama.deinit()
+
     def __repr__(self):
         '''
         This is a dumb hack, but it's easier than trying to rewrite all of pp to
@@ -420,15 +439,101 @@ class CausalityMetrics(object):
         filename = os.path.split(instance.source_sentence.source_file_path)[-1]
         print_indented(
             indent, "Annotation", annotator_num,
-            'only: "%s"' % connective_text.encode('utf-8'), '(%s:%d: "%s")'
-            % (filename, sentence_num, get_truncated_sentence(instance)),
+            'only: "%s"' % connective_text.encode('utf-8'),
+            '(%s:%d: "%s")' % (filename, sentence_num, get_truncated_sentence(
+                                instance).encode('utf-8')),
             file=file)
+        
+    @staticmethod
+    def _print_with_labeled_args(instance, indent, file, cause_start, cause_end,
+                                 effect_start, effect_end):
+        '''
+        Prints sentences annotated according to a particular CausationInstance.
+        Connectives are printed in ALL CAPS. If run from a TTY, arguments are
+        printed in color; otherwise, they're indicated as '/cause/' and
+        '*effect*'. 
+        '''
+        def get_printable_word(token):
+            word = token.get_unnormalized_original_text()
+            if token in instance.connective:
+                word = word.upper()
+
+            if instance.cause and token in instance.cause:
+                word = cause_start + word + cause_end
+            elif instance.effect and token in instance.effect:
+                word = effect_start + word + effect_end
+            return word
+            
+        sentence = instance.source_sentence 
+        tokens = sentence.tokens[1:] # skip ROOT
+        if sys.stdout.isatty() or FLAGS.iaa_force_color:
+            words = [token.get_unnormalized_original_text()
+                     for token in tokens]
+            available_term_width = get_terminal_size()[0] - indent * 4
+        else:
+            words = [get_printable_word(token) for token in tokens]
+            available_term_width = 75 - indent * 4 # 75 to allow for long words
+        lines = wrap(' '.join(words), available_term_width,
+                     subsequent_indent='    ', break_long_words=False)
+
+        # For TTY, we now have to re-process the lines to add in color and
+        # capitalizations.
+        if sys.stdout.isatty() or FLAGS.iaa_force_color:
+            tokens_processed = 0
+            for i, line in enumerate(lines):
+                # NOTE: This assumes no tokens with spaces in them.
+                words = line.split()
+                zipped = zip(words, tokens[tokens_processed:])
+                printable_line = ' '.join([get_printable_word(token)
+                                           for _, token in zipped])
+                print_indented(indent, printable_line)
+                tokens_processed += len(words)
+                if i == 0:
+                    indent += 1 # future lines should be printed more indented
+        else: # non-TTY: we're ready to print
+            print_indented(indent, *lines, sep='\n')
+
+    def _log_arg_label_differences(self, arg_differences, indent, file):
+        if sys.stdout.isatty() or FLAGS.iaa_force_color:
+            cause_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
+            cause_end = colorama.Fore.RESET
+            effect_start = getattr(colorama.Fore, FLAGS.iaa_effect_color.upper())
+            effect_end = colorama.Fore.RESET
+        else:
+            cause_start = '/'
+            cause_end = '/'
+            effect_start = '*'
+            effect_end = '*'
+        
+        for instance_1, instance_2, _, sentence_num in arg_differences:
+            filename = os.path.split(
+                instance_1.source_sentence.source_file_path)[-1]
+            connective_text = ParsedSentence.get_annotation_text(
+                    instance_1.connective).encode('utf-8)')
+            print_indented(
+                indent,
+                'Argument labels differ for connective "', connective_text,
+                '" (', filename, ':', sentence_num, ')',
+                ' with ', cause_start, 'cause', cause_end, ' and ',
+                effect_start, 'effect', effect_end, ':',
+                sep='', file=file)
+            self._print_with_labeled_args(
+                instance_1, indent + 1, file, cause_start, cause_end,
+                effect_start, effect_end)
+            print_indented(indent + 1, "vs.", file=file)
+            self._print_with_labeled_args(
+                instance_2, indent + 1, file, cause_start, cause_end,
+                effect_start, effect_end)
 
     def _log_property_differences(self, property_enum, indent, file):
+        filtered_differences = [x for x in self.property_differences
+                                if x[2] is property_enum]
+
         if property_enum is self.ArgTypes:
-            property_name = 'Argument label'
-            value_extractor = None
-        elif property_enum is CausationInstance.Degrees:
+            self._log_arg_label_differences(filtered_differences, indent, file)
+            return
+
+        if property_enum is CausationInstance.Degrees:
             property_name = 'Degree'
             value_extractor = lambda instance: instance.Degrees[instance.degree]
         elif property_enum is CausationInstance.CausationTypes:
@@ -436,8 +541,6 @@ class CausalityMetrics(object):
             value_extractor = lambda instance: (
                 instance.CausationTypes[instance.type])
 
-        filtered_differences = [x for x in self.property_differences
-                                if x[2] is property_enum]
         for instance_1, instance_2, _, sentence_num in filtered_differences:
             if value_extractor:
                 values = (value_extractor(instance_1),
@@ -448,8 +551,7 @@ class CausalityMetrics(object):
                 indent, property_name, 's for connective "',
                 ParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)'),
-                '" differ',
-                (': %s vs. %s' % values if value_extractor else ''),
+                '" differ: ', values[0], ' vs. ', values[1],
                 ' (', filename, ':', sentence_num, ': "',
                 get_truncated_sentence(instance_1), '")',
                 sep='', file=file)

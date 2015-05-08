@@ -75,3 +75,11 @@ def pairwise(iterable):
     a, b = tee(iterable)
     next(b, None)
     return izip(a, b)
+
+# From http://stackoverflow.com/a/3010495/4044809
+def get_terminal_size():
+    import fcntl, termios, struct
+    h, w, _, _ = struct.unpack('HHHH',
+        fcntl.ioctl(0, termios.TIOCGWINSZ,
+        struct.pack('HHHH', 0, 0, 0, 0)))
+    return w, h

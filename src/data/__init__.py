@@ -70,6 +70,13 @@ class Token(object):
         return "Token(%s/%s [%s:%s])" % (
             self.original_text, self.pos, self.start_offset, self.end_offset)
 
+    def get_unnormalized_original_text(self):
+        # Return real original text, not the lowercased version that's in
+        # token.original_text.
+        # TODO: Why did we do that again??
+        return self.parent_sentence.original_text[
+            self.start_offset:self.end_offset]
+
 Token.POS_GENERAL = merge_dicts(
     [{tag: 'NN' for tag in Token.NOUN_TAGS},
      {tag: 'VB' for tag in Token.VERB_TAGS},
