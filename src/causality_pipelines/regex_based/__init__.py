@@ -1,9 +1,10 @@
 from copy import copy
 from gflags import FLAGS
 
+from data import ParsedSentence
 from iaa import CausalityMetrics
 from pipeline import Stage
-from util import listify
+from util import listify, print_indented
 
 class PossibleCausation(object):
     def __init__(self, matching_patterns, connective_tokens,
@@ -65,7 +66,13 @@ class IAAEvaluatedStage(Stage):
             compare_degrees=self.compare_degrees,
             compare_types=self.compare_types)
 
-        # TODO: actually log differences here
+        if self.log_differences:
+            print 'Differences not allowing partial matches:'
+            without_partial.pp(log_stats=False, log_confusion=False,
+                               log_differences=True, indent=1)
+            print 'Differences allowing partial matches:'
+            with_partial.pp(log_stats=False, log_confusion=False,
+                            log_differences=True, indent=1)
 
         self._with_partial_metrics += with_partial
         self._without_partial_metrics += without_partial
