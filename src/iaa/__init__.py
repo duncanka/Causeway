@@ -22,7 +22,7 @@ try:
         'iaa_given_connective_ids', [], "Annotation IDs for connectives"
         " that were given as gold and should be treated separately for IAA.")
     DEFINE_float(
-        'iaa_min_partial_overlap', 0.25, "Minimum fraction of the larger of two"
+        'iaa_min_partial_overlap', 0.5, "Minimum fraction of the larger of two"
         " annotations that must be overlapping for the two annotations to be"
         " considered a partial match.")
     DEFINE_bool('iaa_log_confusion', False, "Log confusion matrices for IAA.")
@@ -110,6 +110,7 @@ class CausalityMetrics(object):
         self.save_differences = save_differences
         self.gold_only_instances = []
         self.predicted_only_instances = []
+        self.argument_differences = []
         self.property_differences = []
 
         # Compute attributes that take a little more work.
@@ -304,7 +305,10 @@ class CausalityMetrics(object):
                         predicted_only_args -= 1
                         # We're done matching this gold arg; move on to the next
                         break
-
+            
+            if predicted_args_matched != [True, True] and self.save_differences:
+                self.argument_differences.append((instance_1, instance_2,
+                                                  sentence_num))
 
         total_matches = len(gold_labels)
         #assert 4 * len(matches) == (2 * total_matches + gold_only_args +
@@ -342,7 +346,7 @@ class CausalityMetrics(object):
                                            indent + 1, file)
             self._log_property_differences(CausationInstance.Degrees,
                                            indent + 1, file)
-            self._log_property_differences(self.ArgTypes, indent + 1, file)
+            self._log_arg_label_differences(indent + 1, file)
 
         # Ignore connective-related metrics if we have nothing interesting to
         # show there.
@@ -469,7 +473,8 @@ class CausalityMetrics(object):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             words = [token.get_unnormalized_original_text()
                      for token in tokens]
-            available_term_width = get_terminal_size()[0] - indent * 4
+            # -10 allows viewing later in a slightly smaller terminal/editor.
+            available_term_width = get_terminal_size()[0] - indent * 4 - 10
         else:
             words = [get_printable_word(token) for token in tokens]
             available_term_width = 75 - indent * 4 # 75 to allow for long words
@@ -486,14 +491,15 @@ class CausalityMetrics(object):
                 zipped = zip(words, tokens[tokens_processed:])
                 printable_line = ' '.join([get_printable_word(token)
                                            for _, token in zipped])
-                print_indented(indent, printable_line)
+                print_indented(indent, printable_line.encode('utf-8'))
                 tokens_processed += len(words)
                 if i == 0:
                     indent += 1 # future lines should be printed more indented
         else: # non-TTY: we're ready to print
-            print_indented(indent, *lines, sep='\n')
+            print_indented(indent, *[line.encode('utf-8') for line in lines],
+                           sep='\n')
 
-    def _log_arg_label_differences(self, arg_differences, indent, file):
+    def _log_arg_label_differences(self, indent, file):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             cause_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
             cause_end = colorama.Fore.RESET
@@ -505,14 +511,14 @@ class CausalityMetrics(object):
             effect_start = '*'
             effect_end = '*'
         
-        for instance_1, instance_2, _, sentence_num in arg_differences:
+        for instance_1, instance_2, sentence_num in self.argument_differences:
             filename = os.path.split(
                 instance_1.source_sentence.source_file_path)[-1]
             connective_text = ParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)')
             print_indented(
                 indent,
-                'Argument labels differ for connective "', connective_text,
+                'Arguments differ for connective "', connective_text,
                 '" (', filename, ':', sentence_num, ')',
                 ' with ', cause_start, 'cause', cause_end, ' and ',
                 effect_start, 'effect', effect_end, ':',
@@ -520,7 +526,7 @@ class CausalityMetrics(object):
             self._print_with_labeled_args(
                 instance_1, indent + 1, file, cause_start, cause_end,
                 effect_start, effect_end)
-            print_indented(indent + 1, "vs.", file=file)
+            # print_indented(indent + 1, "vs.", file=file)
             self._print_with_labeled_args(
                 instance_2, indent + 1, file, cause_start, cause_end,
                 effect_start, effect_end)
@@ -528,10 +534,6 @@ class CausalityMetrics(object):
     def _log_property_differences(self, property_enum, indent, file):
         filtered_differences = [x for x in self.property_differences
                                 if x[2] is property_enum]
-
-        if property_enum is self.ArgTypes:
-            self._log_arg_label_differences(filtered_differences, indent, file)
-            return
 
         if property_enum is CausationInstance.Degrees:
             property_name = 'Degree'
