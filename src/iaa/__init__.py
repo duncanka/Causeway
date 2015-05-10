@@ -174,6 +174,11 @@ class CausalityMetrics(object):
         def compare_connectives(instance_1, instance_2):
             return self._annotation_comparator(instance_1.connective,
                                                instance_2.connective)
+            
+        if self.allow_partial:
+            def compare_connectives_exact(instance_1, instance_2):
+                comparator = make_annotation_comparator(False)
+                return comparator(instance_1.connective, instance_2.connective)
 
         for gold_sentence, predicted_sentence in zip(gold, predicted):
             assert (gold_sentence.original_text ==
@@ -182,6 +187,26 @@ class CausalityMetrics(object):
             gold_causations = self.__get_causations(gold_sentence)
             predicted_causations = self.__get_causations(predicted_sentence)
             sort_key = lambda inst: inst.connective[0].start_offset
+            
+            # If we're allowing partial matches, we don't want any partial
+            # matches to override full matches. So we first do an exact match,
+            # and remove the ones that matched from the partial matching.
+            if self.allow_partial:
+                diff = SequenceDiff(gold_causations, predicted_causations,
+                                    compare_connectives_exact, sort_key)
+                matching_pairs = diff.get_matching_pairs()
+                matching_instances.extend(matching_pairs)
+
+                matched_golds = [gold_causation for gold_causation, _
+                                 in matching_pairs]
+                gold_causations = [c for c in gold_causations
+                                   if c not in matched_golds]
+
+                matched_predicteds = [predicted_causation for
+                                      _, predicted_causation in matching_pairs]
+                predicted_causations = [c for c in predicted_causations
+                                        if c not in matched_predicteds]
+            
             diff = SequenceDiff(gold_causations, predicted_causations,
                                 compare_connectives, sort_key)
             matching_instances.extend(diff.get_matching_pairs())
