@@ -102,7 +102,8 @@ class Pipeline(object):
                 self.stages, results, fold_results):
                 stage_results.append(current_stage_result)
                 if FLAGS.cv_print_fold_results:
-                    print_indented(1, 'Stage', stage.name, 'results:')
+                    print_indented(1, 'Stage "', stage.name, '" results:',
+                                   sep='')
                     self.print_stage_results(2, current_stage_result)
 
             if (FLAGS.cv_debug_stop_after is not None
@@ -323,6 +324,8 @@ class Stage(object):
         list of instances unmodified by testing, and from which instances were
         copied before testing.
         '''
+        # TODO: re-implement evaluation in terms of composition -- i.e., each
+        # stage should have a list of Evaluator objects.
         raise NotImplementedError
 
     def _extract_parts(self, instance, is_train):

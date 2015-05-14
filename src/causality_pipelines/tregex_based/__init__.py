@@ -104,11 +104,14 @@ class PairwiseCausalityStage(Stage):
             ['True positives', 'False positives', 'False negatives']):
             print pair_type + ':'
             for pair in pairs:
-                # If only one argument is present, it'll be in position 0.
-                sentence = pair[0].parent_sentence
-                arg2 = '"%s"' % pair[1].original_text if pair[1] else None
+                try:
+                    sentence = pair[0].parent_sentence
+                except AttributeError:
+                    sentence = pair[1].parent_sentence
+                args = [(('"%s"' % arg.original_text) if arg else None)
+                        for arg in pair]
                 print ('    %s ("%s" / %s)' % (
                    sentence.original_text.replace('\n', ' '),
-                   pair[0].original_text, arg2)).encode('utf-8')
+                   args[0], args[1])).encode('utf-8')
 
             print '\n'
