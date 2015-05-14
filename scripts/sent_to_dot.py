@@ -9,7 +9,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         parser_path = sys.argv[1]
     else:
-        parser_path = '../../../stanford-parser-full-2014-10-31/'
+        parser_path = '../../../stanford-parser/'
 
     # Read from stdin
     print "Enter your sentence to parse below:"
