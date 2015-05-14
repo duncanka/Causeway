@@ -2,9 +2,10 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 
 import logging
 
-from causality_pipelines.tregex_based import PairwiseCausalityStage
+from causality_pipelines.tregex_based import PairwiseCausalityEvaluator, \
+    normalize_order
 from data import Token, CausationInstance
-from pipeline import ClassifierStage
+from pipeline import Stage, ClassifierEvaluator
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
 
@@ -117,11 +118,10 @@ PhrasePairModel.FEATURE_EXTRACTORS = [
 ]
 
 
-class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
+class PairwiseCandidateClassifierStage(Stage):
     def __init__(self, classifier, name):
         super(PairwiseCandidateClassifierStage, self).__init__(
-            name=name, models=[PhrasePairModel(classifier)],
-            print_test_instances=FLAGS.pw_candidate_print_instances)
+            name=name, models=[PhrasePairModel(classifier)])
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
@@ -141,21 +141,26 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
             # the cause and one is the effect, but we don't actually know
             # which is which. We arbitrarily choose to call the one with the
             # earlier head the cause. We leave the connective unset.
-            cause, effect = self.normalize_order(
+            cause, effect = normalize_order(
                 (part.head_token_1, part.head_token_2))
             # Causations assume their arguments are lists of tokens.
             causation.cause, causation.effect = [cause], [effect]
             sentence.causation_instances.append(causation)
 
-    def _begin_evaluation(self):
-        ''' Select correct ancestor for this method '''
-        return PairwiseCausalityStage._begin_evaluation(self)
+    def _make_evaluator(self):
+        return PairwiseCandidateClassifierEvaluator()
 
-    def _complete_evaluation(self):
-        ''' Select correct ancestor for this method '''
-        return PairwiseCausalityStage._complete_evaluation(self)
+class PairwiseCandidateClassifierEvaluator(PairwiseCausalityEvaluator,
+                                           ClassifierEvaluator):
 
-    def _evaluate(self, sentences, original_sentences):
+    # Uses complete_evaluation from PairwiseCausalityEvaluator, which comes
+    # first in the MRO.
+
+    def __init__(self):
+        super(PairwiseCandidateClassifierEvaluator, self).__init__(
+            FLAGS.pw_candidate_print_instances)
+
+    def evaluate(self, sentences, original_sentences):
         expected_causations = [sentence.causation_instances
                                for sentence in original_sentences]
         for sentence, expected_causation_set in zip(sentences,
@@ -164,7 +169,7 @@ class PairwiseCandidateClassifierStage(ClassifierStage, PairwiseCausalityStage):
                                             i in sentence.causation_instances]
             expected_cause_effect_pairs = [i.get_cause_and_effect_heads() for
                                            i in expected_causation_set]
-            self.match_causation_pairs(
+            self._match_causation_pairs(
                 expected_cause_effect_pairs, predicted_cause_effect_pairs,
                 self._tp_pairs, self._fp_pairs, self._fn_pairs,
                 self._all_instances_metrics)

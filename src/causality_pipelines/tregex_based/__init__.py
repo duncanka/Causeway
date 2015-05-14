@@ -1,7 +1,7 @@
 from gflags import FLAGS
 
 from data import CausationInstance
-from pipeline import Stage
+from pipeline import Stage, Evaluator
 from util.metrics import ClassificationMetrics
 
 # Define a bunch of shared functions that are used by various stages in the
@@ -14,26 +14,36 @@ class PossibleCausation(object):
         self.matching_pattern = matching_pattern
         self.correct = label
 
+def starts_before(token_1, token_2):
+    # None, if present as an argument, should be second.
+    return token_2 is None or (
+        token_1 is not None and
+        token_2.start_offset > token_1.start_offset)
 
-class PairwiseCausalityStage(Stage):
-    def __init__(self, print_test_instances, *args, **kwargs):
-        self.print_test_instances = print_test_instances
-        super(PairwiseCausalityStage, self).__init__(*args, **kwargs)
-        # Used in evaluation
-        self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
-        self._all_instances_metrics = None
+def normalize_order(token_pair):
+    '''
+    Normalizes the order of a token pair so that the earlier one in the
+    sentence is first in the pair.
+    '''
+    if starts_before(*token_pair):
+        return tuple(token_pair)
+    else:
+        return (token_pair[1], token_pair[0])
 
-    def _begin_evaluation(self):
+
+class PairwiseCausalityEvaluator(Evaluator):
+    def __init__(self, print_test_instances):
         self._all_instances_metrics = ClassificationMetrics(finalize=False)
-        if self.print_test_instances:
+        self.print_test_instances = print_test_instances
+        if print_test_instances:
             self._tp_pairs, self._fp_pairs, self._fn_pairs = [], [], []
         else:
             self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
 
-    def _complete_evaluation(self):
+    def complete_evaluation(self):
         self._all_instances_metrics._finalize_counts()
         if self.print_test_instances:
-            PairwiseCausalityStage.print_instances_by_eval_result(
+            self._print_instances_by_eval_result(
                 self._tp_pairs, self._fp_pairs, self._fn_pairs)
         self._tp_pairs, self._fp_pairs, self._fn_pairs = None, None, None
         all_instances_metrics = self._all_instances_metrics
@@ -41,25 +51,7 @@ class PairwiseCausalityStage(Stage):
         return all_instances_metrics
 
     @staticmethod
-    def starts_before(token_1, token_2):
-        # None, if present as an argument, should be second.
-        return token_2 is None or (
-            token_1 is not None and
-            token_2.start_offset > token_1.start_offset)
-
-    @staticmethod
-    def normalize_order(token_pair):
-        '''
-        Normalizes the order of a token pair so that the earlier one in the
-        sentence is first in the pair.
-        '''
-        if PairwiseCausalityStage.starts_before(*token_pair):
-            return tuple(token_pair)
-        else:
-            return (token_pair[1], token_pair[0])
-
-    @staticmethod
-    def match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fp_pairs,
+    def _match_causation_pairs(expected_pairs, found_pairs, tp_pairs, fp_pairs,
                               fn_pairs, metrics):
         '''
         Match expected and predicted cause/effect pairs from a single sentence.
@@ -71,10 +63,8 @@ class PairwiseCausalityStage(Stage):
         None).
         '''
         tp, fp, fn = 0, 0, 0
-        found_pairs = [PairwiseCausalityStage.normalize_order(pair)
-                       for pair in found_pairs]
-        expected_pairs = [PairwiseCausalityStage.normalize_order(pair)
-                          for pair in expected_pairs]
+        found_pairs = [normalize_order(pair) for pair in found_pairs]
+        expected_pairs = [normalize_order(pair) for pair in expected_pairs]
 
         for found_pair in found_pairs:
             try:
@@ -98,7 +88,7 @@ class PairwiseCausalityStage(Stage):
         return tp, fp, fn
 
     @staticmethod
-    def print_instances_by_eval_result(tp_pairs, fp_pairs, fn_pairs):
+    def _print_instances_by_eval_result(tp_pairs, fp_pairs, fn_pairs):
         for pairs, pair_type in zip(
             [tp_pairs, fp_pairs, fn_pairs],
             ['True positives', 'False positives', 'False negatives']):

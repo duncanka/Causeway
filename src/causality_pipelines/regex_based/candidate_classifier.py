@@ -1,10 +1,10 @@
 from gflags import FLAGS, DuplicateFlagError, DEFINE_list, DEFINE_bool, DEFINE_integer
 import logging
 
-from causality_pipelines.regex_based import IAAEvaluatedStage
+from causality_pipelines.regex_based import IAAEvaluator
 from data import Token, CausationInstance
 from iaa import make_annotation_comparator
-from pipeline import ClassifierStage
+from pipeline import Stage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import FeatureExtractor, KnownValuesFeatureExtractor, SetValuedFeatureExtractor
 from util.diff import SequenceDiff
@@ -140,16 +140,19 @@ RegexCandidateClassifierModel.FEATURE_EXTRACTORS = [
                          for head in part.cause_head, part.effect_head]))]
 
 
-class RegexCandidateClassifierStage(IAAEvaluatedStage, ClassifierStage):
+class RegexCandidateClassifierStage(Stage):
+    # TODO: add raw classifier evaluator (just going on what input was)
     def __init__(self, classifier, name):
         super(RegexCandidateClassifierStage, self).__init__(
-            name, [RegexCandidateClassifierModel(classifier)],
-            False, False, FLAGS.regex_cc_log_differences, False)
+            name, [RegexCandidateClassifierModel(classifier)])
         comparator = make_annotation_comparator(
             FLAGS.regex_cc_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations
         self.connective_comparator = lambda inst1, inst2: comparator(
                                         inst1.connective, inst2.connective)
+
+    def _make_evaluator(self):
+        return IAAEvaluator(False, False, FLAGS.regex_cc_log_differences, False)
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
@@ -163,6 +166,7 @@ class RegexCandidateClassifierStage(IAAEvaluatedStage, ClassifierStage):
         if is_train:
             parts = []
             # We want the diff to sort by connective position in the sentence.
+            # TODO: Make this also start by separating out exact matches.
             sort_by_key = lambda inst: inst.connective[0].start_offset
             connectives_diff = SequenceDiff(
                 sentence.possible_causations, sentence.causation_instances,
@@ -179,6 +183,7 @@ class RegexCandidateClassifierStage(IAAEvaluatedStage, ClassifierStage):
 
     def _decode_labeled_parts(self, sentence, labeled_parts):
         sentence.causation_instances = [
-            CausationInstance(sentence, None, None, part.possible_causation.connective,
-                              part.possible_causation.cause, part.possible_causation.effect)
+            CausationInstance(
+                sentence, None, None, part.possible_causation.connective,
+                part.possible_causation.cause, part.possible_causation.effect)
             for part in labeled_parts if part.label]

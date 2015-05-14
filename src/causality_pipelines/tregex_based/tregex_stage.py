@@ -10,9 +10,10 @@ import tempfile
 import time
 
 from data import ParsedSentence, Token
+from pipeline import Stage
 from pipeline.models import Model
-from causality_pipelines.tregex_based import PairwiseCausalityStage, \
-    PossibleCausation
+from causality_pipelines.tregex_based import PossibleCausation, \
+    PairwiseCausalityEvaluator, normalize_order
 from util import pairwise
 from util.metrics import ClassificationMetrics
 from util.nltk import subtree_at_index, index_of_subtree
@@ -132,7 +133,7 @@ class TRegexConnectiveModel(Model):
             else:
                 ptb_strings.append(sentence.constituency_tree.pformat() + '\n')
             true_causation_pairs = [
-                TRegexConnectiveStage.normalize_order(
+                normalize_order(
                     instance.get_cause_and_effect_heads())
                 for instance in sentence.causation_instances]
             true_causation_pairs_by_sentence.append(
@@ -672,51 +673,40 @@ class TRegexConnectiveModel(Model):
         return progress_reporter
 
 
-class TRegexConnectiveStage(PairwiseCausalityStage):
+class TRegexConnectiveStage(Stage):
     def __init__(self, name):
         super(TRegexConnectiveStage, self).__init__(
-            print_test_instances=FLAGS.tregex_print_test_instances, name=name,
+            name=name,
             models=[TRegexConnectiveModel(part_type=ParsedSentence)])
         self.pairwise_only_metrics = None # used during evaluation
 
     PRODUCED_ATTRIBUTES = ['possible_causations']
-
-    ALL_INSTANCES_KEY = 'All instances'
-    PAIRWISE_KEY = 'Pairwise only'
-    @staticmethod
-    def aggregate_eval_results(results_list):
-        all_instances = ClassificationMetrics.average(
-            [metrics_dict[TRegexConnectiveStage.ALL_INSTANCES_KEY]
-             for metrics_dict in results_list])
-        pairwise_only = ClassificationMetrics.average(
-            [metrics_dict[TRegexConnectiveStage.PAIRWISE_KEY]
-             for metrics_dict in results_list])
-        return {TRegexConnectiveStage.ALL_INSTANCES_KEY: all_instances,
-                TRegexConnectiveStage.PAIRWISE_KEY: pairwise_only}
-
+    
     def _extract_parts(self, sentence, is_train):
         return [sentence]
 
-    def _begin_evaluation(self):
-        PairwiseCausalityStage._begin_evaluation(self)
+    def _make_evaluator(self):
+        return ConnectiveEvaluator()
+
+
+class ConnectiveEvaluator(PairwiseCausalityEvaluator):
+    # TODO: Redefine as a composite Evaluator (consisting of two sub-Evaluators)
+    ALL_INSTANCES_KEY = 'All instances'
+    PAIRWISE_KEY = 'Pairwise only'
+
+    def __init__(self):
+        super(ConnectiveEvaluator, self).__init__(
+            FLAGS.tregex_print_test_instances)
         self.pairwise_only_metrics = ClassificationMetrics()
 
-    def _complete_evaluation(self):
-        all_instances_metrics = PairwiseCausalityStage._complete_evaluation(
-            self)
-        pairwise_only_metrics = self.pairwise_only_metrics
-        self.pairwise_only_metrics = None
-        return {TRegexConnectiveStage.ALL_INSTANCES_KEY: all_instances_metrics,
-                TRegexConnectiveStage.PAIRWISE_KEY: pairwise_only_metrics}
-
-    def _evaluate(self, sentences, original_sentences):
+    def evaluate(self, sentences, original_sentences):
         for sentence in sentences:
             predicted_pairs = [(pc.arg1, pc.arg2)
                                for pc in sentence.possible_causations]
             expected_pairs = [i.get_cause_and_effect_heads()
                               for i in sentence.causation_instances]
             assert (None, None) not in expected_pairs
-            tp, fp, fn = self.match_causation_pairs(
+            tp, fp, fn = self._match_causation_pairs(
                 expected_pairs, predicted_pairs, self._tp_pairs, self._fp_pairs,
                 self._fn_pairs, self._all_instances_metrics)
 
@@ -724,3 +714,21 @@ class TRegexConnectiveStage(PairwiseCausalityStage):
             self.pairwise_only_metrics.fp += fp
             fns_to_ignore = sum([1 for pair in expected_pairs if None in pair])
             self.pairwise_only_metrics.fn += fn - fns_to_ignore
+
+    def complete_evaluation(self):
+        all_instances_metrics = PairwiseCausalityEvaluator.complete_evaluation(
+            self)
+        pairwise_only_metrics = self.pairwise_only_metrics
+        self.pairwise_only_metrics = None
+        return {ConnectiveEvaluator.ALL_INSTANCES_KEY: all_instances_metrics,
+                ConnectiveEvaluator.PAIRWISE_KEY: pairwise_only_metrics}
+
+    def aggregate_results(self, results_list):
+        all_instances = ClassificationMetrics.average(
+            [metrics_dict[ConnectiveEvaluator.ALL_INSTANCES_KEY]
+             for metrics_dict in results_list])
+        pairwise_only = ClassificationMetrics.average(
+            [metrics_dict[ConnectiveEvaluator.PAIRWISE_KEY]
+             for metrics_dict in results_list])
+        return {ConnectiveEvaluator.ALL_INSTANCES_KEY: all_instances,
+                ConnectiveEvaluator.PAIRWISE_KEY: pairwise_only}

@@ -48,7 +48,7 @@ class Pipeline(object):
         self.stages = listify(stages)
         self.reader = reader
         self.writer = writer
-        self._evaluating = False
+        self._evaluators_by_stage = []
         self._copy_fn = copy_fn
 
     def _read_instances(self, paths=None):
@@ -65,8 +65,8 @@ class Pipeline(object):
         '''
         Returns a list of results, organized by stage. Results are also saved in
         self.eval_results. Results are aggregated across all folds using the
-        aggregator function provided by the stage (see
-        Stage.aggregate_eval_results).
+        aggregator functions provided by the stage's evaluators (see
+        Evaluator.aggregate_results).
         '''
         if num_folds is None:
             num_folds = FLAGS.cv_folds
@@ -82,7 +82,7 @@ class Pipeline(object):
         if num_folds < 0:
             num_folds = len(instances)
         folds = partition(instances, num_folds)
-        results = [[] for _ in self.stages]
+        results = [[] for _ in self.stages] # each list holds results by fold
 
         for i, fold in enumerate(folds):
             print "Beginning fold", i + 1, 'of', num_folds
@@ -110,8 +110,12 @@ class Pipeline(object):
                 and i + 1 >= FLAGS.cv_debug_stop_after):
                 break
 
-        results = [stage.aggregate_eval_results(stage_results)
-                   for stage, stage_results in zip(self.stages, results)]
+        # It may be slightly expensive to construct new evaluators again just to
+        # access their aggregator functions. Oh, well.
+        evaluators = [stage._make_evaluator() for stage in self.stages]
+        results = [stage_evaluator.aggregate_results(stage_results)
+                   for stage_evaluator, stage_results in zip(
+                       evaluators, results)]
         self.eval_results = results
         return results
 
@@ -166,29 +170,27 @@ class Pipeline(object):
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''
-        Evaluates a single batch of instances. Returns evaluation metrics.
+        Evaluates a single batch of instances. Returns a list of evaluation
+        metrics by stage.
         '''
-        eval_results = []
-        self._evaluating = True
-        for stage in self.stages:
-            stage._begin_evaluation()
-
+        self._evaluators_by_stage = [stage._make_evaluator()
+                                     for stage in self.stages]
         self.test(instances)
+        eval_results = [evaluator.complete_evaluation()
+                        for evaluator in self._evaluators_by_stage]
 
-        for stage in self.stages:
-            eval_results.append(stage._complete_evaluation())
-        self._evaluating = False
-
+        self._evaluators_by_stage = []
         return eval_results
 
     def __test_instances(self, instances):
         original_instances = instances
-        if self._evaluating:
+        if self._evaluators_by_stage: # we're evaluating
             instances = [self._copy_fn(instance) for instance in instances]
-        for stage in self.stages:
+        for i, stage in enumerate(self.stages):
             stage.test(instances)
-            if self._evaluating:
-                stage._evaluate(instances, original_instances)
+            if self._evaluators_by_stage:
+                self._evaluators_by_stage[i].evaluate(instances,
+                                                      original_instances)
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
@@ -247,6 +249,37 @@ class Pipeline(object):
             self.__set_up_paths()
             self.__test_instances_from_reader(batch_size)
 
+
+class Evaluator(object):
+    def evaluate(self, instances, original_instances):
+        '''
+        Evaluates a single batch of instances. original_instances is the
+        list of instances unmodified by testing, and from which instances were
+        copied before testing.
+        '''
+        raise NotImplementedError
+
+    def complete_evaluation(self):
+        '''
+        Should return the evaluation results for this stage, incorporating the
+        results of all calls to self._evaluate. If a dict is returned, it will
+        be treated as a collection of named result metrics, where each key
+        indicates the name of the corresponding metric.
+        '''
+        raise NotImplementedError
+
+    def aggregate_results(self, results_list):
+        '''
+        Aggregates a list of evaluation results, e.g., from cross-validation.
+        Should generally do some kind of averaging. By default this just returns
+        the original list of results; if any kind of processing should be done,
+        this method must be overridden.
+        '''
+        return results_list
+# TODO: Is it worth it to define a default compound evaluator (i.e., an
+# evaluator that groups two other named evaluators)?
+
+
 class Stage(object):
     def __init__(self, name, models):
         self.name = name
@@ -290,6 +323,13 @@ class Stage(object):
                 instance, all_parts[parts_processed:next_parts_processed])
             parts_processed = next_parts_processed
 
+    def _make_evaluator(self):
+        '''
+        Creates a new Evaluator object that knows how to properly
+        evaluate instances for this stage. Must be overridden.
+        '''
+        raise NotImplementedError
+
     def __consume_attributes(self, instance):
         for attribute_name in self.CONSUMED_ATTRIBUTES:
             delattr(instance, attribute_name)
@@ -308,62 +348,22 @@ class Stage(object):
     '''
     CONSUMED_ATTRIBUTES = []
 
-    @staticmethod
-    def aggregate_eval_results(results_list):
-        '''
-        Aggregates a list of evaluation results, e.g., from cross-validation.
-        Should generally do some kind of averaging. By default this just returns
-        the original list of results; if any kind of processing should be done,
-        this method must be overridden.
-        '''
-        return results_list
-
-    def _evaluate(self, instances, original_instances):
-        '''
-        Evaluates a single batch of instances. original_instances is the
-        list of instances unmodified by testing, and from which instances were
-        copied before testing.
-        '''
-        # TODO: re-implement evaluation in terms of composition -- i.e., each
-        # stage should have a list of Evaluator objects.
-        raise NotImplementedError
-
     def _extract_parts(self, instance, is_train):
         raise NotImplementedError
 
     def _decode_labeled_parts(self, instance, labeled_parts):
         pass
 
-    def _begin_evaluation(self):
-        pass
 
-    def _complete_evaluation(self):
-        '''
-        Should return the evaluation results for this stage, incorporating the
-        results of all calls to self._evaluate. If a dict is returned, it will
-        be treated as a collection of named result metrics, where each key
-        indicates the name of the corresponding metric.
-        '''
-        raise NotImplementedError
-
-class ClassifierStage(Stage):
-    def __init__(self, name, models, *args, **kwargs):
-        super(ClassifierStage, self).__init__(name=name, models=models,
-                                              *args, **kwargs)
+class ClassifierEvaluator(Evaluator):
+    def __init__(self):
         self.tp = 0
         self.tn = 0
         self.fp = 0
         self.fn = 0
 
-    @staticmethod
-    def aggregate_eval_results(results_list):
+    def aggregate_results(self, results_list):
         return ClassificationMetrics.average(results_list)
 
-    def _begin_evaluation(self):
-        self.tp = 0
-        self.tn = 0
-        self.fp = 0
-        self.fn = 0
-
-    def _complete_evaluation(self):
+    def complete_evaluation(self):
         return ClassificationMetrics(self.tp, self.fp, self.fn, self.tn)

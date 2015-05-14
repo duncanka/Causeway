@@ -3,7 +3,7 @@ from gflags import FLAGS
 
 from data import ParsedSentence
 from iaa import CausalityMetrics
-from pipeline import Stage
+from pipeline import Stage, Evaluator
 from util import listify, print_indented
 
 class PossibleCausation(object):
@@ -22,27 +22,21 @@ class PossibleCausation(object):
         # TODO: Add spans of plausible ranges for argument spans
 
 
-class IAAEvaluatedStage(Stage):
-    def __init__(self, name, models, compare_degrees, compare_types,
+class IAAEvaluator(Evaluator):
+    def __init__(self, compare_degrees, compare_types,
                  log_differences, eval_possible_causations):
-        super(IAAEvaluatedStage, self).__init__(name=name, models=models)
-        self.log_differences = log_differences
+        self._with_partial_metrics = CausalityMetrics(
+            [], [], True, log_differences, None, compare_degrees,
+            compare_types)
+        self._without_partial_metrics = CausalityMetrics(
+            [], [], False, log_differences, None, compare_degrees,
+            compare_types)
+        self.eval_possible_causations = eval_possible_causations
         self.compare_degrees = compare_degrees
         self.compare_types = compare_types
-        self.eval_possible_causations = eval_possible_causations
-        # Used during evaluation
-        self._with_partial_metrics = None
-        self._without_partial_metrics = None
+        self.log_differences = log_differences
 
-    def _begin_evaluation(self):
-        self._with_partial_metrics = CausalityMetrics(
-            [], [], True, self.log_differences, None, self.compare_degrees,
-            self.compare_types)
-        self._without_partial_metrics = CausalityMetrics(
-            [], [], False, self.log_differences, None, self.compare_degrees,
-            self.compare_types)
-
-    def _evaluate(self, sentences, original_sentences):
+    def evaluate(self, sentences, original_sentences):
         if self.eval_possible_causations:
             # If we're evaluating using possible causations, we need to fake
             # having actual CausationInstances attached to the sentences for IAA
@@ -90,20 +84,19 @@ class IAAEvaluatedStage(Stage):
     _PERMISSIVE_KEY = 'Allowing partial matches'
     _STRICT_KEY = 'Not allowing partial matches'
 
-    def _complete_evaluation(self):
+    def complete_evaluation(self):
         result = {self._PERMISSIVE_KEY: self._with_partial_metrics,
                   self._STRICT_KEY: self._without_partial_metrics}
         self._with_partial_metrics = None
         self._without_partial_metrics = None
         return result
 
-    @staticmethod
-    def aggregate_eval_results(results_list):
+    def aggregate_results(self, results_list):
         permissive = CausalityMetrics.aggregate(
-            [result_dict[IAAEvaluatedStage._PERMISSIVE_KEY]
+            [result_dict[IAAEvaluator._PERMISSIVE_KEY]
              for result_dict in results_list])
         strict = CausalityMetrics.aggregate(
-            [result_dict[IAAEvaluatedStage._STRICT_KEY]
+            [result_dict[IAAEvaluator._STRICT_KEY]
              for result_dict in results_list])
-        return {IAAEvaluatedStage._PERMISSIVE_KEY: permissive,
-                IAAEvaluatedStage._STRICT_KEY: strict}
+        return {IAAEvaluator._PERMISSIVE_KEY: permissive,
+                IAAEvaluator._STRICT_KEY: strict}

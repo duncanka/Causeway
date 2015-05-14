@@ -2,10 +2,11 @@ from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAG
 import logging
 import numpy as np
 
-from causality_pipelines.regex_based import PossibleCausation, IAAEvaluatedStage
+from causality_pipelines.regex_based import PossibleCausation, IAAEvaluator
 from pipeline.models import CRFModel
 from pipeline.feature_extractors import FeatureExtractor, SetValuedFeatureExtractor
 from util import Enum
+from pipeline import Stage
 
 try:
     DEFINE_list('arg_label_features',
@@ -176,13 +177,12 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
 ]
 
 
-class ArgumentLabelerStage(IAAEvaluatedStage):
+class ArgumentLabelerStage(Stage):
     def __init__(self, name, training_algorithm=None, training_params={}):
         if training_algorithm is None:
             training_algorithm = FLAGS.arg_label_training_alg
         super(ArgumentLabelerStage, self).__init__(
-            name, [ArgumentLabelerModel(training_algorithm, training_params)],
-            False, False, FLAGS.arg_label_log_differences, True)
+            name, [ArgumentLabelerModel(training_algorithm, training_params)])
 
     def _extract_parts(self, sentence, is_train):
         if is_train:
@@ -193,3 +193,6 @@ class ArgumentLabelerStage(IAAEvaluatedStage):
                     if possible_causation.true_causation_instance]
         else:
             return sentence.possible_causations
+
+    def _make_evaluator(self):
+        return IAAEvaluator(False, False, FLAGS.arg_label_log_differences, True)
