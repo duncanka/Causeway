@@ -96,10 +96,14 @@ def get_truncated_sentence(instance):
 
 class CausalityMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
+    _ARG_ATTR_NAMES = ['cause_span_metrics', 'effect_span_metrics',
+                       'cause_head_metrics', 'effect_head_metrics',
+                       'cause_jaccard', 'effect_jaccard']
 
     def __init__(self, gold, predicted, allow_partial,
                  save_differences=False, ids_considered=None,
-                 compare_degrees=True, compare_types=True):
+                 compare_degrees=True, compare_types=True,
+                 compare_args=True):
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
 
@@ -129,12 +133,16 @@ class CausalityMetrics(object):
         else:
             self.causation_type_matrix = None
 
-        (self.cause_span_metrics, self.effect_span_metrics,
-         self.cause_head_metrics, self.effect_head_metrics) = (
-            self._match_arguments(matches, gold))
-
-        self.cause_jaccard = self._get_jaccard(matches, 'cause')
-        self.effect_jaccard = self._get_jaccard(matches, 'effect')
+        if compare_args:
+            (self.cause_span_metrics, self.effect_span_metrics,
+             self.cause_head_metrics, self.effect_head_metrics) = (
+                self._match_arguments(matches, gold))
+    
+            self.cause_jaccard = self._get_jaccard(matches, 'cause')
+            self.effect_jaccard = self._get_jaccard(matches, 'effect')
+        else:
+            for attr_name in self._ARG_ATTR_NAMES:
+                setattr(self, attr_name, None)
 
     def __add__(self, other):
         if (self.allow_partial != other.allow_partial or
@@ -420,7 +428,8 @@ class CausalityMetrics(object):
                     'Causation types', self.causation_type_matrix, indent + 1,
                     log_confusion, log_stats, file)
 
-        if log_stats:
+        # If any argument properties are set, all should be.
+        if log_stats and self.cause_span_metrics is not None:
             print_indented(indent, 'Arguments:', file=file)
             for arg_type in ['cause', 'effect']:
                 print_indented(indent + 1, arg_type.title(), 's:', sep='',
