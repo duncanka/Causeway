@@ -19,6 +19,8 @@ from util.diff import SequenceDiff
 from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, \
     safe_divisor
 
+np.seterr(divide='ignore') # Ignore nans in division
+
 try:
     DEFINE_list(
         'iaa_given_connective_ids', [], "Annotation IDs for connectives"
