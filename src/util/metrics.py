@@ -285,3 +285,28 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         r_macro_fractions = tp / np.sum([tp, fn], axis=0, dtype=float)
         r_macro = np.average(r_macro_fractions)
         return f1(p_macro, r_macro)
+
+
+class AccuracyMetrics(object):
+    def __init__(self, correct, incorrect):
+        self.correct = correct
+        self.incorrect = incorrect
+        self.accuracy = correct / float(correct + incorrect)
+
+    def pretty_format(self):
+        if FLAGS.metrics_log_raw_counts:
+            return ('Correct: {:}\nIncorrect: {:}\n% Agreement: {:.2}'
+                    .format(self.correct, self.incorrect, self.accuracy))
+        else:
+            return '% Agreement: {:.2}'.format(self.accuracy)
+
+    def __str__(self):
+        return self.pretty_format()
+
+    @staticmethod
+    def average(metrics):
+        assert metrics, "Cannot average empty metrics list"
+        new_metrics = AccuracyMetrics(np.nan, np.nan)
+        new_metrics.correct = np.mean([m.correct for m in metrics])
+        new_metrics.incorrect = np.mean([m.incorrect for m in metrics])
+        new_metrics.accuracy = np.mean([m.accuracy for m in metrics])

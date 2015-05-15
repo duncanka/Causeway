@@ -7,6 +7,7 @@ from copy import copy
 from StringIO import StringIO
 from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DEFINE_string, DuplicateFlagError, FLAGS
 import logging
+import numpy as np
 import operator
 import os
 import sys
@@ -15,7 +16,8 @@ from textwrap import wrap
 from data import CausationInstance, ParsedSentence
 from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
-from util.metrics import ClassificationMetrics, ConfusionMatrix
+from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, \
+    safe_divisor
 
 try:
     DEFINE_list(
@@ -94,7 +96,6 @@ def get_truncated_sentence(instance):
 
 class CausalityMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
-    ArgTypes = Enum(['Cause', 'Effect'])
 
     def __init__(self, gold, predicted, allow_partial,
                  save_differences=False, ids_considered=None,
@@ -127,8 +128,13 @@ class CausalityMetrics(object):
                 matches, CausationInstance.CausationTypes, 'type', gold)
         else:
             self.causation_type_matrix = None
-        self.arg_metrics, self.arg_label_matrix = self._match_arguments(
-            matches, gold)
+
+        (self.cause_span_metrics, self.effect_span_metrics,
+         self.cause_head_metrics, self.effect_head_metrics) = (
+            self._match_arguments(matches, gold))
+
+        self.cause_jaccard = self._get_jaccard(matches, 'cause')
+        self.effect_jaccard = self._get_jaccard(matches, 'effect')
 
     def __add__(self, other):
         if (self.allow_partial != other.allow_partial or
@@ -253,6 +259,24 @@ class CausalityMetrics(object):
                 for i in predicted_only_instances]
 
         return (connective_metrics, matching_instances)
+    
+    def _get_jaccard(self, matches, arg_property_name):
+        jaccard_index = 0
+        def get_arg_indices(instance):
+            arg = getattr(instance, arg_property_name)
+            if arg is None:
+                return []
+            else:
+                return [token.index for token in arg]
+        for instance_pair in matches:
+            i1_indices, i2_indices = [get_arg_indices(i) for i in instance_pair]
+            diff = SequenceDiff(i1_indices, i2_indices)
+            num_matching = len(diff.get_matching_pairs())
+            jaccard_index += num_matching / (len(i1_indices) + len(i2_indices)
+                                             - num_matching)
+
+        return jaccard_index / safe_divisor(float(len(matches)))
+
 
     def _compute_agreement_matrix(self, matches, labels_enum, property_name,
                                   gold_sentences):
@@ -287,61 +311,67 @@ class CausalityMetrics(object):
 
         return ConfusionMatrix(labels_1, labels_2)
 
-    def _match_arguments(self, matches, gold):
-        # Initially, we assume every argument was unique. We'll update this
-        # incrementally as we find matches.
-        gold_only_args = predicted_only_args = 2 * len(matches)
-        null_args = 0
+    def _match_instance_args(self, arg_1, arg_2):
+        if arg_1 is None or arg_2 is None:
+            if arg_1 is arg_2: # both None
+                spans_match = True
+                heads_match = True
+            else: # one is None and the other isn't
+                spans_match = False
+                heads_match = False
+        else:
+            spans_match = self._annotation_comparator(arg_1, arg_2)
+            arg_1_head, arg_2_head = [arg[0].parent_sentence.get_head(arg)
+                                      for arg in [arg_1, arg_2]]
+            if arg_1_head is None or arg_2_head is None:
+                if arg_1_head is arg_2_head: # both None
+                    heads_match = True
+                else:
+                    heads_match = False
+            else:
+                heads_match = (arg_1_head.index == arg_2_head.index)
 
-        gold_labels = []
-        predicted_labels = []
+        return spans_match, heads_match
+
+    def _match_arguments(self, matches, gold):
+        correct_causes = 0
+        correct_effects = 0
+
+        correct_cause_heads = 0
+        correct_effect_heads = 0
 
         for instance_1, instance_2 in matches:
-            gold_args = (instance_1.cause, instance_1.effect)
-            predicted_args = (instance_2.cause, instance_2.effect)
             sentence_num = gold.index(instance_1.source_sentence) + 1
+            cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
+            effect_1, effect_2 = [i.effect for i in [instance_1, instance_2]]
 
-            predicted_args_matched = [False, False]
-            for i in range(len(gold_args)):
-                if gold_args[i] is None:
-                    gold_only_args -= 1
-                    null_args += 1
-                    continue
-                for j in range(len(predicted_args)):
-                    if predicted_args[j] is None:
-                        # Only update arg counts on the first round to avoid
-                        # double-counting
-                        if i == 0:
-                            predicted_only_args -= 1
-                            null_args += 1
-                        continue
-                    elif predicted_args_matched[j]:
-                        continue
-                    elif self._annotation_comparator(gold_args[i],
-                                                     predicted_args[j]):
-                        gold_labels.append(self.ArgTypes[i])
-                        predicted_labels.append(self.ArgTypes[j])
-                        if self.save_differences and i != j:
-                            self.property_differences.append(
-                                (instance_1, instance_2, self.ArgTypes,
-                                 sentence_num))
-                        predicted_args_matched[j] = True
-                        gold_only_args -= 1
-                        predicted_only_args -= 1
-                        # We're done matching this gold arg; move on to the next
-                        break
-            
-            if predicted_args_matched != [True, True] and self.save_differences:
+            causes_match, cause_heads_match = self._match_instance_args(
+                cause_1, cause_2)
+            effects_match, effect_heads_match = self._match_instance_args(
+                effect_1, effect_2)
+            correct_causes += causes_match
+            correct_effects += effects_match
+            correct_cause_heads += cause_heads_match
+            correct_effect_heads += effect_heads_match
+
+            # If there's any difference, record it.
+            if (self.save_differences and
+                not (causes_match and effects_match and
+                     cause_heads_match and effect_heads_match)):
                 self.argument_differences.append((instance_1, instance_2,
                                                   sentence_num))
 
-        total_matches = len(gold_labels)
-        #assert 4 * len(matches) == (2 * total_matches + gold_only_args +
-        #                            predicted_only_args + null_args)
-        arg_metrics = ClassificationMetrics(total_matches, predicted_only_args,
-                                            gold_only_args)
-        arg_label_matrix = ConfusionMatrix(gold_labels, predicted_labels)
-        return arg_metrics, arg_label_matrix
+        cause_span_metrics = AccuracyMetrics(correct_causes,
+                                             len(matches) - correct_causes)
+        effect_span_metrics = AccuracyMetrics(correct_effects,
+                                              len(matches) - correct_effects)
+        cause_head_metrics = AccuracyMetrics(
+            correct_cause_heads, len(matches) - correct_cause_heads)
+        effect_head_metrics = AccuracyMetrics(
+            correct_effect_heads, len(matches) - correct_effect_heads)
+
+        return (cause_span_metrics, effect_span_metrics,
+                cause_head_metrics, effect_head_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
            indent=0, file=sys.stdout):
@@ -392,12 +422,20 @@ class CausalityMetrics(object):
 
         if log_stats:
             print_indented(indent, 'Arguments:', file=file)
-            print_indented(indent + 1, self.arg_metrics, file=file)
+            for arg_type in ['cause', 'effect']:
+                print_indented(indent + 1, arg_type.title(), 's:', sep='',
+                               file=file)
+                print_indented(indent + 2, 'Spans:', file=file)
+                print_indented(indent + 3, getattr(self,
+                                                   arg_type + '_span_metrics'),
+                               file=file)
+                print_indented(indent + 2, 'Heads:', file=file)
+                print_indented(indent + 3, getattr(self,
+                                                   arg_type + '_head_metrics'),
+                               file=file)
+                print_indented(indent + 2, 'Jaccard index: ',
+                               getattr(self, arg_type + '_jaccard'), file=file)
 
-        if log_stats or log_confusion:
-            self._log_property_metrics('Argument labels', self.arg_label_matrix,
-                                       indent + 1, log_confusion, log_stats, file)
-            
         if log_differences:
             colorama.deinit()
 
@@ -418,14 +456,13 @@ class CausalityMetrics(object):
         confusion matrices are summed.
         '''
         assert metrics_list, "Can't aggregate empty list of causality metrics!"
-        # Copying gets us a CausalityMetrics object to work with, without having
-        # to worry about what to pass to __init__.
-        aggregated = copy(metrics_list[0])
+        aggregated = object.__new__(CausalityMetrics)
         # For an aggregated, it won't make sense to list all the individual
         # sets of instances/properties processed in the individual computations.
         for attr_name in [
             'ids_considered', 'gold_only_instances',
-            'predicted_only_instances', 'property_differences']:
+            'predicted_only_instances', 'property_differences',
+            'argument_differences']:
             setattr(aggregated, attr_name, [])
         aggregated.save_differences = None
 
@@ -442,10 +479,17 @@ class CausalityMetrics(object):
                                                       causation_types)
         else:
             aggregated.causation_type_matrix = None
-        aggregated.arg_metrics = ClassificationMetrics.average(
-            [m.arg_metrics for m in metrics_list])
-        aggregated.arg_label_matrix = reduce(
-            operator.add, [m.arg_label_matrix for m in metrics_list])
+
+        for attr_name in ['cause_span_metrics', 'effect_span_metrics',
+                          'cause_head_metrics', 'effect_head_metrics']:
+            setattr(aggregated, attr_name,
+                    AccuracyMetrics.average([getattr(m, attr_name)
+                                             for m in metrics_list]))
+            
+        aggregated.cause_jaccard = np.mean([m.cause_jaccard
+                                           for m in metrics_list])
+        aggregated.effect_jaccard = np.mean([m.effect_jaccard
+                                            for m in metrics_list])
 
         return aggregated
 
