@@ -12,7 +12,7 @@ try:
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
-safe_divisor = lambda divisor: divisor if divisor != 0 else float('nan')
+safe_divisor = lambda divisor: divisor if divisor != 0 else np.nan
 
 def f1(precision, recall):
     return 2 * precision * recall / safe_divisor(precision + recall)
@@ -291,7 +291,7 @@ class AccuracyMetrics(object):
     def __init__(self, correct, incorrect):
         self.correct = correct
         self.incorrect = incorrect
-        self.accuracy = correct / float(correct + incorrect)
+        self.accuracy = correct / safe_divisor(float(correct + incorrect))
 
     def pretty_format(self):
         if FLAGS.metrics_log_raw_counts:
