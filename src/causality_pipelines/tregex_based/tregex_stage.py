@@ -1,5 +1,4 @@
-from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, \
-    DEFINE_integer, DEFINE_enum
+from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer, DEFINE_enum
 import threading
 import logging
 from math import log10
@@ -12,10 +11,8 @@ import time
 from data import ParsedSentence, Token
 from pipeline import Stage
 from pipeline.models import Model
-from causality_pipelines.tregex_based import PossibleCausation, \
-    PairwiseCausalityEvaluator, normalize_order
+from causality_pipelines import PossibleCausation, IAAEvaluator
 from util import pairwise, igroup
-from util.metrics import ClassificationMetrics
 from util.nltk import subtree_at_index, index_of_subtree
 from util.scipy import steiner_tree, longest_path_in_tree
 
@@ -47,31 +44,22 @@ class TRegexConnectiveModel(Model):
         self.tregex_patterns = []
         # Internal hackery properties, used for training.
         self._ptb_strings = None
-        self._true_causation_pairs_by_sentence = None
 
     def train(self, sentences):
-        ptb_strings, true_causation_pairs_by_sentence = (
-            self._extract_patterns(sentences))
+        ptb_strings = self._extract_patterns(sentences)
         # Dirty hack to avoid redoing all the preprocessing when test() is
         # called to provide input to the next stage.
         self._ptb_strings = ptb_strings
-        self._true_causation_pairs_by_sentence = (
-            true_causation_pairs_by_sentence)
 
     def test(self, sentences):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        if (self._ptb_strings is not None and
-            self._true_causation_pairs_by_sentence is not None):
+        if self._ptb_strings is not None:
             ptb_strings = self._ptb_strings
-            true_causation_pairs_by_sentence = (
-                self._true_causation_pairs_by_sentence)
             self._ptb_strings = None
-            self._true_causation_pairs_by_sentence = None
         else:
-            ptb_strings, true_causation_pairs_by_sentence = (
-                self._preprocess_sentences(sentences))
+            ptb_strings = self._preprocess_sentences(sentences)
 
         # Interacting with the TRegex processes is heavily I/O-bound, plus we
         # really want multiple TRegex processes running in parallel, so we farm
@@ -98,8 +86,7 @@ class TRegexConnectiveModel(Model):
         threads = []
         for _ in range(FLAGS.tregex_max_threads):
             new_thread = self.TregexProcessorThread(
-                sentences, ptb_strings, queue,
-                true_causation_pairs_by_sentence)
+                sentences, ptb_strings, queue)
             threads.append(new_thread)
             new_thread.start()
 
@@ -126,21 +113,12 @@ class TRegexConnectiveModel(Model):
     def _preprocess_sentences(sentences):
         logging.info("Preprocessing sentences...")
         ptb_strings = []
-        true_causation_pairs_by_sentence = []
         for sentence in sentences:
             sentence.possible_causations = []
             if FLAGS.tregex_pattern_type == 'dependency':
                 ptb_strings.append(sentence.dep_to_ptb_tree_string() + '\n')
             else:
                 ptb_strings.append(sentence.constituency_tree.pformat() + '\n')
-            true_causation_pairs = [
-                normalize_order(
-                    instance.get_cause_and_effect_heads())
-                for instance in sentence.causation_instances]
-            true_causation_pairs_by_sentence.append(
-                set([(arg_1.index, arg_2.index)
-                     for (arg_1, arg_2) in true_causation_pairs
-                     if arg_1 is not None and arg_2 is not None]))
 
         if FLAGS.tregex_pattern_type == 'dependency':
             # Order matters a lot here.
@@ -166,7 +144,9 @@ class TRegexConnectiveModel(Model):
                         ([path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
                           '-treeFile', tree_file.name]
                          + tsurgeon_script_names))
-                    subprocess.call(tsurgeon_command, stdout=surgeried_file)
+                    subprocess.call(tsurgeon_command, stdout=surgeried_file,
+                                    stderr=(TRegexConnectiveModel
+                                            .TregexProcessorThread.dev_null))
                     surgeried_file.seek(0)
                     ptb_strings = surgeried_file.readlines()
         else:
@@ -177,7 +157,7 @@ class TRegexConnectiveModel(Model):
             pass
 
         logging.info('Done preprocessing.')
-        return ptb_strings, true_causation_pairs_by_sentence
+        return ptb_strings
 
     @staticmethod
     def _filter_sentences_for_pattern(sentences, pattern, connective_lemmas):
@@ -473,8 +453,7 @@ class TRegexConnectiveModel(Model):
         self.tregex_patterns = []
         patterns_seen = set()
 
-        preprocessed_ptb_strings, true_causation_pairs_by_sentence = (
-            self._preprocess_sentences(sentences))
+        preprocessed_ptb_strings = self._preprocess_sentences(sentences)
 
         logging.info('Extracting patterns...')
         if FLAGS.tregex_print_patterns:
@@ -504,21 +483,18 @@ class TRegexConnectiveModel(Model):
                                                      connective_lemmas))
         logging.info('Done extracting patterns.')
 
-        return preprocessed_ptb_strings, true_causation_pairs_by_sentence
+        return preprocessed_ptb_strings
 
     #####################################
     # Running TRegex
     #####################################
 
     class TregexProcessorThread(threading.Thread):
-        def __init__(self, sentences, ptb_strings, queue,
-                     true_causation_pairs_by_sentence, *args, **kwargs):
+        def __init__(self, sentences, ptb_strings, queue, *args, **kwargs):
             super(TRegexConnectiveModel.TregexProcessorThread, self).__init__(
                 *args, **kwargs)
             self.sentences = sentences
             self.ptb_strings = ptb_strings
-            self.true_causation_pairs_by_sentence = (
-                true_causation_pairs_by_sentence)
             self.queue = queue
             self.output_file = None
             self.total_bytes_output = 0
@@ -538,9 +514,6 @@ class TRegexConnectiveModel(Model):
                                       for i in possible_sentence_indices]
                     possible_sentences = [self.sentences[i]
                                           for i in possible_sentence_indices]
-                    possible_true_causation_pairs = [
-                        self.true_causation_pairs_by_sentence[i]
-                        for i in possible_sentence_indices]
 
                     with tempfile.NamedTemporaryFile(
                         'w', prefix='trees') as tree_file:
@@ -551,7 +524,7 @@ class TRegexConnectiveModel(Model):
                         tree_file.flush()
                         self._process_pattern(
                             pattern, connective_labels, possible_sentences,
-                            tree_file.name, possible_true_causation_pairs)
+                            tree_file.name)
                     self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
@@ -559,7 +532,7 @@ class TRegexConnectiveModel(Model):
         FIXED_TREGEX_ARGS = '-o -l -N -h cause -h effect'.split()
         def _process_pattern(
             self, pattern, connective_labels, possible_sentences,
-            tree_file_path, possible_true_causation_pairs):
+            tree_file_path):
             # Create output file
             with tempfile.NamedTemporaryFile(
                 'w+b', prefix='matches') as self.output_file:
@@ -569,7 +542,7 @@ class TRegexConnectiveModel(Model):
                     output_type_arg = '-u'
                 else:
                     output_type_arg = '-x'
-                    
+
                 connective_printing_args = []
                 for connective_label in connective_labels:
                     connective_printing_args.extend(['-h', connective_label])
@@ -582,10 +555,9 @@ class TRegexConnectiveModel(Model):
                                 stderr=self.dev_null)
                 self.output_file.seek(0)
 
-                for sentence, true_causation_pairs in zip(
-                    possible_sentences, possible_true_causation_pairs):
+                for sentence in possible_sentences:
                     self._process_tregex_for_sentence(
-                        pattern, connective_labels, sentence, true_causation_pairs)
+                        pattern, connective_labels, sentence)
 
                 # Tell the progress reporter how far we've gotten, so that it
                 # will know progress for patterns that have already finished.
@@ -593,8 +565,24 @@ class TRegexConnectiveModel(Model):
 
             self.output_file = None
 
+        @staticmethod
+        def _get_constituency_token_from_tregex_line(line, sentence,
+                                                     all_treepositions):
+            # We need to use treepositions, not subtrees, because this
+            # is how TRegex gives match positions.
+            treeposition_index = int(line.split(":")[1])
+            node = sentence.constituency_tree[
+                all_treepositions[treeposition_index - 1]]
+            head = sentence.constituent_heads[node]
+            return sentence.get_token_for_constituency_node(head)
+        
+        @staticmethod
+        def _get_dependency_token_from_tregex_line(line, sentence):
+            token_index = int(line.split("_")[-1])
+            return sentence.tokens[token_index]
+
         def _process_tregex_for_sentence(self, pattern, connective_labels,
-                                         sentence, true_causation_pairs):
+                                         sentence):
             # Read TRegex output for the sentence.
             # For each sentence, we leave the file positioned at the next
             # tree number line.
@@ -604,6 +592,12 @@ class TRegexConnectiveModel(Model):
             while next_line:
                 lines.append(next_line)
                 next_line = self.output_file.readline().strip()
+                
+            true_connectives = {
+                tuple(instance.connective): instance
+                for instance in sentence.causation_instances
+                if instance.cause and instance.effect # limit to pairwise
+            }
 
             # Parse TRegex output. Argument and connective identifiers will be
             # printed in batches of 2 + k, where k is the connective length.
@@ -611,34 +605,45 @@ class TRegexConnectiveModel(Model):
             # connectives.
             batch_size = 2 + len(connective_labels)
             for match_lines in igroup(lines, batch_size):
-                if FLAGS.tregex_pattern_type == 'dependency':
-                    arg_index_pair = [int(line.split("_")[-1])
-                                      for line in match_lines[:2]]
-                    arg_index_pair = tuple(sorted(arg_index_pair))
-                    token_1, token_2 = [sentence.tokens[i] for i in arg_index_pair]
-                else: # constituency
-                    # We need to use treepositions, not subtrees, because this
-                    # is how TRegex gives match positions.
-                    all_treepositions = (sentence.constituency_tree
-                                          .treepositions())
-                    arg_treeposition_indices = [int(line.split(":")[1])
-                                                for line in match_lines[:2]]
-                    # TRegex node positions start from 1, so we need to
-                    # subtract 1 to get proper treeposition indices.
-                    arg_constituent_nodes = [
-                        sentence.constituency_tree[all_treepositions[pos - 1]]
-                        for pos in arg_treeposition_indices]
-                    arg_constituent_heads = [sentence.constituent_heads[node]
-                                             for node in arg_constituent_nodes]
-                    token_1, token_2 = TRegexConnectiveStage.normalize_order([
-                        sentence.get_token_for_constituency_node(head)
-                        for head in arg_constituent_heads])
-                    arg_index_pair = tuple(t.index for t in [token_1, token_2])
+                # TODO: If argument heads overlap with connective words, we get
+                # a problem where the pattern fails to include one of them,
+                # which means the match always excludes something important and
+                # we end up with the wrong number of match lines. Fix this
+                # (probably by generating class patterns that can store extra
+                # data like argument mappings).
+                if None in match_lines:
+                    logging.warn("Skipping invalid TRegex match: %s", lines)
+                    continue
+                arg_lines = match_lines[:2]
+                connective_lines = match_lines[2:]
 
-                # Mark sentence if possible connective is present.
-                in_gold = arg_index_pair in true_causation_pairs
+                if FLAGS.tregex_pattern_type == 'dependency':
+                    cause, effect = [
+                        self._get_dependency_token_from_tregex_line(line,
+                                                                    sentence)
+                        for line in arg_lines]
+                    connective = [
+                        self._get_dependency_token_from_tregex_line(line,
+                                                                    sentence)
+                        for line in connective_lines]
+                else: # constituency
+                    all_treepositions = (sentence.constituency_tree
+                                         .treepositions())
+                    cause, effect = [
+                        self._get_constituency_token_from_tregex_line(
+                            line, sentence, all_treepositions)
+                        for line in arg_lines]
+                    connective = [
+                        self._get_constituency_token_from_tregex_line(
+                            line, sentence, all_treepositions)
+                        for line in connective_lines]
+
+                # TODO: Make this eliminate duplicate PossibleCausations on
+                # the same connective words, like regex pipeline does.
                 possible = PossibleCausation(
-                    token_1, token_2, pattern, in_gold)
+                    [pattern], connective,
+                    true_connectives.get(tuple(connective), None),
+                    [cause], [effect])
                 # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
                 # It is thread-safe, because lists are thread-safe, and
                 # we never reassign sentence.possible_causations.
@@ -695,49 +700,6 @@ class TRegexConnectiveStage(Stage):
         return [sentence]
 
     def _make_evaluator(self):
-        return ConnectiveEvaluator()
-
-
-class ConnectiveEvaluator(PairwiseCausalityEvaluator):
-    # TODO: Redefine as a composite Evaluator (consisting of two sub-Evaluators)
-    ALL_INSTANCES_KEY = 'All instances'
-    PAIRWISE_KEY = 'Pairwise only'
-
-    def __init__(self):
-        super(ConnectiveEvaluator, self).__init__(
-            FLAGS.tregex_print_test_instances)
-        self.pairwise_only_metrics = ClassificationMetrics()
-
-    def evaluate(self, sentences, original_sentences):
-        for sentence in sentences:
-            predicted_pairs = [(pc.arg1, pc.arg2)
-                               for pc in sentence.possible_causations]
-            expected_pairs = [i.get_cause_and_effect_heads()
-                              for i in sentence.causation_instances]
-            assert (None, None) not in expected_pairs
-            tp, fp, fn = self._match_causation_pairs(
-                expected_pairs, predicted_pairs, self._tp_pairs, self._fp_pairs,
-                self._fn_pairs, self._all_instances_metrics)
-
-            self.pairwise_only_metrics.tp += tp
-            self.pairwise_only_metrics.fp += fp
-            fns_to_ignore = sum([1 for pair in expected_pairs if None in pair])
-            self.pairwise_only_metrics.fn += fn - fns_to_ignore
-
-    def complete_evaluation(self):
-        all_instances_metrics = PairwiseCausalityEvaluator.complete_evaluation(
-            self)
-        pairwise_only_metrics = self.pairwise_only_metrics
-        self.pairwise_only_metrics = None
-        return {ConnectiveEvaluator.ALL_INSTANCES_KEY: all_instances_metrics,
-                ConnectiveEvaluator.PAIRWISE_KEY: pairwise_only_metrics}
-
-    def aggregate_results(self, results_list):
-        all_instances = ClassificationMetrics.average(
-            [metrics_dict[ConnectiveEvaluator.ALL_INSTANCES_KEY]
-             for metrics_dict in results_list])
-        pairwise_only = ClassificationMetrics.average(
-            [metrics_dict[ConnectiveEvaluator.PAIRWISE_KEY]
-             for metrics_dict in results_list])
-        return {ConnectiveEvaluator.ALL_INSTANCES_KEY: all_instances,
-                ConnectiveEvaluator.PAIRWISE_KEY: pairwise_only}
+        # TODO: provide both pairwise and non-pairwise stats
+        return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
+                            True, True, True)

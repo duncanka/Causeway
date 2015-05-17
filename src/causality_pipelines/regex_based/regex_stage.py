@@ -4,7 +4,7 @@ import logging
 import re
 import time
 
-from causality_pipelines.regex_based import PossibleCausation
+from causality_pipelines import PossibleCausation
 from data import ParsedSentence
 from pipeline import ClassifierEvaluator, Stage
 from pipeline.models import Model

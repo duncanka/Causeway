@@ -2,7 +2,7 @@ from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAG
 import logging
 import numpy as np
 
-from causality_pipelines.regex_based import PossibleCausation, IAAEvaluator
+from causality_pipelines import PossibleCausation, IAAEvaluator
 from pipeline.models import CRFModel
 from pipeline.feature_extractors import FeatureExtractor, SetValuedFeatureExtractor
 from util import Enum
@@ -195,4 +195,5 @@ class ArgumentLabelerStage(Stage):
             return sentence.possible_causations
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.arg_label_log_differences, True)
+        return IAAEvaluator(False, False, FLAGS.arg_label_log_differences,
+                            True, True)

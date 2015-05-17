@@ -2,17 +2,16 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 
 import logging
 
-from causality_pipelines.tregex_based import PairwiseCausalityEvaluator, \
-    normalize_order
-from data import Token, CausationInstance
-from pipeline import Stage, ClassifierEvaluator
-from pipeline.models import ClassifierPart, ClassifierModel
+from causality_pipelines import IAAEvaluator
+from data import Token
+from pipeline import Stage
+from pipeline.models import ClassifierModel, ClassifierPart
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
 
 try:
     DEFINE_list(
-        'pw_candidate_features', ['pos1', 'pos2', 'wordsbtw', 'deppath',
-                                  'deplen', 'tenses', 'connective'],
+        'pw_candidate_features', ['cause_pos', 'effect_pos', 'wordsbtw',
+                                  'deppath', 'deplen', 'tenses', 'connective'],
         'Features to use for simple causality model')
     DEFINE_integer('pw_candidate_max_wordsbtw', 10,
                    "Pairwise classifier: maximum number of words between"
@@ -26,13 +25,18 @@ try:
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
+
 class PhrasePairPart(ClassifierPart):
-    def __init__(self, sentence, head_token_1, head_token_2,
-                 connective_pattern, label):
+    def __init__(self, possible_causation):
+        sentence = possible_causation.sentence
+        label = possible_causation.true_causation_instance is not None
         super(PhrasePairPart, self).__init__(sentence, label)
-        self.head_token_1 = head_token_1
-        self.head_token_2 = head_token_2
-        self.connective_pattern = connective_pattern
+        self.cause_head = sentence.get_head(possible_causation.cause)
+        self.effect_head = sentence.get_head(possible_causation.effect)
+        self.connective = possible_causation.connective
+        # TODO: Update this once we have multiple pattern matches sorted out.
+        self.connective_pattern = possible_causation.matching_patterns[0]
+
 
 class PhrasePairModel(ClassifierModel):
     def __init__(self, classifier):
@@ -44,19 +48,13 @@ class PhrasePairModel(ClassifierModel):
     @staticmethod
     def words_btw_heads(part):
         words_btw = part.instance.count_words_between(
-            part.head_token_1, part.head_token_2)
+            part.cause_head, part.effect_head)
         return min(words_btw, FLAGS.pw_candidate_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
-        source = part.head_token_1
-        target = part.head_token_2
-        # Arbitrary convention to ensure that the string comes out the same
-        # no matter which direction the dependency path goes: earlier start
-        # offset is source.
-        if source.start_offset > target.start_offset:
-            source, target = target, source
-        deps = part.instance.extract_dependency_path(source, target, False)
+        deps = part.instance.extract_dependency_path(
+            part.cause_head, part.effect_head, False)
         if len(deps) > FLAGS.pw_candidate_max_dep_path_len:
             return 'LONG-RANGE'
         else:
@@ -90,31 +88,30 @@ class PhrasePairModel(ClassifierModel):
     FEATURE_EXTRACTORS = []
 
 PhrasePairModel.FEATURE_EXTRACTORS = [
-    KnownValuesFeatureExtractor('pos1', lambda part: part.head_token_1.pos,
+    KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
-    KnownValuesFeatureExtractor('pos2', lambda part: part.head_token_2.pos,
+    KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
                                 Token.ALL_POS_TAGS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
-        'pos1gen', lambda part: part.head_token_1.get_gen_pos(),
+        'cause_pos_gen', lambda part: part.cause_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
-        'pos2gen', lambda part: part.head_token_2.get_gen_pos(),
+        'effect_pos_gen', lambda part: part.effect_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
     FeatureExtractor('wordsbtw', PhrasePairModel.words_btw_heads,
                      FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor('deppath', PhrasePairModel.extract_dep_path),
     FeatureExtractor('deplen',
                      lambda part: len(part.instance.extract_dependency_path(
-                        part.head_token_1, part.head_token_2)),
+                        part.cause_head, part.effect_head)),
                      FeatureExtractor.FeatureTypes.Numerical),
-    # TODO: This assumes that we will not have to worry about multiple patterns
-    # matching simultaneously. Should we make that assumption?
+    # TODO: Update this once we have multiple pattern matches sorted out.
     FeatureExtractor('connective', lambda part: part.connective_pattern),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [PhrasePairModel.extract_tense(head)
-                         for head in part.head_token_1, part.head_token_2]))
+                         for head in part.cause_head, part.effect_head]))
 ]
 
 
@@ -126,50 +123,18 @@ class PairwiseCandidateClassifierStage(Stage):
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
-        parts = [PhrasePairPart(sentence, pc.arg1, pc.arg2,
-                 pc.matching_pattern, pc.correct)
-                 for pc in sentence.possible_causations]
-        return parts
+        return [PhrasePairPart(p) for p in sentence.possible_causations]
 
     def _decode_labeled_parts(self, sentence, labeled_parts):
         sentence.causation_instances = []
         for part in [p for p in labeled_parts if p.label]:
-            causation = CausationInstance(sentence)
             # The only part type is phrase pair, so we don't have to worry
             # about checking the part type.
-            # We know it's a pair of phrases related by causation, so one is
-            # the cause and one is the effect, but we don't actually know
-            # which is which. We arbitrarily choose to call the one with the
-            # earlier head the cause. We leave the connective unset.
-            cause, effect = normalize_order(
-                (part.head_token_1, part.head_token_2))
-            # Causations assume their arguments are lists of tokens.
-            causation.cause, causation.effect = [cause], [effect]
-            sentence.causation_instances.append(causation)
+            sentence.add_causation_instance(
+                connective=part.connective, cause=[part.cause_head],
+                effect=[part.effect_head])
 
     def _make_evaluator(self):
-        return PairwiseCandidateClassifierEvaluator()
-
-class PairwiseCandidateClassifierEvaluator(PairwiseCausalityEvaluator,
-                                           ClassifierEvaluator):
-
-    # Uses complete_evaluation from PairwiseCausalityEvaluator, which comes
-    # first in the MRO.
-
-    def __init__(self):
-        super(PairwiseCandidateClassifierEvaluator, self).__init__(
-            FLAGS.pw_candidate_print_instances)
-
-    def evaluate(self, sentences, original_sentences):
-        expected_causations = [sentence.causation_instances
-                               for sentence in original_sentences]
-        for sentence, expected_causation_set in zip(sentences,
-                                                    expected_causations):
-            predicted_cause_effect_pairs = [i.get_cause_and_effect_heads() for
-                                            i in sentence.causation_instances]
-            expected_cause_effect_pairs = [i.get_cause_and_effect_heads() for
-                                           i in expected_causation_set]
-            self._match_causation_pairs(
-                expected_cause_effect_pairs, predicted_cause_effect_pairs,
-                self._tp_pairs, self._fp_pairs, self._fn_pairs,
-                self._all_instances_metrics)
+        # TODO: provide both pairwise and non-pairwise stats
+        return IAAEvaluator(False, False, FLAGS.pw_candidate_print_instances,
+                            False, True, True)

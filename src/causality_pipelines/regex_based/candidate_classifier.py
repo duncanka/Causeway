@@ -1,7 +1,7 @@
 from gflags import FLAGS, DuplicateFlagError, DEFINE_list, DEFINE_bool, DEFINE_integer
 import logging
 
-from causality_pipelines.regex_based import IAAEvaluator
+from causality_pipelines import IAAEvaluator
 from data import Token, CausationInstance
 from iaa import make_annotation_comparator
 from pipeline import Stage
@@ -152,7 +152,9 @@ class RegexCandidateClassifierStage(Stage):
                                         inst1.connective, inst2.connective)
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.regex_cc_log_differences, False)
+        # TODO: provide both pairwise and non-pairwise stats.
+        return IAAEvaluator(False, False, FLAGS.regex_cc_log_differences,
+                            False, True, True)
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
@@ -163,6 +165,7 @@ class RegexCandidateClassifierStage(Stage):
         # code does it internally: by running a diff on the connectives. Except
         # we cheat a bit, and compare PossibleCausations against real
         # CausationInstances.
+        # TODO: try limiting to pairwise only for training.
         if is_train:
             parts = []
             # We want the diff to sort by connective position in the sentence.
