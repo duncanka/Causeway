@@ -170,9 +170,16 @@ class CausalityMetrics(object):
             self_attr = getattr(self, attr_name)
             other_attr = getattr(other, attr_name)
             if self_attr is not None and other_attr is not None:
-                setattr(sum_metrics, attr_name, self_attr + other_attr)
+                # Ignore all NaNs -- just pretend they're not even there.
+                if isinstance(self_attr, float) and np.isnan(self_attr):
+                    attr_value = other_attr
+                elif isinstance(other_attr, float) and np.isnan(other_attr):
+                    attr_value = self_attr
+                else:
+                    attr_value = self_attr + other_attr
             else:
-                setattr(sum_metrics, attr_name, None)
+                attr_value = None
+            setattr(sum_metrics, attr_name, attr_value)
 
         return sum_metrics
 
@@ -510,10 +517,10 @@ class CausalityMetrics(object):
 
         aggregated.cause_jaccard = np.mean(
             [m.cause_jaccard for m in metrics_list
-             if m.cause_jaccard != np.nan])
+             if not np.isnan(m.cause_jaccard)])
         aggregated.effect_jaccard = np.mean(
             [m.effect_jaccard for m in metrics_list
-             if m.effect_jaccard != np.nan])
+             if not np.isnan(m.effect_jaccard)])
 
         return aggregated
 
