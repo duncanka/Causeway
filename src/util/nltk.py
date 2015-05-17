@@ -141,7 +141,7 @@ def last_search(tree, options, head_map):
 def add_collins_NP(tree, head_map):
     for subtree in tree:
         collins_find_heads(subtree, head_map)
-    # TODO:todo Extra special cases for NPs
+    # Original code had todo for: Extra special cases for NPs
     '''
     From Collins:
 
@@ -152,7 +152,7 @@ def add_collins_NP(tree, head_map):
     after parsing. The following rules are then used to recover the NP head:
     '''
 
-    # TODO: handle NML properly
+    # Original code had todo for: handle NML properly
 
     last_child_head = get_head(head_map, tree[-1])
     if last_child_head.label() == 'POS':
@@ -200,7 +200,6 @@ def collins_find_heads(tree, head_map=None):
         if tree.label() in ['NP', 'NML']:
             add_collins_NP(tree, head_map)
         else:
-            # TODO: Consider alternative error announcement means
             if tree.label() not in ['ROOT', 'TOP', 'S1', '']:
                 logging.warn("Unknown label: %s" % tree.label())
             else:

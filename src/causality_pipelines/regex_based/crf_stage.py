@@ -123,7 +123,6 @@ class ArgumentLabelerModel(CRFModel):
 
         def extract(self, observation):
             word = observation.observation
-            # TODO: make this function return a signed value?
             min_distance = np.inf
             min_abs_distance = np.inf
             for connective_token in observation.part.connective:
