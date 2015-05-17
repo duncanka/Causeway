@@ -1,6 +1,9 @@
 from __future__ import print_function
-from itertools import tee, izip
+from itertools import tee, izip, izip_longest
+import fcntl
 import os
+import struct
+import termios
 
 def recursively_list_files(path):
     walker = os.walk(path)
@@ -78,8 +81,12 @@ def pairwise(iterable):
 
 # From http://stackoverflow.com/a/3010495/4044809
 def get_terminal_size():
-    import fcntl, termios, struct
     h, w, _, _ = struct.unpack('HHHH',
         fcntl.ioctl(0, termios.TIOCGWINSZ,
         struct.pack('HHHH', 0, 0, 0, 0)))
     return w, h
+
+# From http://stackoverflow.com/a/434411
+def igroup(iterable, n, fillvalue=None):
+    args = [iter(iterable)] * n
+    return izip_longest(*args, fillvalue=fillvalue)
