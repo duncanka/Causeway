@@ -68,6 +68,11 @@ class ArgumentLabelerModel(CRFModel):
             elif label == self.EFFECT_LABEL:
                 part.effect.append(token)
 
+        if not part.cause:
+            part.cause = None
+        if not part.effect:
+            part.effect = None
+
     @staticmethod
     def get_connective_parse_distance(observation):
         sentence = observation.part.sentence

@@ -701,5 +701,6 @@ class TRegexConnectiveStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
+        # TODO: figure out why this doesn't print test instances
         return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
                             True, True, True)
