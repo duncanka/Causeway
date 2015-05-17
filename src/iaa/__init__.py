@@ -108,7 +108,6 @@ class CausalityMetrics(object):
                  compare_args=True, pairwise_only=False):
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
-        # TODO: add implementation for pairwise-only evaluation.
 
         if ids_considered is None:
             ids_considered = CausalityMetrics.IDsConsidered.Both
@@ -181,11 +180,15 @@ class CausalityMetrics(object):
         causations = []
         for instance in sentence.causation_instances:
             is_given_id = instance.id in FLAGS.iaa_given_connective_ids
-            if (self.ids_considered == self.IDsConsidered.Both or
-                (is_given_id and
-                 self.ids_considered == self.IDsConsidered.GivenOnly) or
-                (not is_given_id and
-                 self.ids_considered == self.IDsConsidered.NonGivenOnly)):
+            if (# First set of conditions: matches givenness specified
+                (self.ids_considered == self.IDsConsidered.Both or
+                 (is_given_id and
+                  self.ids_considered == self.IDsConsidered.GivenOnly) or
+                 (not is_given_id and
+                  self.ids_considered == self.IDsConsidered.NonGivenOnly))
+                # Second set of conditions: is pairwise if necessary
+                and (not self.pairwise_only or
+                     (instance.cause != None and instance.effect != None))):
                 causations.append(instance)
         return causations
 
@@ -213,6 +216,7 @@ class CausalityMetrics(object):
             # If we're allowing partial matches, we don't want any partial
             # matches to override full matches. So we first do an exact match,
             # and remove the ones that matched from the partial matching.
+            # TODO: extract this as a function?
             if self.allow_partial:
                 diff = SequenceDiff(gold_causations, predicted_causations,
                                     compare_connectives_exact, sort_key)
