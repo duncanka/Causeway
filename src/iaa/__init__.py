@@ -105,9 +105,10 @@ class CausalityMetrics(object):
     def __init__(self, gold, predicted, allow_partial,
                  save_differences=False, ids_considered=None,
                  compare_degrees=True, compare_types=True,
-                 compare_args=True):
+                 compare_args=True, pairwise_only=False):
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
+        # TODO: add implementation for pairwise-only evaluation.
 
         if ids_considered is None:
             ids_considered = CausalityMetrics.IDsConsidered.Both
@@ -115,6 +116,7 @@ class CausalityMetrics(object):
         self._annotation_comparator = make_annotation_comparator(allow_partial)
         self.ids_considered = ids_considered
         self.save_differences = save_differences
+        self.pairwise_only = pairwise_only
         self.gold_only_instances = []
         self.predicted_only_instances = []
         self.argument_differences = []
@@ -135,6 +137,8 @@ class CausalityMetrics(object):
         else:
             self.causation_type_matrix = None
 
+        # TODO: add back metrics that account for the possibility of null args
+        # (i.e., P/R/F1).
         if compare_args:
             (self.cause_span_metrics, self.effect_span_metrics,
              self.cause_head_metrics, self.effect_head_metrics) = (
@@ -162,12 +166,14 @@ class CausalityMetrics(object):
         sum_metrics.property_differences.extend(other.property_differences)
         # Add together submetrics, if they exist
         sum_metrics.connective_metrics += other.connective_metrics
-        if sum_metrics.degree_matrix is not None:
-            sum_metrics.degree_matrix += other.degree_matrix
-        if sum_metrics.causation_type_matrix is not None:
-            sum_metrics.causation_type_matrix += other.causation_type_matrix
-        sum_metrics.arg_metrics += other.arg_metrics
-        sum_metrics.arg_label_matrix += other.arg_label_matrix
+        for attr_name in (['degree_matrix', 'causation_type_matrix']
+                          + self._ARG_ATTR_NAMES):
+            self_attr = getattr(self, attr_name)
+            other_attr = getattr(other, attr_name)
+            if self_attr is not None and other_attr is not None:
+                setattr(sum_metrics, attr_name, self_attr + other_attr)
+            else:
+                setattr(sum_metrics, attr_name, None)
 
         return sum_metrics
 
@@ -493,14 +499,17 @@ class CausalityMetrics(object):
 
         for attr_name in ['cause_span_metrics', 'effect_span_metrics',
                           'cause_head_metrics', 'effect_head_metrics']:
+            attr_values = [getattr(m, attr_name) for m in metrics_list]
             setattr(aggregated, attr_name,
-                    AccuracyMetrics.average([getattr(m, attr_name)
-                                             for m in metrics_list]))
-            
-        aggregated.cause_jaccard = np.mean([m.cause_jaccard
-                                           for m in metrics_list])
-        aggregated.effect_jaccard = np.mean([m.effect_jaccard
-                                            for m in metrics_list])
+                    AccuracyMetrics.average([v for v in attr_values
+                                             if v is not None]))
+
+        aggregated.cause_jaccard = np.mean(
+            [m.cause_jaccard for m in metrics_list
+             if m.cause_jaccard != np.nan])
+        aggregated.effect_jaccard = np.mean(
+            [m.effect_jaccard for m in metrics_list
+             if m.effect_jaccard != np.nan])
 
         return aggregated
 

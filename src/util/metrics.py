@@ -303,6 +303,10 @@ class AccuracyMetrics(object):
     def __str__(self):
         return self.pretty_format()
 
+    def __add__(self, other):
+        return AccuracyMetrics(self.correct + other.correct,
+                               self.incorrect + other.incorrect)
+
     @staticmethod
     def average(metrics):
         assert metrics, "Cannot average empty metrics list"
