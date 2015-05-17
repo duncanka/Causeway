@@ -90,6 +90,8 @@ def make_annotation_comparator(allow_partial):
         return fraction_of_larger_overlapping > min_partial_overlap
 
     return match_annotations
+compare_annotations_partial = make_annotation_comparator(True)
+compare_annotations_exact = make_annotation_comparator(False)
 
 
 def get_truncated_sentence(instance):
@@ -199,18 +201,51 @@ class CausalityMetrics(object):
                 causations.append(instance)
         return causations
 
+    @staticmethod
+    def get_connective_matches(gold_causations, predicted_causations,
+                               allow_partial):
+        def compare_connectives_exact(instance_1, instance_2):
+            return compare_annotations_exact(
+                instance_1.connective, instance_2.connective)
+        if allow_partial:
+            def compare_connectives(instance_1, instance_2):
+                return compare_annotations_partial(
+                    instance_1.connective, instance_2.connective)
+        else:
+            compare_connectives = compare_connectives_exact
+        # Sort instances by connective, just in case they're somehow out of
+        # order.
+        sort_key = lambda inst: inst.connective[0].start_offset
+
+        matching_instances = []
+        gold_only_instances = []
+        predicted_only_instances = []
+
+        # If we're allowing partial matches, we don't want any partial
+        # matches to override full matches. So we first do an exact match,
+        # and remove the ones that matched from the partial matching.
+        if allow_partial:
+            diff = SequenceDiff(gold_causations, predicted_causations,
+                                compare_connectives_exact, sort_key)
+            matching_pairs = diff.get_matching_pairs()
+            matching_instances.extend(matching_pairs)
+            # Instances that were gold-only or predicted-only may still generate
+            # partial matches.
+            gold_causations = diff.get_a_only_elements()
+            predicted_causations = diff.get_b_only_elements()
+
+        diff = SequenceDiff(gold_causations, predicted_causations,
+                            compare_connectives, sort_key)
+        matching_instances.extend(diff.get_matching_pairs())
+        gold_only_instances.extend(diff.get_a_only_elements())
+        predicted_only_instances.extend(diff.get_b_only_elements())
+
+        return matching_instances, gold_only_instances, predicted_only_instances
+
     def _match_connectives(self, gold, predicted):
         matching_instances = []
         gold_only_instances = []
         predicted_only_instances = []
-        def compare_connectives(instance_1, instance_2):
-            return self._annotation_comparator(instance_1.connective,
-                                               instance_2.connective)
-            
-        if self.allow_partial:
-            def compare_connectives_exact(instance_1, instance_2):
-                comparator = make_annotation_comparator(False)
-                return comparator(instance_1.connective, instance_2.connective)
 
         for gold_sentence, predicted_sentence in zip(gold, predicted):
             assert (gold_sentence.original_text ==
@@ -218,33 +253,13 @@ class CausalityMetrics(object):
                         "Can't compare annotations on non-identical sentences")
             gold_causations = self.__get_causations(gold_sentence)
             predicted_causations = self.__get_causations(predicted_sentence)
-            sort_key = lambda inst: inst.connective[0].start_offset
             
-            # If we're allowing partial matches, we don't want any partial
-            # matches to override full matches. So we first do an exact match,
-            # and remove the ones that matched from the partial matching.
-            # TODO: extract this as a function?
-            if self.allow_partial:
-                diff = SequenceDiff(gold_causations, predicted_causations,
-                                    compare_connectives_exact, sort_key)
-                matching_pairs = diff.get_matching_pairs()
-                matching_instances.extend(matching_pairs)
-
-                matched_golds = [gold_causation for gold_causation, _
-                                 in matching_pairs]
-                gold_causations = [c for c in gold_causations
-                                   if c not in matched_golds]
-
-                matched_predicteds = [predicted_causation for
-                                      _, predicted_causation in matching_pairs]
-                predicted_causations = [c for c in predicted_causations
-                                        if c not in matched_predicteds]
-            
-            diff = SequenceDiff(gold_causations, predicted_causations,
-                                compare_connectives, sort_key)
-            matching_instances.extend(diff.get_matching_pairs())
-            gold_only_instances.extend(diff.get_a_only_elements())
-            predicted_only_instances.extend(diff.get_b_only_elements())
+            sentence_matching, sentence_gold_only, sentence_predicted_only = (
+                self.get_connective_matches(
+                    gold_causations, predicted_causations, self.allow_partial))
+            matching_instances.extend(sentence_matching)
+            gold_only_instances.extend(sentence_gold_only)
+            predicted_only_instances.extend(sentence_predicted_only)
 
         if self.ids_considered == CausalityMetrics.IDsConsidered.GivenOnly:
             assert len(matching_instances) == len(

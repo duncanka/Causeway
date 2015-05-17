@@ -169,7 +169,6 @@ class RegexCandidateClassifierStage(Stage):
         if is_train:
             parts = []
             # We want the diff to sort by connective position in the sentence.
-            # TODO: Make this also start by separating out exact matches.
             sort_by_key = lambda inst: inst.connective[0].start_offset
             connectives_diff = SequenceDiff(
                 sentence.possible_causations, sentence.causation_instances,
