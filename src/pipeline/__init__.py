@@ -98,13 +98,13 @@ class Pipeline(object):
             if FLAGS.cv_print_fold_results:
                 print "Fold", i + 1, "results:"
 
-            for stage, stage_results, current_stage_result in zip(
+            for stage, stage_results, stage_result in zip(
                 self.stages, results, fold_results):
-                stage_results.append(current_stage_result)
+                stage_results.append(stage_result)
                 if FLAGS.cv_print_fold_results:
                     print_indented(1, 'Stage "', stage.name, '" results:',
                                    sep='')
-                    self.print_stage_results(2, current_stage_result)
+                    self.print_stage_results(2, stage_result)
 
             if (FLAGS.cv_debug_stop_after is not None
                 and i + 1 >= FLAGS.cv_debug_stop_after):
