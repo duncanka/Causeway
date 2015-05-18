@@ -166,7 +166,7 @@ class Pipeline(object):
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
                 stage.test(instances)
-                logging.info("Done testing stage %s" % stage.name)
+                logging.info('Done testing stage "%s"' % stage.name)
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''

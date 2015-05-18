@@ -4,9 +4,9 @@ import logging
 import re
 import time
 
-from causality_pipelines import PossibleCausation
+from causality_pipelines import PossibleCausation, IAAEvaluator
 from data import ParsedSentence
-from pipeline import ClassifierEvaluator, Stage
+from pipeline import Stage
 from pipeline.models import Model
 from util import Enum
 
@@ -203,76 +203,10 @@ class RegexConnectiveStage(Stage):
             models=[RegexConnectiveModel()])
 
     def _make_evaluator(self):
-        return ConnectiveEvaluator()
+        return IAAEvaluator(False, False, FLAGS.regex_print_test_instances,
+                            True, False, True)
 
     PRODUCED_ATTRIBUTES = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
         return [sentence]
-
-class ConnectiveEvaluator(ClassifierEvaluator):
-    def __init__(self):
-        super(ConnectiveEvaluator, self).__init__()
-        self._tp_connectives, self._fp_connectives, self._fn_connectives = (
-            [], [], [])
-
-    def evaluate(self, sentences, original_sentences):
-        for sentence in sentences:
-            # Duplicates have already been eliminated by merging all patterns
-            # that match the same connective tokens. So unless we have two
-            # identical connectives in the gold data (which we shouldn't),
-            # it's safe to compare lists.
-            expected_connectives = [
-                tuple(sorted(t.index for t in instance.connective))
-                for instance in sentence.causation_instances]
-            predicted_connectives = [
-                tuple(sorted(t.index for t in pc.connective))
-                for pc in sentence.possible_causations]
-
-            for predicted in predicted_connectives:
-                if predicted in expected_connectives:
-                    if FLAGS.regex_print_test_instances:
-                        tp_tokens = [sentence.tokens[i] for i in predicted]
-                        self._tp_connectives.append(tp_tokens)
-                    self.tp += 1
-                    expected_connectives.remove(predicted)
-                else:
-                    if FLAGS.regex_print_test_instances:
-                        fp_tokens = [sentence.tokens[i] for i in predicted]
-                        self._fp_connectives.append(fp_tokens)
-                    self.fp += 1
-            # Any expected connectives remaining are ones we didn't predict,
-            # i.e., false negatives.
-            self.fn += len(expected_connectives)
-            if FLAGS.regex_print_test_instances:
-                tn_token_lists = [[sentence.tokens[i] for i in expected]
-                               for expected in expected_connectives]
-                self._fn_connectives.extend(tn_token_lists)
-
-    def complete_evaluation(self):
-        result = super(ConnectiveEvaluator, self).complete_evaluation()
-        if FLAGS.regex_print_test_instances:
-            self._print_instances_by_eval_result(
-                self._tp_connectives, self._fp_connectives, self._fn_connectives)
-        del self._tp_connectives
-        del self._fp_connectives
-        del self._fn_connectives
-        return result
-
-    @staticmethod
-    def _print_instances_by_eval_result(tp_connectives, fp_connectives,
-                                       fn_connectives):
-        for connectives, pair_type in zip(
-            [tp_connectives, fp_connectives, fn_connectives],
-            ['True positives', 'False positives', 'False negatives']):
-            print pair_type + ':'
-            for connective in connectives:
-                sentence = connective[0].parent_sentence
-                connective_text = ', '.join([t.original_text
-                                             for t in connective])
-                print ('    %s (%s)' % (
-                   sentence.original_text.replace('\n', ' '),
-                   connective_text)).encode('utf-8')
-
-            print '\n'
-
