@@ -526,16 +526,26 @@ class CausalityMetrics(object):
         for attr_name in ['cause_span_metrics', 'effect_span_metrics',
                           'cause_head_metrics', 'effect_head_metrics']:
             attr_values = [getattr(m, attr_name) for m in metrics_list]
-            setattr(aggregated, attr_name,
-                    AccuracyMetrics.average([v for v in attr_values
-                                             if v is not None]))
+            attr_values = [v for v in attr_values if v is not None]
+            if attr_values:
+                setattr(aggregated, attr_name,
+                        AccuracyMetrics.average(attr_values))
+            else:
+                setattr(aggregated, attr_name, None)
 
-        aggregated.cause_jaccard = np.mean(
-            [m.cause_jaccard for m in metrics_list
-             if not np.isnan(m.cause_jaccard)])
-        aggregated.effect_jaccard = np.mean(
-            [m.effect_jaccard for m in metrics_list
-             if not np.isnan(m.effect_jaccard)])
+        for attr_name in ['cause_jaccard', 'effect_jaccard']:
+            attr_values = [getattr(m, attr_name) for m in metrics_list]
+            attr_values = [v for v in attr_values if v is not None]
+            if attr_values: # At least some are not None
+                attr_values = [v for v in attr_values if not np.isnan(v)]
+                if attr_values:
+                    aggregate_value = np.mean(attr_values)
+                else:
+                    aggregate_value = np.nan
+            else:
+                aggregate_value = None
+
+            setattr(aggregated, attr_name, aggregate_value)
 
         return aggregated
 

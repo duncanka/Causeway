@@ -309,8 +309,7 @@ class AccuracyMetrics(object):
 
     @staticmethod
     def average(metrics):
-        assert metrics, "Cannot average empty metrics list"
-        new_metrics = AccuracyMetrics(np.nan, np.nan)
+        new_metrics = object.__new__(AccuracyMetrics)
         new_metrics.correct = np.mean([m.correct for m in metrics])
         new_metrics.incorrect = np.mean([m.incorrect for m in metrics])
         new_metrics.accuracy = np.mean([m.accuracy for m in metrics])
