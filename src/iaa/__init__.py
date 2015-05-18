@@ -185,7 +185,7 @@ class CausalityMetrics(object):
 
         return sum_metrics
 
-    def __get_causations(self, sentence):
+    def __get_causations(self, sentence, is_gold):
         causations = []
         for instance in sentence.causation_instances:
             is_given_id = instance.id in FLAGS.iaa_given_connective_ids
@@ -196,7 +196,7 @@ class CausalityMetrics(object):
                  (not is_given_id and
                   self.ids_considered == self.IDsConsidered.NonGivenOnly))
                 # Second set of conditions: is pairwise if necessary
-                and (not self.pairwise_only or
+                and (not is_gold or not self.pairwise_only or
                      (instance.cause != None and instance.effect != None))):
                 causations.append(instance)
         return causations
@@ -251,8 +251,8 @@ class CausalityMetrics(object):
             assert (gold_sentence.original_text ==
                     predicted_sentence.original_text), (
                         "Can't compare annotations on non-identical sentences")
-            gold_causations = self.__get_causations(gold_sentence)
-            predicted_causations = self.__get_causations(predicted_sentence)
+            gold_causations = self.__get_causations(gold_sentence, True)
+            predicted_causations = self.__get_causations(predicted_sentence, False)
             
             sentence_matching, sentence_gold_only, sentence_predicted_only = (
                 self.get_connective_matches(
