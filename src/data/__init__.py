@@ -323,16 +323,12 @@ class ParsedSentence(object):
         if not possible_targets:
             raise ValueError("Can't find closest of 0 tokens")
 
-        if use_tree:
-            dist = lambda source, target: self.path_costs[source.index,
-                                                          target.index]
-        else:
-            dist = lambda source, target: target.index - source.index
-
-        closest = possible_targets[0]
-        min_distance = dist(source, closest)
-        for target in possible_targets[1:]:
-            next_distance = dist(source, target)
+        min_distance = np.inf
+        for target in possible_targets:
+            if use_tree:
+                next_distance = self.path_costs[source.index, target.index]
+            else:
+                next_distance = source.index - target.index
             if next_distance < min_distance:
                 closest = target
                 min_distance = next_distance
