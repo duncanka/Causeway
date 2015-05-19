@@ -9,6 +9,7 @@ import sys
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from data import ParsedSentence
 from causality_pipelines.regex_based.candidate_classifier import RegexCandidateClassifierStage
+from causality_pipelines.baseline import BaselineStage
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
@@ -32,7 +33,7 @@ try:
     gflags.DEFINE_bool('debug', False,
                        'Whether to print debug-level logging.')
     gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
-    gflags.DEFINE_enum('pipeline_type', 'tregex', ['tregex', 'regex'],
+    gflags.DEFINE_enum('pipeline_type', 'tregex', ['tregex', 'regex', 'baseline'],
                        'Which causality pipeline to run')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -81,11 +82,13 @@ if __name__ == '__main__':
         stages = [TRegexConnectiveStage('TRegex connectives'),
                   PairwiseCandidateClassifierStage(
                       candidate_classifier, 'Candidate classifier')]
-    else: # regex
+    elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler'),
                   RegexCandidateClassifierStage(candidate_classifier,
                                                 'Candidate classifier')]
+    else: # baseline
+        stages = [BaselineStage('Baseline')]
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
