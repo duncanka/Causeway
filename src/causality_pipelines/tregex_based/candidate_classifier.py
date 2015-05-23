@@ -10,27 +10,27 @@ from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtr
 
 try:
     DEFINE_list(
-        'pw_candidate_features', ['cause_pos', 'effect_pos', 'wordsbtw',
+        'tregex_cc_features', ['cause_pos', 'effect_pos', 'wordsbtw',
                                   'deppath', 'deplen', 'tenses', 'connective'],
-        'Features to use for simple causality model')
-    DEFINE_integer('pw_candidate_max_wordsbtw', 10,
-                   "Pairwise classifier: maximum number of words between"
+        'Features to use for TRegex-based classifier model')
+    DEFINE_integer('tregex_cc_max_wordsbtw', 10,
+                   "TRegex-based classifier: maximum number of words between"
                    " phrases before just making the value the max")
-    DEFINE_integer('pw_candidate_max_dep_path_len', 3,
-                   "Pairwise classifier: Maximum number of dependency path steps"
-                   " to allow before just making the value 'LONG-RANGE'")
-    DEFINE_bool('pw_candidate_print_instances', False,
-                'Pairwise classifier: Whether to print differing IAA results'
+    DEFINE_integer('tregex_cc_max_dep_path_len', 3,
+                   "TRegex-based classifier: Maximum number of dependency path"
+                   " steps to allow before just making the value 'LONG-RANGE'")
+    DEFINE_bool('tregex_cc_print_test_instances', False,
+                'TRegex-based: Whether to print differing IAA results'
                 ' during evaluation')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class PhrasePairPart(ClassifierPart):
+class TRegexClassifierPart(ClassifierPart):
     def __init__(self, possible_causation):
         sentence = possible_causation.sentence
         label = possible_causation.true_causation_instance is not None
-        super(PhrasePairPart, self).__init__(sentence, label)
+        super(TRegexClassifierPart, self).__init__(sentence, label)
         self.cause_head = sentence.get_head(possible_causation.cause)
         self.effect_head = sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
@@ -38,24 +38,24 @@ class PhrasePairPart(ClassifierPart):
         self.connective_pattern = possible_causation.matching_patterns[0]
 
 
-class PhrasePairModel(ClassifierModel):
+class TRegexClassifierModel(ClassifierModel):
     def __init__(self, classifier):
-        super(PhrasePairModel, self).__init__(
-            PhrasePairPart,
-            PhrasePairModel.FEATURE_EXTRACTORS,
-            FLAGS.pw_candidate_features, classifier)
+        super(TRegexClassifierModel, self).__init__(
+            TRegexClassifierPart,
+            TRegexClassifierModel.FEATURE_EXTRACTORS,
+            FLAGS.tregex_cc_features, classifier)
 
     @staticmethod
     def words_btw_heads(part):
         words_btw = part.instance.count_words_between(
             part.cause_head, part.effect_head)
-        return min(words_btw, FLAGS.pw_candidate_max_wordsbtw)
+        return min(words_btw, FLAGS.tregex_cc_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
         deps = part.instance.extract_dependency_path(
             part.cause_head, part.effect_head, False)
-        if len(deps) > FLAGS.pw_candidate_max_dep_path_len:
+        if len(deps) > FLAGS.tregex_cc_max_dep_path_len:
             return 'LONG-RANGE'
         else:
             return str(deps)
@@ -69,17 +69,19 @@ class PhrasePairModel(ClassifierModel):
     __cached_tenses_sentence = None
     @staticmethod
     def extract_tense(head):
-        if head.parent_sentence is PhrasePairModel.__cached_tenses_sentence:
+        if head.parent_sentence is (
+            TRegexClassifierModel.__cached_tenses_sentence):
             try:
-                return PhrasePairModel.__cached_tenses[head]
+                return TRegexClassifierModel.__cached_tenses[head]
             except KeyError:
                 pass
         else:
-            PhrasePairModel.__cached_tenses_sentence = head.parent_sentence
-            PhrasePairModel.__cached_tenses = {}
+            TRegexClassifierModel.__cached_tenses_sentence = (
+                head.parent_sentence)
+            TRegexClassifierModel.__cached_tenses = {}
 
         tense = head.parent_sentence.get_auxiliaries_string(head)
-        PhrasePairModel.__cached_tenses[head] = tense
+        TRegexClassifierModel.__cached_tenses[head] = tense
         return tense
 
 
@@ -87,7 +89,7 @@ class PhrasePairModel(ClassifierModel):
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
 
-PhrasePairModel.FEATURE_EXTRACTORS = [
+TRegexClassifierModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
@@ -99,9 +101,9 @@ PhrasePairModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor(
         'effect_pos_gen', lambda part: part.effect_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
-    FeatureExtractor('wordsbtw', PhrasePairModel.words_btw_heads,
+    FeatureExtractor('wordsbtw', TRegexClassifierModel.words_btw_heads,
                      FeatureExtractor.FeatureTypes.Numerical),
-    FeatureExtractor('deppath', PhrasePairModel.extract_dep_path),
+    FeatureExtractor('deppath', TRegexClassifierModel.extract_dep_path),
     FeatureExtractor('deplen',
                      lambda part: len(part.instance.extract_dependency_path(
                         part.cause_head, part.effect_head)),
@@ -110,20 +112,20 @@ PhrasePairModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('connective', lambda part: part.connective_pattern),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
-                        [PhrasePairModel.extract_tense(head)
+                        [TRegexClassifierModel.extract_tense(head)
                          for head in part.cause_head, part.effect_head]))
 ]
 
 
-class PairwiseCandidateClassifierStage(Stage):
+class TRegexClassifierStage(Stage):
     def __init__(self, classifier, name):
-        super(PairwiseCandidateClassifierStage, self).__init__(
-            name=name, models=[PhrasePairModel(classifier)])
+        super(TRegexClassifierStage, self).__init__(
+            name=name, models=[TRegexClassifierModel(classifier)])
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
-        return [PhrasePairPart(p) for p in sentence.possible_causations]
+        return [TRegexClassifierPart(p) for p in sentence.possible_causations]
 
     def _decode_labeled_parts(self, sentence, labeled_parts):
         sentence.causation_instances = []
@@ -136,5 +138,5 @@ class PairwiseCandidateClassifierStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
-        return IAAEvaluator(False, False, FLAGS.pw_candidate_print_instances,
+        return IAAEvaluator(False, False, FLAGS.tregex_cc_print_test_instances,
                             False, True, True)

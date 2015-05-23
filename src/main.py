@@ -8,14 +8,14 @@ import os
 import sys
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from data import ParsedSentence
-from causality_pipelines.regex_based.candidate_classifier import RegexCandidateClassifierStage
+from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
 from causality_pipelines.baseline import BaselineStage
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
-from causality_pipelines.tregex_based.candidate_classifier import PairwiseCandidateClassifierStage
+from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
@@ -80,12 +80,12 @@ if __name__ == '__main__':
 
     if FLAGS.pipeline_type == 'tregex':
         stages = [TRegexConnectiveStage('TRegex connectives'),
-                  PairwiseCandidateClassifierStage(
+                  TRegexClassifierStage(
                       candidate_classifier, 'Candidate classifier')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler'),
-                  RegexCandidateClassifierStage(candidate_classifier,
+                  RegexClassifierStage(candidate_classifier,
                                                 'Candidate classifier')]
     else: # baseline
         stages = [BaselineStage('Baseline')]

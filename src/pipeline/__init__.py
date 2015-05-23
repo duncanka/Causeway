@@ -130,8 +130,8 @@ class Pipeline(object):
 
     def print_eval_results(self, eval_results, indent_baseline=0):
         for stage, result in zip(self.stages, eval_results):
-            print_indented(indent_baseline, "Evaluation for stage ",
-                           stage.name, ':', sep='')
+            print_indented(indent_baseline, 'Evaluation for stage "',
+                           stage.name, '":', sep='')
             self.print_stage_results(indent_baseline + 1, result)
 
     def train(self, instances=None):
@@ -154,9 +154,9 @@ class Pipeline(object):
                 logging.info("Training on %d instances" % len(instances))
 
         for stage in self.stages:
-            logging.info("Training stage %s..." % stage.name)
+            logging.info('Training stage "%s"...' % stage.name)
             stage.train(instances)
-            logging.info("Finished training stage %s" % stage.name)
+            logging.info('Finished training stage "%s"' % stage.name)
             # For training, each stage needs a realistic view of what its inputs
             # will look like. So now that we've trained the stage, if there is
             # another stage after it we run the trained stage as though we were

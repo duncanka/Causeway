@@ -31,10 +31,10 @@ except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class RegexCandidateClassifierPart(ClassifierPart):
+class RegexClassifierPart(ClassifierPart):
     def __init__(self, possible_causation, label):
         sentence = possible_causation.sentence
-        super(RegexCandidateClassifierPart, self).__init__(
+        super(RegexClassifierPart, self).__init__(
             sentence, label)
         self.possible_causation = possible_causation
 
@@ -43,11 +43,11 @@ class RegexCandidateClassifierPart(ClassifierPart):
         self.effect_head = (sentence.get_head(possible_causation.effect)
                            if possible_causation.effect else None)
 
-class RegexCandidateClassifierModel(ClassifierModel):
+class RegexClassifierModel(ClassifierModel):
     def __init__(self, classifier):
-        super(RegexCandidateClassifierModel, self).__init__(
-            RegexCandidateClassifierPart,
-            RegexCandidateClassifierModel.FEATURE_EXTRACTORS,
+        super(RegexClassifierModel, self).__init__(
+            RegexClassifierPart,
+            RegexClassifierModel.FEATURE_EXTRACTORS,
             FLAGS.regex_cc_features, classifier)
 
     @staticmethod
@@ -85,18 +85,18 @@ class RegexCandidateClassifierModel(ClassifierModel):
             return "None"
 
         if (head.parent_sentence is
-            RegexCandidateClassifierModel.__cached_tenses_sentence):
+            RegexClassifierModel.__cached_tenses_sentence):
             try:
-                return RegexCandidateClassifierModel.__cached_tenses[head]
+                return RegexClassifierModel.__cached_tenses[head]
             except KeyError:
                 pass
         else:
-            RegexCandidateClassifierModel.__cached_tenses_sentence = (
+            RegexClassifierModel.__cached_tenses_sentence = (
                 head.parent_sentence)
-            RegexCandidateClassifierModel.__cached_tenses = {}
+            RegexClassifierModel.__cached_tenses = {}
 
         tense = head.parent_sentence.get_auxiliaries_string(head)
-        RegexCandidateClassifierModel.__cached_tenses[head] = tense
+        RegexClassifierModel.__cached_tenses[head] = tense
 
         return tense
 
@@ -104,7 +104,7 @@ class RegexCandidateClassifierModel(ClassifierModel):
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
 
-RegexCandidateClassifierModel.FEATURE_EXTRACTORS = [
+RegexClassifierModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor(
         'cause_pos', lambda part: (part.cause_head.pos
                                    if part.cause_head else None),
@@ -122,12 +122,12 @@ RegexCandidateClassifierModel.FEATURE_EXTRACTORS = [
         'effect_pos_gen', lambda part: (part.effect_head.get_gen_pos()
                                        if part.effect_head else None),
         Token.ALL_POS_TAGS),
-    FeatureExtractor('wordsbtw', RegexCandidateClassifierModel.words_btw_heads,
+    FeatureExtractor('wordsbtw', RegexClassifierModel.words_btw_heads,
                      FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor('args_dep_path',
-                     RegexCandidateClassifierModel.extract_dep_path),
+                     RegexClassifierModel.extract_dep_path),
     FeatureExtractor('args_dep_len',
-                     RegexCandidateClassifierModel.extract_dep_path_length,
+                     RegexClassifierModel.extract_dep_path_length,
                      FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor('connective',
                      lambda part: ' '.join(
@@ -136,15 +136,15 @@ RegexCandidateClassifierModel.FEATURE_EXTRACTORS = [
         'patterns', lambda observation: observation.part.matching_patterns),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
-                        [RegexCandidateClassifierModel.extract_tense(head)
+                        [RegexClassifierModel.extract_tense(head)
                          for head in part.cause_head, part.effect_head]))]
 
 
-class RegexCandidateClassifierStage(Stage):
+class RegexClassifierStage(Stage):
     # TODO: add raw classifier evaluator (just going on what input was)
     def __init__(self, classifier, name):
-        super(RegexCandidateClassifierStage, self).__init__(
-            name, [RegexCandidateClassifierModel(classifier)])
+        super(RegexClassifierStage, self).__init__(
+            name, [RegexClassifierModel(classifier)])
         comparator = make_annotation_comparator(
             FLAGS.regex_cc_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations
@@ -174,12 +174,12 @@ class RegexCandidateClassifierStage(Stage):
                 sentence.possible_causations, sentence.causation_instances,
                 self.connective_comparator, sort_by_key)
             for correct_pc, _ in connectives_diff.get_matching_pairs():
-                parts.append(RegexCandidateClassifierPart(correct_pc, True))
+                parts.append(RegexClassifierPart(correct_pc, True))
             for incorrect_pc in connectives_diff.get_a_only_elements():
-                parts.append(RegexCandidateClassifierPart(incorrect_pc, False))
+                parts.append(RegexClassifierPart(incorrect_pc, False))
         else:
             # If we're not in training, the initial label doesn't really matter.
-            parts = [RegexCandidateClassifierPart(pc, False)
+            parts = [RegexClassifierPart(pc, False)
                      for pc in sentence.possible_causations]
         return parts
 
