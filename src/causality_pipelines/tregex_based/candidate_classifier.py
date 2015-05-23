@@ -20,8 +20,8 @@ try:
                    "Pairwise classifier: Maximum number of dependency path steps"
                    " to allow before just making the value 'LONG-RANGE'")
     DEFINE_bool('pw_candidate_print_instances', False,
-                'Pairwise classifier: Whether to print true positive, false'
-                ' positive, and false negative instances after testing')
+                'Pairwise classifier: Whether to print differing IAA results'
+                ' during evaluation')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 

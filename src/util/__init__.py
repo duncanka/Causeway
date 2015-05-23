@@ -1,9 +1,18 @@
 from __future__ import print_function
+import colorama
 from itertools import tee, izip, izip_longest
 import fcntl
 import os
 import struct
 import termios
+
+# Add some Colorama functionality.
+class AnsiFormats:
+    BOLD = 1
+    UNDERLINE = 4
+    BLINK = 5
+    RESET_ALL = 0
+colorama.Format = colorama.ansi.AnsiCodes(AnsiFormats)
 
 def recursively_list_files(path):
     walker = os.walk(path)

@@ -67,11 +67,6 @@ class IAAEvaluator(Evaluator):
             pairwise_only=self.pairwise_only)
 
         if self.log_differences:
-            # Prevent clogging the output with connective differences
-            without_partial.gold_only_instances = []
-            without_partial.predicted_only_instances = []
-            with_partial.gold_only_instances = []
-            with_partial.predicted_only_instances = []
             print 'Differences not allowing partial matches:'
             without_partial.pp(log_stats=False, log_confusion=False,
                                log_differences=True, indent=1)

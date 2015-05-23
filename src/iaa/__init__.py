@@ -93,10 +93,20 @@ def make_annotation_comparator(allow_partial):
 compare_annotations_partial = make_annotation_comparator(True)
 compare_annotations_exact = make_annotation_comparator(False)
 
+def _get_printable_connective_word(word):
+    if sys.stdout.isatty() or FLAGS.iaa_force_color:
+        return colorama.Format.BOLD + word.upper() + colorama.Format.RESET_ALL
+    else:
+        return word.upper()
 
-def get_truncated_sentence(instance):
-    return truncated_string(
-        instance.source_sentence.original_text.replace('\n', ' '))
+def _wrapped_sentence_highlighting_instance(instance):
+    sentence = instance.source_sentence
+    words = [(_get_printable_connective_word(t.original_text)
+              if t in instance.connective else t.original_text)
+             for t in sentence.tokens[1:]]
+    lines = wrap(' '.join(words), 100, subsequent_indent='    ',
+                 break_long_words=False)
+    return '\n'.join(lines)
 
 class CausalityMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
@@ -329,7 +339,8 @@ class CausalityMetrics(object):
             print(property_type_name,
                   ('property not set in Annotation %d;' % number),
                   'not including in analysis (sentence: "',
-                  get_truncated_sentence(instance_1).encode('utf-8') + '")',
+                  _wrapped_sentence_highlighting_instance(instance_1).encode(
+                      'utf-8') + '")',
                   file=sys.stderr)
 
         for instance_1, instance_2 in matches:
@@ -431,7 +442,7 @@ class CausalityMetrics(object):
 
         if log_differences and (
             self.gold_only_instances or self.predicted_only_instances
-            or self.property_differences):
+            or self.property_differences or self.argument_differences):
             print_indented(indent, 'Annotation differences:', file=file)
             for sentence_num, instance in self.gold_only_instances:
                 self._log_unique_instance(instance, sentence_num, 1,
@@ -567,10 +578,9 @@ class CausalityMetrics(object):
             instance.connective)
         filename = os.path.split(instance.source_sentence.source_file_path)[-1]
         print_indented(
-            indent, "Annotation", annotator_num,
-            'only: "%s"' % connective_text.encode('utf-8'),
-            '(%s:%d: "%s")' % (filename, sentence_num, get_truncated_sentence(
-                                instance).encode('utf-8')),
+            indent, "Annotation", annotator_num, 'only:',
+            _wrapped_sentence_highlighting_instance(instance).encode('utf-8'),
+            '(%s:%d)' % (filename, sentence_num),
             file=file)
         
     @staticmethod
@@ -585,7 +595,7 @@ class CausalityMetrics(object):
         def get_printable_word(token):
             word = token.get_unnormalized_original_text()
             if token in instance.connective:
-                word = word.upper()
+                word = _get_printable_connective_word(word)
 
             if instance.cause and token in instance.cause:
                 word = cause_start + word + cause_end
@@ -680,5 +690,5 @@ class CausalityMetrics(object):
                     instance_1.connective).encode('utf-8)'),
                 '" differ: ', values[0], ' vs. ', values[1],
                 ' (', filename, ':', sentence_num, ': "',
-                get_truncated_sentence(instance_1), '")',
+                _wrapped_sentence_highlighting_instance(instance_1), '")',
                 sep='', file=file)
