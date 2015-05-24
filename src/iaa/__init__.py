@@ -33,6 +33,8 @@ try:
     DEFINE_bool('iaa_log_stats', True, 'Log IAA statistics.')
     DEFINE_bool('iaa_log_differences', False,
                 'Log differing annotations during IAA comparison.')
+    DEFINE_bool('iaa_log_agreements', False,
+                'Log agreeing annotations during IAA comparison.')
     DEFINE_string('iaa_cause_color', 'Blue',
                   'ANSI color to use for formatting cause words in IAA'
                   ' comparison output')
@@ -114,10 +116,12 @@ class CausalityMetrics(object):
                        'cause_head_metrics', 'effect_head_metrics',
                        'cause_jaccard', 'effect_jaccard']
 
+    # TODO: Refactor order of parameters
     def __init__(self, gold, predicted, allow_partial,
                  save_differences=False, ids_considered=None,
                  compare_degrees=True, compare_types=True,
-                 compare_args=True, pairwise_only=False):
+                 compare_args=True, pairwise_only=False,
+                 save_agreements=False):
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
 
@@ -127,9 +131,11 @@ class CausalityMetrics(object):
         self._annotation_comparator = make_annotation_comparator(allow_partial)
         self.ids_considered = ids_considered
         self.save_differences = save_differences
+        self.save_agreements = save_agreements
         self.pairwise_only = pairwise_only
         self.gold_only_instances = []
         self.predicted_only_instances = []
+        self.agreeing_instances = []
         self.argument_differences = []
         self.property_differences = []
 
@@ -175,6 +181,7 @@ class CausalityMetrics(object):
         sum_metrics.predicted_only_instances.extend(
             other.predicted_only_instances)
         sum_metrics.property_differences.extend(other.property_differences)
+        sum_metrics.agreeing_instances.extend(other.agreeing_instances)
         # Add together submetrics, if they exist
         sum_metrics.connective_metrics += other.connective_metrics
         for attr_name in (['degree_matrix', 'causation_type_matrix']
@@ -289,16 +296,18 @@ class CausalityMetrics(object):
                 len(matching_instances), len(predicted_only_instances),
                 len(gold_only_instances))
 
-        if self.save_differences:
-            def sentences_by_file(sentences):
-                by_file = defaultdict(list)
-                for sentence in sentences:
-                    filename = os.path.split(sentence.source_file_path)[-1]
-                    by_file[filename].append(sentence)
-                return by_file
-            gold_by_file = sentences_by_file(gold)
-            predicted_by_file = sentences_by_file(predicted)
+        def sentences_by_file(sentences):
+            by_file = defaultdict(list)
+            for sentence in sentences:
+                filename = os.path.split(sentence.source_file_path)[-1]
+                by_file[filename].append(sentence)
+            return by_file
 
+        if self.save_differences or self.save_agreements:
+            gold_by_file = sentences_by_file(gold)
+
+        if self.save_differences:
+            predicted_by_file = sentences_by_file(predicted)
             self.gold_only_instances = [
                 (gold_by_file[os.path.split(
                     i.source_sentence.source_file_path)[-1]]
@@ -309,6 +318,13 @@ class CausalityMetrics(object):
                     i.source_sentence.source_file_path)[-1]]
                  .index(i.source_sentence) + 1, i)
                 for i in predicted_only_instances]
+            
+        if self.save_agreements:
+            self.agreeing_instances = [
+                (gold_by_file[os.path.split(
+                    i1.source_sentence.source_file_path)[-1]]
+                 .index(i1.source_sentence) + 1, i1)
+                for i1, i2 in matching_instances]
 
         return (connective_metrics, matching_instances)
     
@@ -427,7 +443,7 @@ class CausalityMetrics(object):
                 cause_head_metrics, effect_head_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
-           indent=0, file=sys.stdout):
+           log_agreements=None, indent=0, file=sys.stdout):
         # Flags aren't available as defaults when the function is created, so
         # set the defaults here.
         if log_confusion is None:
@@ -436,20 +452,30 @@ class CausalityMetrics(object):
             log_stats = FLAGS.iaa_log_stats
         if log_differences is None:
             log_differences = FLAGS.iaa_log_differences
+        if log_agreements is None:
+            log_agreements = FLAGS.iaa_log_agreements
 
         if log_differences:
             colorama.reinit()
+
+        if log_agreements:
+            print_indented(indent, "Agreeing instances:", file=file)
+            for sentence_num, instance in self.agreeing_instances:
+                self._log_instance_for_connective(
+                    instance, sentence_num, "", indent + 1, file)
 
         if log_differences and (
             self.gold_only_instances or self.predicted_only_instances
             or self.property_differences or self.argument_differences):
             print_indented(indent, 'Annotation differences:', file=file)
             for sentence_num, instance in self.gold_only_instances:
-                self._log_unique_instance(instance, sentence_num, 1,
-                                          indent + 1, file)
+                self._log_instance_for_connective(
+                    instance, sentence_num, "Annotator 1 only:", indent + 1,
+                    file)
             for sentence_num, instance in self.predicted_only_instances:
-                self._log_unique_instance(instance, sentence_num, 2,
-                                           indent + 1, file)
+                self._log_instance_for_connective(
+                    instance, sentence_num, "Annotator 2 only:", indent + 1,
+                    file)
             self._log_property_differences(CausationInstance.CausationTypes,
                                            indent + 1, file)
             self._log_property_differences(CausationInstance.Degrees,
@@ -500,7 +526,7 @@ class CausalityMetrics(object):
         keep copying strings over to concatenate them).
         '''
         string_buffer = StringIO()
-        self.pp(None, None, None, 0, string_buffer)
+        self.pp(None, None, None, None, 0, string_buffer)
         return string_buffer.getvalue()
 
     @staticmethod
@@ -516,7 +542,7 @@ class CausalityMetrics(object):
         for attr_name in [
             'ids_considered', 'gold_only_instances',
             'predicted_only_instances', 'property_differences',
-            'argument_differences']:
+            'argument_differences', 'agreeing_instances']:
             setattr(aggregated, attr_name, [])
         aggregated.save_differences = None
 
@@ -570,19 +596,15 @@ class CausalityMetrics(object):
             print_indented(indent + 1, matrix.pretty_format_metrics(),
                            file=file)
 
-
     @staticmethod
-    def _log_unique_instance(instance, sentence_num, annotator_num, indent,
-                             file):
-        connective_text = ParsedSentence.get_annotation_text(
-            instance.connective)
+    def _log_instance_for_connective(instance, sentence_num, msg, indent, file):
         filename = os.path.split(instance.source_sentence.source_file_path)[-1]
         print_indented(
-            indent, "Annotation", annotator_num, 'only:',
+            indent, msg,
             _wrapped_sentence_highlighting_instance(instance).encode('utf-8'),
             '(%s:%d)' % (filename, sentence_num),
             file=file)
-        
+
     @staticmethod
     def _print_with_labeled_args(instance, indent, file, cause_start, cause_end,
                                  effect_start, effect_end):

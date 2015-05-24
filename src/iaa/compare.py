@@ -46,7 +46,7 @@ def compare_instance_lists(gold, predicted, indent=0):
             print_indented(indent, 'Without gold connectives:')
             non_given_only_metrics.pp(
                 FLAGS.iaa_log_confusion, FLAGS.iaa_log_stats,
-                False, indent + 1)
+                False, False, indent + 1)
 
             given_only_metrics = CausalityMetrics(
                 gold, predicted, allow_partial, False,
@@ -54,7 +54,7 @@ def compare_instance_lists(gold, predicted, indent=0):
             print_indented(indent, 'With only gold connectives:')
             given_only_metrics.pp(
                 FLAGS.iaa_log_confusion, FLAGS.iaa_log_stats,
-                False, indent + 1)
+                False, False, indent + 1)
 
             print()
             print_indented(indent, 'Counting all connectives:')
@@ -65,7 +65,7 @@ def compare_instance_lists(gold, predicted, indent=0):
             CausalityMetrics.IDsConsidered.Both)
         all_metrics.pp(
             FLAGS.iaa_log_confusion, FLAGS.iaa_log_stats,
-            FLAGS.iaa_log_differences, indent + 1)
+            FLAGS.iaa_log_differences, False, indent + 1)
 
         # Restore indent only if we increased it earlier.
         if FLAGS.iaa_given_connective_ids and printing_some_metrics:

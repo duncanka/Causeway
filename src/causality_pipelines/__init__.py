@@ -23,19 +23,20 @@ class PossibleCausation(object):
 
 
 class IAAEvaluator(Evaluator):
-    def __init__(self, compare_degrees, compare_types, log_differences,
+    # TODO: refactor arguments
+    def __init__(self, compare_degrees, compare_types, log_test_instances,
                  eval_possible_causations, compare_args,
                  pairwise_only=False):
         self._with_partial_metrics = CausalityMetrics(
-            [], [], True, log_differences, None, compare_degrees,
-            compare_types)
+            [], [], True, log_test_instances, None, compare_degrees,
+            compare_types, log_test_instances)
         self._without_partial_metrics = CausalityMetrics(
-            [], [], False, log_differences, None, compare_degrees,
-            compare_types)
+            [], [], False, log_test_instances, None, compare_degrees,
+            compare_types, log_test_instances)
         self.eval_possible_causations = eval_possible_causations
         self.compare_degrees = compare_degrees
         self.compare_types = compare_types
-        self.log_differences = log_differences
+        self.log_test_instances = log_test_instances
         self.compare_args = compare_args
         self.pairwise_only = pairwise_only
 
@@ -44,6 +45,8 @@ class IAAEvaluator(Evaluator):
             # If we're evaluating using possible causations, we need to fake
             # having actual CausationInstances attached to the sentences for IAA
             # code to be happy.
+            # TODO: replace this by making CausalityMetrics more flexible about
+            # what property name it uses.
             original_causations_by_sentence = []
             for sentence in sentences:
                 original_causations_by_sentence.append(
@@ -56,24 +59,28 @@ class IAAEvaluator(Evaluator):
                         effect=possible_causation.effect)
 
         with_partial = CausalityMetrics(
-            original_sentences, sentences, True, self.log_differences,
+            original_sentences, sentences, True, self.log_test_instances,
             compare_types=self.compare_types, compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
-            pairwise_only=self.pairwise_only)
+            pairwise_only=self.pairwise_only,
+            save_agreements=self.log_test_instances)
         without_partial = CausalityMetrics(
-            original_sentences, sentences, False, self.log_differences,
+            original_sentences, sentences, False, self.log_test_instances,
             compare_types=self.compare_types, compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
-            pairwise_only=self.pairwise_only)
+            pairwise_only=self.pairwise_only,
+            save_agreements=self.log_test_instances)
 
-        if self.log_differences:
+        if self.log_test_instances:
             print 'Differences not allowing partial matches:'
             without_partial.pp(log_stats=False, log_confusion=False,
-                               log_differences=True, indent=1)
+                               log_differences=True, log_agreements=True,
+                               indent=1)
             print
             print 'Differences allowing partial matches:'
             with_partial.pp(log_stats=False, log_confusion=False,
-                            log_differences=True, indent=1)
+                            log_differences=True, log_agreements=True,
+                            indent=1)
 
         self._with_partial_metrics += with_partial
         self._without_partial_metrics += without_partial
