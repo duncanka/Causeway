@@ -192,6 +192,7 @@ class ParsedSentence(object):
             return False
 
     def get_head(self, tokens):
+        # TODO: Update to match SEMAFOR's heuristic algorithm?
         min_depth = np.inf
         head = None
         # equal_replacement = None
@@ -242,7 +243,17 @@ class ParsedSentence(object):
         Returns a tuple (e, p), p is the parent of the given token along the
         shortest path to root, and e is the label of the edge from p to token.
         '''
-        parent_index = self.path_predecessors[0, token.index]
+        # We can't use self.path_predecessors because it was computed in an
+        # essentially undirected fashion. Instead, we find all parents, and
+        # select the one whose directed depth is lowest (i.e., with the shortest
+        # directed path to root).
+        incoming = self.edge_graph[:, token.index]
+        min_depth = np.inf
+        for edge_start_index in incoming.nonzero()[0]:
+            next_depth = self.__depths[edge_start_index]
+            if next_depth < min_depth:
+                min_depth = next_depth
+                parent_index = edge_start_index
         edge_label = self.edge_labels[(parent_index, token.index)]
         return (edge_label, self.tokens[parent_index])
 
