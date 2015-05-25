@@ -1,5 +1,4 @@
 import os
-import sklearn
 from sklearn import tree
 import subprocess
 import sys
@@ -19,8 +18,8 @@ def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot'):
         with open(os.devnull, 'w') as null:
             subprocess.call(['xdg-open', img_fname], stderr=null)
 
-def vis_pipeline_trees(pipeline):
-    model = pipeline.stages[1].models[0]
+def vis_pipeline_trees(pipeline, stage_num, model_num=0):
+    model = pipeline.stages[stage_num].models[model_num]
     classifier = model.classifier.classifier
     if isinstance(classifier, tree.DecisionTreeClassifier):
         vis_tree(model, classifier)
