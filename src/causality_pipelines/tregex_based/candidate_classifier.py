@@ -13,7 +13,7 @@ try:
         'tregex_cc_features',
         ['cause_pos', 'effect_pos', 'wordsbtw', 'deppath', 'deplen', 'tenses',
          'connective', 'cn_daughter_deps', 'cn_incoming_dep', 'verb_children_deps',
-         'cn_parent_pos', 'cn_words'],
+         'cn_parent_pos', 'cn_lemmas'],
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "TRegex-based classifier: maximum number of words between"
@@ -156,8 +156,12 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('verb_children_deps',
                      TRegexClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos', TRegexClassifierModel.extract_parent_pos),
-    FeatureExtractor('cn_words', lambda part: ' '.join([t.original_text
-                                                     for t in part.connective]))
+    FeatureExtractor('cn_words',
+                     lambda part: ' '.join([t.original_text
+                                            for t in part.connective])),
+    FeatureExtractor('cn_lemmas',
+                     lambda part: ' '.join([t.lemma
+                                            for t in part.connective]))
 ]
 
 
