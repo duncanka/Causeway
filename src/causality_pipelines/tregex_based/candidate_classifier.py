@@ -10,8 +10,10 @@ from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtr
 
 try:
     DEFINE_list(
-        'tregex_cc_features', ['cause_pos', 'effect_pos', 'wordsbtw',
-                                  'deppath', 'deplen', 'tenses', 'connective'],
+        'tregex_cc_features',
+        ['cause_pos', 'effect_pos', 'wordsbtw', 'deppath', 'deplen', 'tenses',
+         'connective', 'cn_daughter_deps', 'cn_incoming_dep', 'verb_children_deps',
+         'cn_parent_pos', 'cn_words'],
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "TRegex-based classifier: maximum number of words between"
@@ -28,12 +30,13 @@ except DuplicateFlagError as e:
 
 class TRegexClassifierPart(ClassifierPart):
     def __init__(self, possible_causation):
-        sentence = possible_causation.sentence
+        self.sentence = possible_causation.sentence
         label = possible_causation.true_causation_instance is not None
-        super(TRegexClassifierPart, self).__init__(sentence, label)
-        self.cause_head = sentence.get_head(possible_causation.cause)
-        self.effect_head = sentence.get_head(possible_causation.effect)
+        super(TRegexClassifierPart, self).__init__(self.sentence, label)
+        self.cause_head = self.sentence.get_head(possible_causation.cause)
+        self.effect_head = self.sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
+        self.connective_head = self.sentence.get_head(self.connective)
         # TODO: Update this once we have multiple pattern matches sorted out.
         self.connective_pattern = possible_causation.matching_patterns[0]
 
@@ -84,6 +87,38 @@ class TRegexClassifierModel(ClassifierModel):
         TRegexClassifierModel.__cached_tenses[head] = tense
         return tense
 
+    @staticmethod
+    def extract_daughter_deps(part):
+        sentence = part.sentence
+        deps = sentence.get_children(part.connective_head)
+        edge_labels = [label for label, _ in deps]
+        edge_labels.sort()
+        return tuple(edge_labels)
+
+    @staticmethod
+    def extract_incoming_dep(part):
+        edge_label, parent = part.sentence.get_most_direct_parent(
+            part.connective_head)
+        return edge_label
+
+    @staticmethod
+    def get_verb_children_deps(part):
+        if part.connective_head.pos not in Token.VERB_TAGS:
+            return 'Non-verb'
+
+        sentence = part.sentence
+        children = [child for _, child in
+                    sentence.get_children(part.connective_head)]
+        verb_children_deps = set()
+        for child in children:
+            child_deps = [dep for dep, _ in sentence.get_children(child)]
+            verb_children_deps.update(child_deps)
+
+        return tuple(verb_children_deps)
+
+    @staticmethod
+    def extract_parent_pos(part):
+        return part.sentence.get_most_direct_parent(part.connective_head)[1].pos
 
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
@@ -113,7 +148,16 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [TRegexClassifierModel.extract_tense(head)
-                         for head in part.cause_head, part.effect_head]))
+                         for head in part.cause_head, part.effect_head])),
+    FeatureExtractor('cn_daughter_deps',
+                     TRegexClassifierModel.extract_daughter_deps),
+    FeatureExtractor('cn_incoming_dep',
+                     TRegexClassifierModel.extract_incoming_dep),
+    FeatureExtractor('verb_children_deps',
+                     TRegexClassifierModel.get_verb_children_deps),
+    FeatureExtractor('cn_parent_pos', TRegexClassifierModel.extract_parent_pos),
+    FeatureExtractor('cn_words', lambda part: ' '.join([t.original_text
+                                                     for t in part.connective]))
 ]
 
 
