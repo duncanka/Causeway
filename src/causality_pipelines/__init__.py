@@ -29,10 +29,10 @@ class IAAEvaluator(Evaluator):
                  pairwise_only=False):
         self._with_partial_metrics = CausalityMetrics(
             [], [], True, log_test_instances, None, compare_degrees,
-            compare_types, log_test_instances)
+            compare_types, True, True, log_test_instances)
         self._without_partial_metrics = CausalityMetrics(
             [], [], False, log_test_instances, None, compare_degrees,
-            compare_types, log_test_instances)
+            compare_types, True, True, log_test_instances)
         self.eval_possible_causations = eval_possible_causations
         self.compare_degrees = compare_degrees
         self.compare_types = compare_types
