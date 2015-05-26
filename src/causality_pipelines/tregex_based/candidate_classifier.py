@@ -1,19 +1,20 @@
 from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
-
 import logging
+from nltk.corpus import wordnet
 
 from causality_pipelines import IAAEvaluator
 from data import Token
 from pipeline import Stage
 from pipeline.models import ClassifierModel, ClassifierPart
-from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor
+from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, \
+    SetValuedFeatureExtractor
 
 try:
     DEFINE_list(
         'tregex_cc_features',
         ['cause_pos', 'effect_pos', 'wordsbtw', 'deppath', 'deplen', 'tenses',
          'connective', 'cn_daughter_deps', 'cn_incoming_dep', 'verb_children_deps',
-         'cn_parent_pos', 'cn_lemmas'],
+         'cn_parent_pos', 'cn_lemmas', 'cause_hypernyms', 'effect_hypernyms'],
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "TRegex-based classifier: maximum number of words between"
@@ -120,6 +121,25 @@ class TRegexClassifierModel(ClassifierModel):
     def extract_parent_pos(part):
         return part.sentence.get_most_direct_parent(part.connective_head)[1].pos
 
+    @staticmethod
+    def extract_wn_hypernyms(token):
+        ''' Extracts all Wordnet hypernyms, including the token's lemma. '''
+        wn_pos_key = token.get_gen_pos()[0].lower()
+        if wn_pos_key == 'j': # correct adjective tag for Wordnet
+            wn_pos_key = 'a'
+        try:
+            synsets = wordnet.synsets(token.lemma, pos=wn_pos_key)
+        except KeyError: # Invalid POS tag
+            logging.warning("Invalid Wordnet POS tag: %s" % wn_pos_key)
+            return []
+        
+        synsets_with_hypernyms = set()
+        for synset in synsets:
+            for hypernym_path in synset.hypernym_paths():
+                synsets_with_hypernyms.update(hypernym_path)
+
+        return tuple(synset.name() for synset in synsets_with_hypernyms)
+
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
@@ -161,7 +181,15 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                                             for t in part.connective])),
     FeatureExtractor('cn_lemmas',
                      lambda part: ' '.join([t.lemma
-                                            for t in part.connective]))
+                                            for t in part.connective])),
+    SetValuedFeatureExtractor(
+        'cause_hypernyms',
+        lambda part: TRegexClassifierModel.extract_wn_hypernyms(
+            part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_hypernyms',
+        lambda part: TRegexClassifierModel.extract_wn_hypernyms(
+            part.effect_head)),
 ]
 
 
