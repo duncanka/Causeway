@@ -69,7 +69,7 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'knn':
         candidate_classifier = neighbors.KNeighborsClassifier()
     elif FLAGS.classifier_model == 'logistic':
-        candidate_classifier = linear_model.LogisticRegression()
+        candidate_classifier = linear_model.LogisticRegression(penalty='l1')
     elif FLAGS.classifier_model == 'svm':
         candidate_classifier = svm.SVC()
     elif FLAGS.classifier_model == 'forest':
