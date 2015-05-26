@@ -152,7 +152,7 @@ class BaselineModel(Model):
         self._operate_on_sentences(sentences, training_callback)
 
     def test(self, sentences):
-        def test_call_back(
+        def test_callback(
             sentence_num, connective_lemmas, connective_tokens, possible_cause,
             possible_effect, path_1, path_2):
             key = (connective_lemmas, path_1, path_2)
@@ -167,7 +167,7 @@ class BaselineModel(Model):
                     effect=[possible_effect])
         for sentence in sentences:
             sentence.causation_instances = []
-        self._operate_on_sentences(sentences, test_call_back)
+        self._operate_on_sentences(sentences, test_callback)
 
 
 class BaselineStage(Stage):
