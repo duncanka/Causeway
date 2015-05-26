@@ -13,8 +13,7 @@ try:
     DEFINE_list(
         'tregex_cc_features',
         ['cause_pos', 'effect_pos', 'wordsbtw', 'deppath', 'deplen', 'tenses',
-         'connective', 'cn_daughter_deps', 'cn_incoming_dep', 'verb_children_deps',
-         'cn_parent_pos', 'cn_lemmas', 'cause_hypernyms', 'effect_hypernyms'],
+         'connective', 'cn_lemmas'],
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "TRegex-based classifier: maximum number of words between"
@@ -25,6 +24,10 @@ try:
     DEFINE_bool('tregex_cc_print_test_instances', False,
                 'TRegex-based: Whether to print differing IAA results'
                 ' during evaluation')
+    DEFINE_bool('tregex_cc_tuple_correctness', False,
+                'Whether a candidate instance should be considered correct in'
+                ' training based on (connective, cause, effect), as opposed to'
+                ' just connectives.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -32,14 +35,26 @@ except DuplicateFlagError as e:
 class TRegexClassifierPart(ClassifierPart):
     def __init__(self, possible_causation):
         self.sentence = possible_causation.sentence
-        label = possible_causation.true_causation_instance is not None
-        super(TRegexClassifierPart, self).__init__(self.sentence, label)
         self.cause_head = self.sentence.get_head(possible_causation.cause)
         self.effect_head = self.sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
         self.connective_head = self.sentence.get_head(self.connective)
         # TODO: Update this once we have multiple pattern matches sorted out.
         self.connective_pattern = possible_causation.matching_patterns[0]
+
+        if possible_causation.true_causation_instance:
+            if FLAGS.tregex_cc_tuple_correctness:
+                true_cause_head = self.sentence.get_head(
+                    possible_causation.true_causation_instance.cause)
+                true_effect_head = self.sentence.get_head(
+                    possible_causation.true_causation_instance.effect)
+                label = (true_cause_head is self.cause_head and
+                         true_effect_head is self.effect_head)
+            else:
+                label = True
+        else:
+            label = False
+        super(TRegexClassifierPart, self).__init__(self.sentence, label)
 
 
 class TRegexClassifierModel(ClassifierModel):
@@ -130,7 +145,6 @@ class TRegexClassifierModel(ClassifierModel):
         try:
             synsets = wordnet.synsets(token.lemma, pos=wn_pos_key)
         except KeyError: # Invalid POS tag
-            logging.warning("Invalid Wordnet POS tag: %s" % wn_pos_key)
             return []
         
         synsets_with_hypernyms = set()
