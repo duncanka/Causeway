@@ -20,7 +20,7 @@ from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
 try:
-    gflags.DEFINE_enum('classifier_model', 'tree',
+    gflags.DEFINE_enum('classifier_model', 'forest',
                        ['tree', 'knn', 'logistic', 'svm', 'forest'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
