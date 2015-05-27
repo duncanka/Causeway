@@ -10,6 +10,8 @@ from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from data import ParsedSentence
 from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
 from causality_pipelines.baseline import BaselineStage
+from causality_pipelines.baseline.combiner import BaselineCombinerStage
+
 FLAGS = gflags.FLAGS
 
 from data.readers import DirectoryReader, StandoffReader
@@ -33,11 +35,42 @@ try:
     gflags.DEFINE_bool('debug', False,
                        'Whether to print debug-level logging.')
     gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
-    gflags.DEFINE_enum('pipeline_type', 'tregex', ['tregex', 'regex', 'baseline'],
+    gflags.DEFINE_enum('pipeline_type', 'tregex',
+                       ['tregex', 'regex', 'baseline', 'baseline+tregex',
+                        'baseline+regex'],
                        'Which causality pipeline to run')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
+
+def get_stages(candidate_classifier):
+    BASELINE_CAUSATIONS_NAME = 'baseline_causations'
+
+    if FLAGS.pipeline_type == 'tregex':
+        stages = [TRegexConnectiveStage('TRegex connectives'),
+                  TRegexClassifierStage(candidate_classifier,
+                                        'Candidate classifier')]
+    elif FLAGS.pipeline_type == 'regex':
+        stages = [RegexConnectiveStage('Regex connectives'),
+                  ArgumentLabelerStage('CRF arg labeler'),
+                  RegexClassifierStage(candidate_classifier,
+                                       'Candidate classifier')]
+    elif FLAGS.pipeline_type == 'baseline+tregex':
+        stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
+                  TRegexConnectiveStage('TRegex connectives'),
+                  TRegexClassifierStage(candidate_classifier,
+                                        'Candidate classifier'),
+                  BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
+    elif FLAGS.pipeline_type == 'baseline+regex':
+        stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
+                  RegexConnectiveStage('Regex connectives'),
+                  ArgumentLabelerStage('CRF arg labeler'),
+                  RegexClassifierStage(candidate_classifier,
+                                       'Candidate classifier'),
+                  BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
+    else:
+        stages = [BaselineStage('Baseline')] # baseline
+    return stages
 
 # def main(argv):
 if __name__ == '__main__':
@@ -78,17 +111,7 @@ if __name__ == '__main__':
     candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
                                                       FLAGS.rebalance_ratio)
 
-    if FLAGS.pipeline_type == 'tregex':
-        stages = [TRegexConnectiveStage('TRegex connectives'),
-                  TRegexClassifierStage(
-                      candidate_classifier, 'Candidate classifier')]
-    elif FLAGS.pipeline_type == 'regex':
-        stages = [RegexConnectiveStage('Regex connectives'),
-                  ArgumentLabelerStage('CRF arg labeler'),
-                  RegexClassifierStage(candidate_classifier,
-                                                'Candidate classifier')]
-    else: # baseline
-        stages = [BaselineStage('Baseline')]
+    stages = get_stages(candidate_classifier)
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
