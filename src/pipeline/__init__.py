@@ -190,6 +190,7 @@ class Pipeline(object):
         if self._evaluators_by_stage: # we're evaluating
             instances = [self._copy_fn(instance) for instance in instances]
         for i, stage in enumerate(self.stages):
+            logging.info('Testing stage "%s"...' % stage.name)
             stage.test(instances)
             if self._evaluators_by_stage:
                 self._evaluators_by_stage[i].evaluate(instances,
