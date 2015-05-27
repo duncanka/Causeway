@@ -1,13 +1,14 @@
 """ Define basic pipeline functionality. """
 
-from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
 from copy import deepcopy
+from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
 import itertools
 import logging
 from numpy import random
 
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
+
 
 # Define pipeline-related flags.
 try:
@@ -167,6 +168,8 @@ class Pipeline(object):
                              % stage.name)
                 stage.test(instances)
                 logging.info('Done testing stage "%s"' % stage.name)
+            else: # consume attributes because it won't happen via test()
+                stage._consume_attributes(instance)
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''
@@ -289,12 +292,7 @@ class Stage(object):
         all_parts = []
         for instance in instances:
             all_parts.extend(self._extract_parts(instance, True))
-            # In general, consumed attributes are only used for part extraction.
-            # If they are needed for some reason in further processing, the
-            # relevant information should simply be attached to the parts.
-            self.__consume_attributes(instance)
 
-        assert all_parts, "No parts extracted for training!"
         for model in self.models:
             model.train(all_parts)
 
@@ -305,7 +303,7 @@ class Stage(object):
 
         for i, instance in enumerate(instances):
             parts = self._extract_parts(instance, False)
-            self.__consume_attributes(instance)
+            self._consume_attributes(instance)
             all_parts.extend(parts)
             instance_part_counts[i] = len(parts)
             for part in parts:
@@ -330,7 +328,7 @@ class Stage(object):
         '''
         raise NotImplementedError
 
-    def __consume_attributes(self, instance):
+    def _consume_attributes(self, instance):
         for attribute_name in self.CONSUMED_ATTRIBUTES:
             delattr(instance, attribute_name)
 

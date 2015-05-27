@@ -5,8 +5,8 @@ import numpy as np
 from causality_pipelines import PossibleCausation, IAAEvaluator
 from pipeline.models import CRFModel
 from pipeline.feature_extractors import FeatureExtractor, SetValuedFeatureExtractor
-from util import Enum
 from pipeline import Stage
+from util import Enum
 
 try:
     DEFINE_list('arg_label_features',
