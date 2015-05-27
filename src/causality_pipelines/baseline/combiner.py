@@ -19,12 +19,31 @@ class BaselineCombinerModel(Model):
     def train(self, parts):
         pass
     
+    @staticmethod
+    def _get_instance_tuple(causation_instance, sentence):
+        arg_indices = (sentence.get_head(causation_instance.cause).index,
+                      sentence.get_head(causation_instance.effect).index)
+        connective_indices = tuple(t.index for t in
+                                   causation_instance.connective)
+        return arg_indices + connective_indices
+    
     def test(self, parts):
+        last_sentence = None
+        existing_causations = None
         for possible_causation in parts:
-            possible_causation.sentence.add_causation_instance(
-                connective=possible_causation.connective,
-                cause=possible_causation.cause,
-                effect=possible_causation.effect)
+            sentence = possible_causation.sentence
+            if sentence is not last_sentence:
+                existing_causations = []
+                for causation in sentence.causation_instances:
+                    existing_causations.append(
+                        self._get_instance_tuple(causation, sentence))
+                
+            if (self._get_instance_tuple(possible_causation, sentence)
+                not in existing_causations):
+                possible_causation.sentence.add_causation_instance(
+                    connective=possible_causation.connective,
+                    cause=possible_causation.cause,
+                    effect=possible_causation.effect)
 
     
 class BaselineCombinerStage(Stage):

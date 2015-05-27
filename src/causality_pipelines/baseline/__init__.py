@@ -87,6 +87,7 @@ class BaselineModel(Model):
         each extract the paths. If the connective is present and there are
         paths, call callback.
         '''
+        # TODO: Change these to be the parts?
         for i, sentence in enumerate(sentences):
             tokens = [t for t in sentence.tokens[1:]
                       if t.lemma not in self._STOP_LEMMAS
