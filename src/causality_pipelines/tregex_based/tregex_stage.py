@@ -521,9 +521,20 @@ class TRegexConnectiveModel(Model):
                         tree_file.writelines(possible_trees)
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
-                        self._process_pattern(
-                            pattern, connective_labels, possible_sentences,
-                            tree_file.name)
+                        try:
+                            self._process_pattern(
+                                pattern, connective_labels, possible_sentences,
+                                tree_file.name)
+                        except IOError as e:
+                            # Rare error: if tell() was in the middle of
+                            # executing when the file was closed.
+                            logging.warn("IOError in pattern processing: %s"
+                                         % e.message)
+                            if self.output_file:
+                                # Just in case. Technically this could create
+                                # the same problem again, but that's extremely
+                                # improbable.
+                                self.output_file.close()
                     self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
