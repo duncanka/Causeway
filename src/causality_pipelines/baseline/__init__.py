@@ -174,7 +174,7 @@ class BaselineModel(Model):
 class BaselineStage(Stage):
     def __init__(self, name, record_results_in='causation_instances'):
         super(BaselineStage, self).__init__(
-            name=name, models=[BaselineModel(record_results_in)])
+            name=name, models=BaselineModel(record_results_in))
         # Slightly evil hack: override class variable with instance variable.
         self.PRODUCED_ATTRIBUTES = [record_results_in]
 

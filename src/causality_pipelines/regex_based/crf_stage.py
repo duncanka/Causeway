@@ -185,7 +185,7 @@ class ArgumentLabelerStage(Stage):
         if training_algorithm is None:
             training_algorithm = FLAGS.arg_label_training_alg
         super(ArgumentLabelerStage, self).__init__(
-            name, [ArgumentLabelerModel(training_algorithm, training_params)])
+            name, ArgumentLabelerModel(training_algorithm, training_params))
 
     def _extract_parts(self, sentence, is_train):
         if is_train:

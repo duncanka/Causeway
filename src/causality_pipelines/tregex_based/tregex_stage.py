@@ -690,7 +690,7 @@ class TRegexConnectiveStage(Stage):
     def __init__(self, name):
         super(TRegexConnectiveStage, self).__init__(
             name=name,
-            models=[TRegexConnectiveModel(part_type=ParsedSentence)])
+            models=TRegexConnectiveModel(part_type=ParsedSentence))
         self.pairwise_only_metrics = None # used during evaluation
 
     PRODUCED_ATTRIBUTES = ['possible_causations']

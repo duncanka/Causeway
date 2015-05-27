@@ -286,7 +286,7 @@ class Evaluator(object):
 class Stage(object):
     def __init__(self, name, models):
         self.name = name
-        self.models = models
+        self.models = listify(models)
 
     def train(self, instances):
         all_parts = []

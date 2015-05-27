@@ -142,7 +142,7 @@ class RegexClassifierStage(Stage):
     # TODO: add raw classifier evaluator (just going on what input was)
     def __init__(self, classifier, name):
         super(RegexClassifierStage, self).__init__(
-            name, [RegexClassifierModel(classifier)])
+            name, RegexClassifierModel(classifier))
         comparator = make_annotation_comparator(
             FLAGS.regex_cc_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations

@@ -209,7 +209,7 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
 class TRegexClassifierStage(Stage):
     def __init__(self, classifier, name):
         super(TRegexClassifierStage, self).__init__(
-            name=name, models=[TRegexClassifierModel(classifier)])
+            name=name, models=TRegexClassifierModel(classifier))
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 

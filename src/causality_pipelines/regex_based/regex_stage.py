@@ -198,8 +198,7 @@ class RegexConnectiveModel(Model):
 class RegexConnectiveStage(Stage):
     def __init__(self, name):
         super(RegexConnectiveStage, self).__init__(
-            name=name,
-            models=[RegexConnectiveModel()])
+            name=name, models=RegexConnectiveModel())
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, FLAGS.regex_print_test_instances,
