@@ -102,7 +102,7 @@ def _get_printable_connective_word(word):
         return word.upper()
 
 def _wrapped_sentence_highlighting_instance(instance):
-    sentence = instance.source_sentence
+    sentence = instance.sentence
     words = [(_get_printable_connective_word(t.original_text)
               if t in instance.connective else t.original_text)
              for t in sentence.tokens[1:]]
@@ -117,11 +117,12 @@ class CausalityMetrics(object):
                        'cause_jaccard', 'effect_jaccard']
 
     # TODO: Refactor order of parameters
-    def __init__(self, gold, predicted, allow_partial,
-                 save_differences=False, ids_considered=None,
-                 compare_degrees=True, compare_types=True,
-                 compare_args=True, pairwise_only=False,
-                 save_agreements=False):
+    def __init__(
+        self, gold, predicted, allow_partial, save_differences=False,
+        ids_considered=None, compare_degrees=True, compare_types=True,
+        compare_args=True, pairwise_only=False, save_agreements=False,
+        causations_property_name='causation_instances'):
+
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
 
@@ -133,6 +134,8 @@ class CausalityMetrics(object):
         self.save_differences = save_differences
         self.save_agreements = save_agreements
         self.pairwise_only = pairwise_only
+        self.causations_property_name = causations_property_name
+
         self.gold_only_instances = []
         self.predicted_only_instances = []
         self.agreeing_instances = []
@@ -204,13 +207,14 @@ class CausalityMetrics(object):
 
     def __get_causations(self, sentence, is_gold):
         causations = []
-        for instance in sentence.causation_instances:
-            is_given_id = instance.id in FLAGS.iaa_given_connective_ids
+        property_name = [self.causations_property_name,
+                         'causation_instances'][is_gold]
+        for instance in getattr(sentence, property_name):
             if (# First set of conditions: matches givenness specified
                 (self.ids_considered == self.IDsConsidered.Both or
-                 (is_given_id and
+                 (instance.id in FLAGS.iaa_given_connective_ids and
                   self.ids_considered == self.IDsConsidered.GivenOnly) or
-                 (not is_given_id and
+                 (instance.id not in FLAGS.iaa_given_connective_ids and
                   self.ids_considered == self.IDsConsidered.NonGivenOnly))
                 # Second set of conditions: is pairwise if necessary
                 and (not is_gold or not self.pairwise_only or
@@ -309,21 +313,19 @@ class CausalityMetrics(object):
         if self.save_differences:
             predicted_by_file = sentences_by_file(predicted)
             self.gold_only_instances = [
-                (gold_by_file[os.path.split(
-                    i.source_sentence.source_file_path)[-1]]
-                 .index(i.source_sentence) + 1, i)
+                (gold_by_file[os.path.split(i.sentence.source_file_path)[-1]]
+                 .index(i.sentence) + 1, i)
                 for i in gold_only_instances]
             self.predicted_only_instances = [
                 (predicted_by_file[os.path.split(
-                    i.source_sentence.source_file_path)[-1]]
-                 .index(i.source_sentence) + 1, i)
+                    i.sentence.source_file_path)[-1]]
+                 .index(i.sentence) + 1, i)
                 for i in predicted_only_instances]
             
         if self.save_agreements:
             self.agreeing_instances = [
-                (gold_by_file[os.path.split(
-                    i1.source_sentence.source_file_path)[-1]]
-                 .index(i1.source_sentence) + 1, i1)
+                (gold_by_file[os.path.split(i1.sentence.source_file_path)[-1]]
+                 .index(i1.sentence) + 1, i1)
                 for i1, i2 in matching_instances]
 
         return (connective_metrics, matching_instances)
@@ -372,8 +374,7 @@ class CausalityMetrics(object):
             else:
                 labels_1.append(labels_enum[property_1])
                 labels_2.append(labels_enum[property_2])
-                sentence_num = (
-                    gold_sentences.index(instance_1.source_sentence) + 1)
+                sentence_num = gold_sentences.index(instance_1.sentence) + 1
                 if property_1 != property_2 and self.save_differences:
                     self.property_differences.append(
                         (instance_1, instance_2, labels_enum, sentence_num))
@@ -410,7 +411,7 @@ class CausalityMetrics(object):
         correct_effect_heads = 0
 
         for instance_1, instance_2 in matches:
-            sentence_num = gold.index(instance_1.source_sentence) + 1
+            sentence_num = gold.index(instance_1.sentence) + 1
             cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
             effect_1, effect_2 = [i.effect for i in [instance_1, instance_2]]
 
@@ -598,7 +599,7 @@ class CausalityMetrics(object):
 
     @staticmethod
     def _log_instance_for_connective(instance, sentence_num, msg, indent, file):
-        filename = os.path.split(instance.source_sentence.source_file_path)[-1]
+        filename = os.path.split(instance.sentence.source_file_path)[-1]
         print_indented(
             indent, msg,
             _wrapped_sentence_highlighting_instance(instance).encode('utf-8'),
@@ -625,8 +626,7 @@ class CausalityMetrics(object):
                 word = effect_start + word + effect_end
             return word
             
-        sentence = instance.source_sentence 
-        tokens = sentence.tokens[1:] # skip ROOT
+        tokens = instance.sentence.tokens[1:] # skip ROOT
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             words = [token.get_unnormalized_original_text()
                      for token in tokens]
@@ -669,8 +669,7 @@ class CausalityMetrics(object):
             effect_end = '*'
         
         for instance_1, instance_2, sentence_num in self.argument_differences:
-            filename = os.path.split(
-                instance_1.source_sentence.source_file_path)[-1]
+            filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             connective_text = ParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)')
             print_indented(
@@ -704,8 +703,7 @@ class CausalityMetrics(object):
             if value_extractor:
                 values = (value_extractor(instance_1),
                           value_extractor(instance_2))
-            filename = os.path.split(
-                instance_1.source_sentence.source_file_path)[-1]
+            filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             print_indented(
                 indent, property_name, 's for connective "',
                 ParsedSentence.get_annotation_text(

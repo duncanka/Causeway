@@ -229,4 +229,4 @@ class TRegexClassifierStage(Stage):
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
         return IAAEvaluator(False, False, FLAGS.tregex_cc_print_test_instances,
-                            False, True, True)
+                            True, True)

@@ -2,7 +2,7 @@ from collections import defaultdict
 from gflags import DEFINE_integer, FLAGS, DuplicateFlagError
 from itertools import product
 
-from causality_pipelines import IAAEvaluator
+from causality_pipelines import IAAEvaluator, PossibleCausation
 from data import ParsedSentence
 import logging
 from pipeline import Stage
@@ -20,12 +20,13 @@ class BaselineModel(Model):
     _STOP_LEMMAS = ['be', 'the', 'a']
     _STOP_POSES = ['MD', 'CC', 'UH', ':', "''", ',' '.']
     
-    def __init__(self):
+    def __init__(self, save_results_in):
         super(BaselineModel, self).__init__(ParsedSentence)
         self._connectives = set()
         # (connective word tuple, parse path to cause, parse path to effect) ->
         #   list of [# causal, # non-causal]
         self._connective_relation_counts = defaultdict(lambda: [0, 0])
+        self._save_results_in = save_results_in
 
     @staticmethod
     def _get_closest_connective(sentence, cause, effect, connective_lemmas,
@@ -161,21 +162,25 @@ class BaselineModel(Model):
                 # Not seen in training; assumed to be non-causal
                 return
             if counts[1] > counts[0]: # go with majority class
-                sentences[sentence_num].add_causation_instance(
-                    connective=connective_tokens,
-                    cause=[possible_cause],
-                    effect=[possible_effect])
+                getattr(sentences[sentence_num], self._save_results_in).append(
+                    PossibleCausation(
+                        None, connective=connective_tokens,
+                        cause=[possible_cause], effect=[possible_effect]))
         for sentence in sentences:
-            sentence.causation_instances = []
+            setattr(sentence, self._save_results_in, [])
         self._operate_on_sentences(sentences, test_callback)
 
 
 class BaselineStage(Stage):
-    def __init__(self, name):
-        super(BaselineStage, self).__init__(name=name, models=[BaselineModel()])
+    def __init__(self, name, record_results_in='causation_instances'):
+        super(BaselineStage, self).__init__(
+            name=name, models=[BaselineModel(record_results_in)])
+        # Slightly evil hack: override class variable with instance variable.
+        self.PRODUCED_ATTRIBUTES = [record_results_in]
 
     def _extract_parts(self, sentence, is_train):
         return [sentence]
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, False, False, True, True)
+        return IAAEvaluator(False, False, False, True, True,
+                            self.PRODUCED_ATTRIBUTES[0])

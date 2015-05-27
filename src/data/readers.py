@@ -422,15 +422,14 @@ class StandoffReader(Reader):
             ids_to_reprocess.add(line_id)
             ids_needed_to_reprocess.add(id_needed)
         else:
-            sentence = instance.source_sentence
             # There can be a numerical suffix on the end of the name of the
             # edge. Since we're generally assuming well-formed data, we don't
             # check that there's only one of each.
             for arg_type, arg_id in split_args[1:]:
                 annotation = ids_to_annotations[arg_id]
                 try:
-                    annotation_tokens = sentence.find_tokens_for_annotation(
-                        annotation)
+                    annotation_tokens = (
+                        instance.sentence.find_tokens_for_annotation(annotation))
                 except ValueError as e:
                     raise UserWarning(e.message)
                 if arg_type.startswith('Cause'):

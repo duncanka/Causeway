@@ -154,7 +154,7 @@ class RegexClassifierStage(Stage):
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats.
         return IAAEvaluator(False, False, FLAGS.regex_cc_log_differences,
-                            False, True, True)
+                            True, True)
 
     CONSUMED_ATTRIBUTES = ['possible_causations']
 

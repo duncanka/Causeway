@@ -200,4 +200,4 @@ class ArgumentLabelerStage(Stage):
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, FLAGS.arg_label_log_differences,
-                            True, True, True)
+                            True, True, 'possible_causations')

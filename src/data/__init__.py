@@ -513,7 +513,7 @@ class ParsedSentence(object):
         new_sentence.causation_instances = []
         for causation_instance in sentence.causation_instances:
             new_instance = copy(causation_instance)
-            new_instance.source_sentence = new_sentence
+            new_instance.sentence = new_sentence
             new_sentence.causation_instances.append(new_instance)
         return new_sentence
 
@@ -779,7 +779,7 @@ class CausationInstance(object):
             degree = len(self.CausationTypes)
 
         assert source_sentence is not None
-        self.source_sentence = source_sentence
+        self.sentence = source_sentence
         self.degree = degree
         self.type = causation_type
         self.connective = connective
@@ -789,12 +789,12 @@ class CausationInstance(object):
 
     def get_cause_and_effect_heads(self, cause_before_relation=None):
         if self.cause:
-            cause = self.source_sentence.get_head(self.cause)
+            cause = self.sentence.get_head(self.cause)
         else:
             cause = None
 
         if self.effect:
-            effect = self.source_sentence.get_head(self.effect)
+            effect = self.sentence.get_head(self.effect)
         else:
             effect = None
 
