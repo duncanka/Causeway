@@ -109,7 +109,7 @@ RegexClassifierModel.FEATURE_EXTRACTORS = [
         Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
         'effect_pos', lambda part: (part.effect_head.pos
-                                   if part.effect_head else None),
+                                    if part.effect_head else None),
         Token.ALL_POS_TAGS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
@@ -118,7 +118,7 @@ RegexClassifierModel.FEATURE_EXTRACTORS = [
         Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
         'effect_pos_gen', lambda part: (part.effect_head.get_gen_pos()
-                                       if part.effect_head else None),
+                                        if part.effect_head else None),
         Token.ALL_POS_TAGS),
     FeatureExtractor('wordsbtw', RegexClassifierModel.words_btw_heads,
                      FeatureExtractor.FeatureTypes.Numerical),

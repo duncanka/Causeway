@@ -640,7 +640,7 @@ class TRegexConnectiveModel(Model):
                 # TODO: Make this eliminate duplicate PossibleCausations on
                 # the same connective words, like regex pipeline does.
                 possible = PossibleCausation(
-                    [pattern], connective,
+                    sentence, [pattern], connective,
                     true_connectives.get(tuple(connective), None),
                     [cause], [effect])
                 # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.

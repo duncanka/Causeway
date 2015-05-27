@@ -12,11 +12,9 @@ class PossibleCausation(object):
     Designed to mimic actual CausationInstance objects.
     '''
     # TODO: Make these actually descend from CausationInstances.
-    def __init__(self, matching_patterns, connective,
+    def __init__(self, sentence, matching_patterns, connective,
                  true_causation_instance=None, cause=None, effect=None):
-        # There must be at least 1 connective token, or it's not a valid
-        # potential instance anyway.
-        self.sentence = connective[0].parent_sentence
+        self.sentence = sentence
         self.matching_patterns = listify(matching_patterns)
         self.connective = connective
         self.true_causation_instance = true_causation_instance

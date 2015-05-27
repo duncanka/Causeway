@@ -81,7 +81,7 @@ class RegexConnectiveModel(Model):
                         true_causation_instance = causation_instance
 
                 possible_causation = PossibleCausation(
-                    matching_patterns, connective_tokens,
+                    sentence, matching_patterns, connective_tokens,
                     true_causation_instance)
                 sentence.possible_causations.append(possible_causation)
 

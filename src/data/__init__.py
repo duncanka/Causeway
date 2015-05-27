@@ -8,12 +8,13 @@ import logging
 from nltk.tree import ImmutableParentedTree, Tree
 import numpy as np
 import re
-
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
+
 from util import Enum, merge_dicts, listify
-from util.streams import *
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
+from util.streams import *
+
 
 try:
     DEFINE_bool('use_constituency_parse', False,
@@ -501,19 +502,41 @@ class ParsedSentence(object):
                              " its root. Wow.")
 
     @staticmethod
-    def shallow_copy_with_causations(sentence):
+    def shallow_copy_with_sentences_fixed(sentence):
         '''
-        Creates a shallow copy of sentence, but with causation_instances on the
-        new object set to copies of the CausationInstance objects, so that they
-        can know their correct source sentence.
+        Creates a shallow copy of sentence, but with causation_instances and
+        Tokens on the new object set to copies of the CausationInstance objects,
+        so that they can know their correct source sentence.
+        
+        N.B.: This means that all tokens in the copy will point back to the
+        *original* sentence!
         '''
         cls = sentence.__class__
         new_sentence = cls.__new__(cls)
         new_sentence.__dict__.update(sentence.__dict__)
+
+        new_sentence.tokens = []
+        for token in sentence.tokens:
+            new_token = object.__new__(token.__class__)
+            new_token.__dict__.update(token.__dict__)
+            new_token.parent_sentence = new_sentence
+            new_sentence.tokens.append(new_token)
+
         new_sentence.causation_instances = []
         for causation_instance in sentence.causation_instances:
             new_instance = copy(causation_instance)
             new_instance.sentence = new_sentence
+            # Update connective/cause/effect tokens to the ones that point to
+            # the new sentence object.
+            if causation_instance.connective:
+                new_instance.connective = [new_sentence.tokens[t.index] for t
+                                           in causation_instance.connective]
+            if causation_instance.cause:
+                new_instance.cause = [new_sentence.tokens[t.index] for t
+                                      in causation_instance.cause]
+            if causation_instance.effect:
+                new_instance.effect = [new_sentence.tokens[t.index] for t
+                                       in causation_instance.effect]
             new_sentence.causation_instances.append(new_instance)
         return new_sentence
 
@@ -779,6 +802,11 @@ class CausationInstance(object):
             degree = len(self.CausationTypes)
 
         assert source_sentence is not None
+        for token in listify(connective) + listify(cause) + listify(effect):
+            if token is None:
+                continue
+            assert token.parent_sentence is source_sentence
+
         self.sentence = source_sentence
         self.degree = degree
         self.type = causation_type

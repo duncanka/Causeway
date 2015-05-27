@@ -162,9 +162,10 @@ class BaselineModel(Model):
                 # Not seen in training; assumed to be non-causal
                 return
             if counts[1] > counts[0]: # go with majority class
-                getattr(sentences[sentence_num], self._save_results_in).append(
+                sentence = sentences[sentence_num]
+                getattr(sentence, self._save_results_in).append(
                     PossibleCausation(
-                        None, connective=connective_tokens,
+                        sentence, None, connective=connective_tokens,
                         cause=[possible_cause], effect=[possible_effect]))
         for sentence in sentences:
             setattr(sentence, self._save_results_in, [])

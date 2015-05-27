@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
-        copy_fn=ParsedSentence.shallow_copy_with_causations)
+        copy_fn=ParsedSentence.shallow_copy_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()
