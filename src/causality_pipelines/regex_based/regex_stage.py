@@ -14,8 +14,7 @@ try:
     DEFINE_bool('regex_print_patterns', False,
                 'Whether to print all connective patterns')
     DEFINE_bool('regex_print_test_instances', False,
-                'Whether to print true positive, false positive, and false'
-                ' negative instances after testing')
+                'Whether to print differing IAA results during evaluation')
     DEFINE_bool('regex_include_pos', True,
                 'Whether to include POS tags in the strings matched by regex')
 

@@ -11,6 +11,7 @@ class PossibleCausation(object):
     '''
     Designed to mimic actual CausationInstance objects.
     '''
+    # TODO: Make these actually descend from CausationInstances.
     def __init__(self, matching_patterns, connective,
                  true_causation_instance=None, cause=None, effect=None):
         # There must be at least 1 connective token, or it's not a valid

@@ -18,8 +18,7 @@ try:
     DEFINE_string('arg_label_model_path', '../arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
     DEFINE_bool('arg_label_log_differences', False,
-                'Whether to log differences between gold and predicted results'
-                ' for each round of argument labeling evaluation')
+                'Whether to print differing IAA results during evaluation')
     DEFINE_integer('arg_label_max_dep_path_len', 4,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")

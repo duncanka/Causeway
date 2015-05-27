@@ -16,14 +16,13 @@ try:
          'connective', 'cn_lemmas'],
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
-                   "TRegex-based classifier: maximum number of words between"
-                   " phrases before just making the value the max")
+                   "Maximum number of words between phrases before just making"
+                   " the value the max")
     DEFINE_integer('tregex_cc_max_dep_path_len', 3,
-                   "TRegex-based classifier: Maximum number of dependency path"
-                   " steps to allow before just making the value 'LONG-RANGE'")
+                   "Maximum number of dependency path steps to allow before"
+                   " just making the value 'LONG-RANGE'")
     DEFINE_bool('tregex_cc_print_test_instances', False,
-                'TRegex-based: Whether to print differing IAA results'
-                ' during evaluation')
+                'Whether to print differing IAA results during evaluation')
     DEFINE_bool('tregex_cc_tuple_correctness', False,
                 'Whether a candidate instance should be considered correct in'
                 ' training based on (connective, cause, effect), as opposed to'

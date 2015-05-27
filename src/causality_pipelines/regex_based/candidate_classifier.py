@@ -15,18 +15,16 @@ try:
                  'args_dep_len', 'connective', 'tenses', 'pattern'],
                 'Features for regex-based candidate classifier')
     DEFINE_integer('regex_cc_max_wordsbtw', 10,
-                   "Regex-based candidate classifier: maximum number of words"
-                   " between phrases before just making the value the max")
+                   "Maximum number of words between phrases before just making"
+                   " the value the max")
     DEFINE_bool('regex_cc_log_differences', False,
-                'Whether to log differences between gold and predicted results'
-                ' for ')
+                'Whether to print differing IAA results during evaluation')
     DEFINE_bool('regex_cc_train_with_partials', False,
                 'Whether to train the regex-based candidate classifier model'
                 ' counting partial overlap as correct')
     DEFINE_integer('regex_cc_max_dep_path_len', 3,
-                   "Regex-based candidate classifier: Maximum number of"
-                   " dependency path steps to allow before just making the"
-                   " value 'LONG-RANGE'")
+                   "Maximum number of dependency path steps to allow before just"
+                   " making the value 'LONG-RANGE'")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 

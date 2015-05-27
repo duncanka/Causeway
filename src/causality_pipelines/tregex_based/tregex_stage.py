@@ -29,8 +29,7 @@ try:
     DEFINE_bool('tregex_print_patterns', False,
                 'Whether to print all connective patterns')
     DEFINE_bool('tregex_print_test_instances', False,
-                'Whether to print true positive, false positive, and false'
-                ' negative instances after testing')
+                'Whether to print differing IAA results during evaluation')
     DEFINE_enum('tregex_pattern_type', 'dependency',
                 ['dependency', 'constituency'],
                 'Type of tree to generate and run TRegex patterns with')
