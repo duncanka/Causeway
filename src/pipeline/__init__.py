@@ -150,9 +150,8 @@ class Pipeline(object):
             # overwrite the originals. This is especially important during
             # cross-validation, when we could otherwise overwrite data that will
             # later be used again for both training and testing.
-            if len(self.stages) > 1:
-                instances = [self._copy_fn(instance) for instance in instances]
-                logging.info("Training on %d instances" % len(instances))
+            instances = [self._copy_fn(instance) for instance in instances]
+            logging.info("Training on %d instances" % len(instances))
 
         for stage in self.stages:
             logging.info('Training stage "%s"...' % stage.name)
@@ -169,7 +168,8 @@ class Pipeline(object):
                 stage.test(instances)
                 logging.info('Done testing stage "%s"' % stage.name)
             else: # consume attributes because it won't happen via test()
-                stage._consume_attributes(instance)
+                for instance in instances:
+                    stage._consume_attributes(instance)
 
     def evaluate(self, instances=FLAGS.test_batch_size):
         '''
