@@ -211,7 +211,7 @@ class TRegexClassifierStage(Stage):
         super(TRegexClassifierStage, self).__init__(
             name=name, models=TRegexClassifierModel(classifier))
 
-    CONSUMED_ATTRIBUTES = ['possible_causations']
+    consumed_attributes = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
         return [TRegexClassifierPart(p) for p in sentence.possible_causations]

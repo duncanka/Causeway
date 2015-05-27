@@ -154,7 +154,7 @@ class RegexClassifierStage(Stage):
         return IAAEvaluator(False, False, FLAGS.regex_cc_log_differences,
                             True, True)
 
-    CONSUMED_ATTRIBUTES = ['possible_causations']
+    consumed_attributes = ['possible_causations']
 
     def _extract_parts(self, sentence, is_train):
         # In training, we need to match the causation instances the pipeline has

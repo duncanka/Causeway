@@ -693,7 +693,7 @@ class TRegexConnectiveStage(Stage):
             models=TRegexConnectiveModel(part_type=ParsedSentence))
         self.pairwise_only_metrics = None # used during evaluation
 
-    PRODUCED_ATTRIBUTES = ['possible_causations']
+    produced_attributes = ['possible_causations']
     
     def _extract_parts(self, sentence, is_train):
         return [sentence]

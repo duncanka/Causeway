@@ -329,22 +329,22 @@ class Stage(object):
         raise NotImplementedError
 
     def _consume_attributes(self, instance):
-        for attribute_name in self.CONSUMED_ATTRIBUTES:
+        for attribute_name in self.consumed_attributes:
             delattr(instance, attribute_name)
 
     '''
     Default list of attributes the stage adds to instances. Add a class-wide
     field by the same name in the class for a stage that adds any attributes
-    to instances.
+    to instances. Stages can also provide instance-specific lists.
     '''
-    PRODUCED_ATTRIBUTES = []
+    produced_attributes = []
 
     '''
     Default list of attributes the stage removes from instances. Add a
     class-wide field by the same name in the class for a stage that removes any
-    attributes from instances.
+    attributes from instances. Stages can also provide instance-specific lists.
     '''
-    CONSUMED_ATTRIBUTES = []
+    consumed_attributes = []
 
     def _extract_parts(self, instance, is_train):
         raise NotImplementedError

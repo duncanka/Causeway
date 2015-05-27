@@ -175,12 +175,11 @@ class BaselineStage(Stage):
     def __init__(self, name, record_results_in='causation_instances'):
         super(BaselineStage, self).__init__(
             name=name, models=BaselineModel(record_results_in))
-        # Slightly evil hack: override class variable with instance variable.
-        self.PRODUCED_ATTRIBUTES = [record_results_in]
+        self.produced_attributes = [record_results_in]
 
     def _extract_parts(self, sentence, is_train):
         return [sentence]
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, False, True, True,
-                            self.PRODUCED_ATTRIBUTES[0])
+                            self.produced_attributes[0])
