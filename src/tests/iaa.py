@@ -34,6 +34,25 @@ class CausalityMetricsTest(unittest.TestCase):
             swapped_sentences.append(swapped_sentence)
         return swapped_sentences
 
+    def _test_arg_metrics(
+        self, metrics, correct_cause_span_metrics, correct_effect_span_metrics,
+        correct_cause_head_metrics, correct_effect_head_metrics,
+        correct_cause_jaccard, correct_effect_jaccard):
+
+        self.assertEqual(metrics.cause_span_metrics,
+                         correct_cause_span_metrics)
+        self.assertEqual(metrics.effect_span_metrics,
+                         correct_effect_span_metrics)
+        self.assertEqual(metrics.cause_head_metrics,
+                         correct_cause_head_metrics)
+        self.assertEqual(metrics.effect_head_metrics,
+                         correct_effect_head_metrics)
+
+        self.assertEqual(metrics.cause_jaccard, correct_cause_jaccard)
+        self.assertEqual(metrics.effect_jaccard, correct_effect_jaccard)
+
+        # TODO: verify type and degree matrices
+
     def setUp(self):
         self.sentences = self._get_sentences_from_file('standoff_test.ann')
         # We have 4 unmodified connectives; 1 connective with an added fragment
@@ -48,27 +67,14 @@ class CausalityMetricsTest(unittest.TestCase):
 
     def test_same_annotations_metrics(self):
         swapped = self._get_sentences_with_swapped_args(self.sentences)
+        correct_connective_metrics = ClassificationMetrics(7, 0, 0)
+        correct_arg_metrics = AccuracyMetrics(7, 0)
         for sentences in [self.sentences, swapped]:
             metrics = CausalityMetrics(sentences, sentences, False)
-
-            correct_connective_metrics = ClassificationMetrics(7, 0, 0)
             self.assertEqual(metrics.connective_metrics,
                              correct_connective_metrics)
-
-            correct_arg_metrics = AccuracyMetrics(7, 0)
-            self.assertEqual(metrics.cause_span_metrics,
-                             correct_arg_metrics)
-            self.assertEqual(metrics.effect_span_metrics,
-                             correct_arg_metrics)
-            self.assertEqual(metrics.cause_head_metrics,
-                             correct_arg_metrics)
-            self.assertEqual(metrics.effect_head_metrics,
-                             correct_arg_metrics)
-
-            self.assertEqual(metrics.cause_jaccard, 1.0)
-            self.assertEqual(metrics.effect_jaccard, 1.0)
-
-            # TODO: verify type and degree matrices
+            self._test_arg_metrics(metrics, correct_connective_metrics,
+                                   *([correct_arg_metrics] * 4 + [1.0] * 2))
 
     def test_modified_annotations_metrics(self):
         metrics = CausalityMetrics(self.sentences, self.modified_sentences,
