@@ -331,22 +331,29 @@ class CausalityMetrics(object):
         return (connective_metrics, matching_instances)
     
     def _get_jaccard(self, matches, arg_property_name):
-        jaccard_index = 0
+        jaccard_numerator = 0
+        instances_ignored = 0
         def get_arg_indices(instance):
             arg = getattr(instance, arg_property_name)
             if arg is None:
                 return []
             else:
                 return [token.index for token in arg]
+
         for instance_pair in matches:
             i1_indices, i2_indices = [get_arg_indices(i) for i in instance_pair]
-            diff = SequenceDiff(i1_indices, i2_indices)
-            num_matching = len(diff.get_matching_pairs())
-            jaccard_index += num_matching / (len(i1_indices) + len(i2_indices)
-                                             - num_matching)
+            # Simply don't include instances missing this argument in the
+            # calculation, either in the numerator or the denominator.
+            if i1_indices or i2_indices:
+                diff = SequenceDiff(i1_indices, i2_indices)
+                num_matching = len(diff.get_matching_pairs())
+                jaccard_numerator += num_matching / (
+                    len(i1_indices) + len(i2_indices) - num_matching)
+            else:
+                instances_ignored += 1
 
-        return jaccard_index / safe_divisor(float(len(matches)))
-
+        return jaccard_numerator / safe_divisor(
+            float(len(matches) - instances_ignored))
 
     def _compute_agreement_matrix(self, matches, labels_enum, property_name,
                                   gold_sentences):
