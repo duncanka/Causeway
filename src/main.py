@@ -11,6 +11,7 @@ from data import ParsedSentence
 from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
+from util import print_indented
 
 FLAGS = gflags.FLAGS
 
@@ -79,9 +80,8 @@ if __name__ == '__main__':
     try:
         FLAGS(argv)  # parse flags
         # Print command line in case we ever want to re-run from output file
-        print "Command line:", " ".join(
-            [arg if ' ' not in arg else '"%s"' % arg
-             for arg in argv[:]])
+        print "Flags:"
+        print_indented(1, FLAGS.FlagsIntoString())
     except gflags.FlagsError, e:
         print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
