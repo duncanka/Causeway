@@ -1,4 +1,6 @@
 from __future__ import absolute_import
+
+from copy import deepcopy
 import gflags
 import os
 import unittest
@@ -20,6 +22,17 @@ class CausalityMetricsTest(unittest.TestCase):
         sentences = reader.get_all()
         reader.close()
         return sentences
+    
+    @staticmethod
+    def _get_sentences_with_swapped_args(sentences):
+        swapped_sentences = []
+        for sentence in sentences:
+            swapped_sentence = deepcopy(sentence)
+            for instance in swapped_sentence.causation_instances:
+                instance.cause, instance.effect = (
+                    instance.effect, instance.cause)
+            swapped_sentences.append(swapped_sentence)
+        return swapped_sentences
 
     def setUp(self):
         self.sentences = self._get_sentences_from_file('standoff_test.ann')
@@ -34,26 +47,28 @@ class CausalityMetricsTest(unittest.TestCase):
             'standoff_test_modified.ann')
 
     def test_same_annotations_metrics(self):
-        metrics = CausalityMetrics(self.sentences, self.sentences, False)
+        swapped = self._get_sentences_with_swapped_args(self.sentences)
+        for sentences in [self.sentences, swapped]:
+            metrics = CausalityMetrics(sentences, sentences, False)
 
-        correct_connective_metrics = ClassificationMetrics(7, 0, 0)
-        self.assertEqual(metrics.connective_metrics,
-                         correct_connective_metrics)
+            correct_connective_metrics = ClassificationMetrics(7, 0, 0)
+            self.assertEqual(metrics.connective_metrics,
+                             correct_connective_metrics)
 
-        correct_arg_metrics = AccuracyMetrics(7, 0)
-        self.assertEqual(metrics.cause_span_metrics,
-                         correct_arg_metrics)
-        self.assertEqual(metrics.effect_span_metrics,
-                         correct_arg_metrics)
-        self.assertEqual(metrics.cause_head_metrics,
-                         correct_arg_metrics)
-        self.assertEqual(metrics.effect_head_metrics,
-                         correct_arg_metrics)
+            correct_arg_metrics = AccuracyMetrics(7, 0)
+            self.assertEqual(metrics.cause_span_metrics,
+                             correct_arg_metrics)
+            self.assertEqual(metrics.effect_span_metrics,
+                             correct_arg_metrics)
+            self.assertEqual(metrics.cause_head_metrics,
+                             correct_arg_metrics)
+            self.assertEqual(metrics.effect_head_metrics,
+                             correct_arg_metrics)
 
-        self.assertEqual(metrics.cause_jaccard, 1.0)
-        self.assertEqual(metrics.effect_jaccard, 1.0)
+            self.assertEqual(metrics.cause_jaccard, 1.0)
+            self.assertEqual(metrics.effect_jaccard, 1.0)
 
-        # TODO: verify type and degree matrices
+            # TODO: verify type and degree matrices
 
     def test_modified_annotations_metrics(self):
         metrics = CausalityMetrics(self.sentences, self.modified_sentences,
