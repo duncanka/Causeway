@@ -1,0 +1,234 @@
+A very large part of our problem is that we have not yet found sufficient replacement for the discipline of a lender not lending to a borrower unless the lender is sure that the borrower will be able to repay .
+
+a/DT very/RB large/JJ part/NN of/IN we/PRP$ problem/NN be/VBZ that/IN we/PRP have/VBP not/RB yet/RB find/VBN sufficient/JJ replacement/NN for/IN the/DT discipline/NN of/IN a/DT lender/NN not/RB lend/VBG to/TO a/DT borrower/NN unless/IN the/DT lender/NN be/VBZ sure/JJ that/IN the/DT borrower/NN will/MD be/VB able/JJ to/TO repay/VB ./.
+
+(ROOT
+  (S
+    (NP
+      (NP (DT a)
+        (ADJP (RB very) (JJ large))
+        (NN part))
+      (PP (IN of)
+        (NP (PRP$ we) (NN problem))))
+    (VP (VBZ be)
+      (SBAR (IN that)
+        (S
+          (NP (PRP we))
+          (VP (VBP have) (RB not)
+            (ADVP (RB yet))
+            (VP (VBN find)
+              (NP (JJ sufficient) (NN replacement))
+              (PP (IN for)
+                (S
+                  (NP
+                    (NP (DT the) (NN discipline))
+                    (PP (IN of)
+                      (NP (DT a) (NN lender))))
+                  (RB not)
+                  (VP (VBG lend)
+                    (PP (TO to)
+                      (NP (DT a) (NN borrower)))
+                    (SBAR (IN unless)
+                      (S
+                        (NP (DT the) (NN lender))
+                        (VP (VBZ be)
+                          (ADJP (JJ sure))
+                          (SBAR (IN that)
+                            (S
+                              (NP (DT the) (NN borrower))
+                              (VP (MD will)
+                                (VP (VB be)
+                                  (ADJP (JJ able)
+                                    (S
+                                      (VP (TO to)
+                                        (VP (VB repay))))))))))))))))))))
+    (. .)))
+
+det(part-4, a-1)
+advmod(large-3, very-2)
+amod(part-4, large-3)
+nsubj(be-8, part-4)
+prep(part-4, of-5)
+poss(problem-7, we-6)
+pobj(of-5, problem-7)
+root(ROOT-0, be-8)
+mark(find-14, that-9)
+nsubj(find-14, we-10)
+aux(find-14, have-11)
+neg(find-14, not-12)
+advmod(find-14, yet-13)
+ccomp(be-8, find-14)
+amod(replacement-16, sufficient-15)
+dobj(find-14, replacement-16)
+prep(find-14, for-17)
+det(discipline-19, the-18)
+nsubj(lend-24, discipline-19)
+prep(discipline-19, of-20)
+det(lender-22, a-21)
+pobj(of-20, lender-22)
+neg(lend-24, not-23)
+pcomp(for-17, lend-24)
+prep(lend-24, to-25)
+det(borrower-27, a-26)
+pobj(to-25, borrower-27)
+mark(sure-32, unless-28)
+det(lender-30, the-29)
+nsubj(sure-32, lender-30)
+cop(sure-32, be-31)
+advcl(lend-24, sure-32)
+mark(able-38, that-33)
+det(borrower-35, the-34)
+nsubj(able-38, borrower-35)
+nsubj(repay-40, borrower-35)
+aux(able-38, will-36)
+cop(able-38, be-37)
+ccomp(sure-32, able-38)
+aux(repay-40, to-39)
+xcomp(able-38, repay-40)
+
+Something that simple causes problems in subprime , and it has caused problems elsewhere .
+
+something/NN that/RB simple/JJ cause/VBZ problem/NNS in/IN subprime/NN ,/, and/CC it/PRP have/VBZ cause/VBN problem/NNS elsewhere/RB ./.
+
+(ROOT
+  (S
+    (S
+      (NP
+        (NP (NN something))
+        (ADJP (RB that) (JJ simple)))
+      (VP (VBZ cause)
+        (NP
+          (NP (NNS problem))
+          (PP (IN in)
+            (NP (NN subprime))))))
+    (, ,)
+    (CC and)
+    (S
+      (NP (PRP it))
+      (VP (VBZ have)
+        (VP (VBN cause)
+          (NP (NNS problem))
+          (ADVP (RB elsewhere)))))
+    (. .)))
+
+nsubj(cause-4, something-1)
+advmod(simple-3, that-2)
+amod(something-1, simple-3)
+root(ROOT-0, cause-4)
+dobj(cause-4, problem-5)
+prep(problem-5, in-6)
+pobj(in-6, subprime-7)
+cc(cause-4, and-9)
+nsubj(cause-12, it-10)
+aux(cause-12, have-11)
+conj(cause-4, cause-12)
+dobj(cause-12, problem-13)
+advmod(cause-12, elsewhere-14)
+
+If properly done , a market sensitive regulatory authority not only prevents some of the problems , but is pro-market , because we have investors now who are unwilling to invest even in things they should .
+
+if/IN properly/RB do/VBN ,/, a/DT market/NN sensitive/JJ regulatory/JJ authority/NN not/RB only/JJ prevent/VBZ some/DT of/IN the/DT problem/NNS ,/, but/CC be/VBZ pro-market/JJ ,/, because/IN we/PRP have/VBP investor/NNS now/RB who/WP be/VBP unwilling/JJ to/TO invest/VB even/RB in/IN thing/NNS they/PRP should/MD ./.
+
+(ROOT
+  (S
+    (SBAR (IN if)
+      (S
+        (ADVP (RB properly))
+        (VP (VBN do))))
+    (, ,)
+    (NP (DT a)
+      (ADJP (NN market) (JJ sensitive))
+      (JJ regulatory) (NN authority))
+    (VP
+      (CONJP (RB not) (JJ only))
+      (VP (VBZ prevent)
+        (NP
+          (NP (DT some))
+          (PP (IN of)
+            (NP (DT the) (NNS problem)))))
+      (, ,)
+      (CC but)
+      (VP (VBZ be)
+        (ADJP (JJ pro-market))
+        (, ,)
+        (SBAR (IN because)
+          (S
+            (NP (PRP we))
+            (VP (VBP have)
+              (NP
+                (NP (NNS investor))
+                (ADVP (RB now))
+                (SBAR
+                  (WHNP (WP who))
+                  (S
+                    (VP (VBP be)
+                      (ADJP (JJ unwilling)
+                        (S
+                          (VP (TO to)
+                            (VP (VB invest)
+                              (ADVP (RB even))
+                              (PP (IN in)
+                                (NP
+                                  (NP (NNS thing))
+                                  (SBAR
+                                    (S
+                                      (NP (PRP they))
+                                      (VP (MD should)))))))))))))))))))
+    (. .)))
+
+mark(do-3, if-1)
+advmod(do-3, properly-2)
+advcl(prevent-12, do-3)
+det(authority-9, a-5)
+npadvmod(sensitive-7, market-6)
+amod(authority-9, sensitive-7)
+amod(authority-9, regulatory-8)
+nsubj(prevent-12, authority-9)
+neg(only-11, not-10)
+preconj(prevent-12, only-11)
+root(ROOT-0, prevent-12)
+dobj(prevent-12, some-13)
+prep(some-13, of-14)
+det(problem-16, the-15)
+pobj(of-14, problem-16)
+cc(prevent-12, but-18)
+cop(pro-market-20, be-19)
+conj(prevent-12, pro-market-20)
+mark(have-24, because-22)
+nsubj(have-24, we-23)
+advcl(pro-market-20, have-24)
+dobj(have-24, investor-25)
+advmod(investor-25, now-26)
+ref(investor-25, who-27)
+nsubj(unwilling-29, who-27)
+nsubj(invest-31, who-27)
+cop(unwilling-29, be-28)
+rcmod(investor-25, unwilling-29)
+aux(invest-31, to-30)
+xcomp(unwilling-29, invest-31)
+advmod(invest-31, even-32)
+prep(invest-31, in-33)
+pobj(in-33, thing-34)
+nsubj(should-36, they-35)
+rcmod(thing-34, should-36)
+
+To cause harm is bad .
+
+to/TO cause/VB harm/NN be/VBZ bad/JJ ./.
+
+(ROOT
+  (S
+    (S
+      (VP (TO to)
+        (VP (VB cause)
+          (NP (NN harm)))))
+    (VP (VBZ be)
+      (ADJP (JJ bad)))
+    (. .)))
+
+aux(cause-2, to-1)
+csubj(bad-5, cause-2)
+dobj(cause-2, harm-3)
+cop(bad-5, be-4)
+root(ROOT-0, bad-5)
+

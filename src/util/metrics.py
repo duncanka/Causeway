@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
 from util.scipy import add_rows_and_cols_to_matrix
+from util import floats_are_same
 
 try:
     DEFINE_bool('metrics_log_raw_counts', False,
@@ -59,7 +60,7 @@ class ClassificationMetrics(object):
             self._tn = self._accuracy
         self._finalized = True
 
-    def __str__(self):
+    def __repr__(self):
         if not self._finalized:
             self._finalize_counts()
 
@@ -81,6 +82,15 @@ class ClassificationMetrics(object):
                     'F1: %g') % (
                         self._accuracy, self._precision, self._recall,
                         self._f1)
+
+    def __eq__(self, other):
+        return (floats_are_same(self._tp, other._tp)
+                and floats_are_same(self._fp, other._fp)
+                and floats_are_same(self._fn, other._fn)
+                and floats_are_same(self._tn, other._tn))
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     @staticmethod
     def average(metrics_list, ignore_nans=True):
@@ -300,7 +310,7 @@ class AccuracyMetrics(object):
         else:
             return '% Agreement: {:.2}'.format(self.accuracy)
 
-    def __str__(self):
+    def __repr__(self):
         return self.pretty_format()
 
     def __add__(self, other):
@@ -314,3 +324,13 @@ class AccuracyMetrics(object):
         new_metrics.incorrect = np.mean([m.incorrect for m in metrics])
         new_metrics.accuracy = np.mean([m.accuracy for m in metrics])
         return new_metrics
+
+    def __eq__(self, other):
+        return (self.correct == other.correct
+                and self.incorrect == other.incorrect
+                # Extra check to make sure averages work right
+                and floats_are_same(self.accuracy, other.accuracy))
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+

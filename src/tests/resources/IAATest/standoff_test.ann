@@ -1,0 +1,35 @@
+T192	Argument 112 146	a lender not lending to a borrower
+T193	Argument 154 212	the lender is sure that the borrower will be able to repay
+T194	Consequence 147 153	unless
+E64	Consequence:T194 Cause:T193 Effect:T192
+A68	Degree E64 Disentail
+T15	Argument 214 235	Something that simple
+T16	Argument 243 263	problems in subprime
+T17	Argument 269 271	it
+R1	Coref Arg1:T17 Arg2:T15	
+T18	Consequence 276 282	caused
+A4	Degree E6 Facilitate
+E6	Consequence:T18 Cause:T17 Effect:T19
+T19	Argument 283 301	problems elsewhere
+T20	Consequence 236 242	causes
+E7	Consequence:T20 Cause:T15 Effect:T16
+A5	Degree E7 Facilitate
+T33	Argument 325 364;409 422	a market sensitive regulatory authority is pro-market
+T34	Argument 432 508	we have investors now who are unwilling to invest even in things they should
+T35	Inference 424 431	because
+E12	Inference:T35 Cause:T34 Effect:T33
+A12	Degree E12 Facilitate
+T26	Argument 325 508	a market sensitive regulatory authority not only prevents some of the problems, but is pro-market, because we have investors now who are unwilling to invest even in things they should
+T66	Argument 310 323;325 364	properly done a market sensitive regulatory authority
+T67	Consequence 307 309	If
+E23	Consequence:T67 Cause:T66 Effect:T26
+A25	Degree E23 Facilitate
+T30	Argument 325 364	a market sensitive regulatory authority
+T31	Argument 383 403	some of the problems
+T32	Consequence 374 382	prevents
+E11	Consequence:T32 Effect:T31 Cause:T30
+A11	Degree E11 Inhibit
+T1	Consequence 517 522	cause
+E1	Consequence:T1 Effect:T2
+A1	Degree E1 Facilitate
+T2	Argument 523 527	harm

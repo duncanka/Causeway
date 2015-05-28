@@ -1,10 +1,13 @@
 from __future__ import print_function
+
 import colorama
-from itertools import tee, izip, izip_longest
 import fcntl
+from itertools import tee, izip, izip_longest
+import numpy as np
 import os
 import struct
 import termios
+
 
 # Add some Colorama functionality.
 class AnsiFormats:
@@ -99,3 +102,13 @@ def get_terminal_size():
 def igroup(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return izip_longest(*args, fillvalue=fillvalue)
+
+def floats_are_same(f1, f2):
+    '''
+    NaN != NaN. This function compares floats in a way that considers them equal
+    if they are both NaNs OR they are actually equal.
+    '''
+    if np.isnan(f1):
+        return np.isnan(f2)
+    else:
+        return f1 == f2
