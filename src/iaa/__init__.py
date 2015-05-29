@@ -546,8 +546,8 @@ class CausalityMetrics(object):
     @staticmethod
     def aggregate(metrics_list):
         '''
-        Aggregates IAA statistics. Classification metrics are averaged;
-        confusion matrices are summed.
+        Aggregates IAA statistics. Classification and accuracy metrics are
+        averaged; confusion matrices are summed.
         '''
         assert metrics_list, "Can't aggregate empty list of causality metrics!"
         aggregated = object.__new__(CausalityMetrics)

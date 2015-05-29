@@ -55,7 +55,7 @@ class CausalityMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(correct_cause_jaccard, metrics.cause_jaccard)
         self.assertAlmostEqual(correct_effect_jaccard, metrics.effect_jaccard)
 
-        # TODO: verify type and degree matrices
+        # TODO: verify type and degree matrices (may require editing data)
 
     def setUp(self):
         # Unmodified file contains 7 instances.
@@ -139,6 +139,25 @@ class CausalityMetricsTest(unittest.TestCase):
             aggregated.cause_span_metrics, aggregated.effect_span_metrics,
             aggregated.cause_head_metrics, aggregated.effect_head_metrics,
             aggregated.cause_jaccard, aggregated.effect_jaccard)
+
+        self_metrics = CausalityMetrics(self.sentences, self.sentences, False)
+        aggregated = CausalityMetrics.aggregate([metrics, self_metrics])
+
+        correct_connective_metrics = ClassificationMetrics(6, 1, 1)
+        correct_cause_span_metrics = AccuracyMetrics(5, 1)
+        correct_cause_span_metrics.accuracy = 0.8
+        correct_cause_head_metrics = correct_cause_span_metrics
+        correct_effect_span_metrics = AccuracyMetrics(5.5, 0.5)
+        correct_effect_span_metrics.accuracy = 0.9
+        correct_effect_head_metrics = AccuracyMetrics(6, 0)
+        correct_effect_head_metrics.accuracy = 1.0
+        correct_cause_jaccard = (1.0 + 0.6) / 2.0
+        correct_effect_jaccard = 34 / 35.
+        self._test_metrics(
+            aggregated, correct_connective_metrics,
+            correct_cause_span_metrics, correct_effect_span_metrics,
+            correct_cause_head_metrics, correct_effect_head_metrics,
+            correct_cause_jaccard, correct_effect_jaccard)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
