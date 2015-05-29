@@ -198,7 +198,10 @@ class CausalityMetrics(object):
                 elif isinstance(other_attr, float) and np.isnan(other_attr):
                     attr_value = self_attr
                 else:
-                    attr_value = self_attr + other_attr
+                    if attr_name.endswith('jaccard'):
+                        attr_value = (self_attr + other_attr) / 2.0
+                    else:
+                        attr_value = self_attr + other_attr
             else:
                 attr_value = None
             setattr(sum_metrics, attr_name, attr_value)
