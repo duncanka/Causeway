@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
 from util.scipy import add_rows_and_cols_to_matrix
-from util import floats_are_same
+from util import floats_same_or_nearly_equal
 
 try:
     DEFINE_bool('metrics_log_raw_counts', False,
@@ -84,10 +84,10 @@ class ClassificationMetrics(object):
                         self._f1)
 
     def __eq__(self, other):
-        return (floats_are_same(self._tp, other._tp)
-                and floats_are_same(self._fp, other._fp)
-                and floats_are_same(self._fn, other._fn)
-                and floats_are_same(self._tn, other._tn))
+        return (floats_same_or_nearly_equal(self._tp, other._tp)
+                and floats_same_or_nearly_equal(self._fp, other._fp)
+                and floats_same_or_nearly_equal(self._fn, other._fn)
+                and floats_same_or_nearly_equal(self._tn, other._tn))
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -329,7 +329,7 @@ class AccuracyMetrics(object):
         return (self.correct == other.correct
                 and self.incorrect == other.incorrect
                 # Extra check to make sure averages work right
-                and floats_are_same(self.accuracy, other.accuracy))
+                and floats_same_or_nearly_equal(self.accuracy, other.accuracy))
 
     def __ne__(self, other):
         return not self.__eq__(other)

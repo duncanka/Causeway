@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from copy import deepcopy
+from copy import deepcopy, copy
 import gflags
 import os
 import unittest
@@ -40,20 +40,20 @@ class CausalityMetricsTest(unittest.TestCase):
         correct_cause_head_metrics, correct_effect_head_metrics,
         correct_cause_jaccard, correct_effect_jaccard):
 
-        self.assertEqual(metrics.connective_metrics,
-                         correct_connective_metrics)
+        self.assertEqual(correct_connective_metrics,
+                         metrics.connective_metrics)
 
-        self.assertEqual(metrics.cause_span_metrics,
-                         correct_cause_span_metrics)
-        self.assertEqual(metrics.effect_span_metrics,
-                         correct_effect_span_metrics)
-        self.assertEqual(metrics.cause_head_metrics,
-                         correct_cause_head_metrics)
-        self.assertEqual(metrics.effect_head_metrics,
-                         correct_effect_head_metrics)
+        self.assertEqual(correct_cause_span_metrics,
+                         metrics.cause_span_metrics)
+        self.assertEqual(correct_effect_span_metrics,
+                         metrics.effect_span_metrics)
+        self.assertEqual(correct_cause_head_metrics,
+                         metrics.cause_head_metrics)
+        self.assertEqual(correct_effect_head_metrics,
+                         metrics.effect_head_metrics)
 
-        self.assertAlmostEqual(metrics.cause_jaccard, correct_cause_jaccard)
-        self.assertAlmostEqual(metrics.effect_jaccard, correct_effect_jaccard)
+        self.assertAlmostEqual(correct_cause_jaccard, metrics.cause_jaccard)
+        self.assertAlmostEqual(correct_effect_jaccard, metrics.effect_jaccard)
 
         # TODO: verify type and degree matrices
 
@@ -71,9 +71,9 @@ class CausalityMetricsTest(unittest.TestCase):
             'iaa_test_modified.ann')
 
     def test_same_annotations_metrics(self):
-        swapped = self._get_sentences_with_swapped_args(self.sentences)
         correct_connective_metrics = ClassificationMetrics(7, 0, 0)
         correct_arg_metrics = AccuracyMetrics(7, 0)
+        swapped = self._get_sentences_with_swapped_args(self.sentences)
         for sentences in [self.sentences, swapped]:
             metrics = CausalityMetrics(sentences, sentences, False)
             self._test_metrics(metrics, correct_connective_metrics,
@@ -91,7 +91,6 @@ class CausalityMetricsTest(unittest.TestCase):
 
         metrics = CausalityMetrics(self.sentences, self.modified_sentences,
                                    False)
-        self.assertEqual(metrics.connective_metrics, correct_connective_metrics)
         self._test_metrics(
             metrics, correct_connective_metrics, correct_cause_span_metrics,
             correct_effect_span_metrics, correct_cause_head_metrics,
@@ -105,11 +104,41 @@ class CausalityMetricsTest(unittest.TestCase):
                                            False)
         # Swap all the correct arguments
         self._test_metrics(
-            swapped_metrics, correct_connective_metrics, correct_effect_span_metrics,
-            correct_cause_span_metrics, correct_effect_head_metrics,
-            correct_cause_head_metrics, correct_effect_jaccard,
-            correct_cause_jaccard)
+            swapped_metrics, correct_connective_metrics,
+            correct_effect_span_metrics, correct_cause_span_metrics,
+            correct_effect_head_metrics, correct_cause_head_metrics,
+            correct_effect_jaccard, correct_cause_jaccard)
 
+    def test_add_metrics(self):
+        metrics = CausalityMetrics(self.sentences,
+                                   self.modified_sentences, False)
+        modified_metrics = copy(metrics)
+        modified_metrics.cause_jaccard = 0.3
+        modified_metrics.effect_jaccard = 1.0
+        summed_metrics = metrics + modified_metrics
+
+        correct_connective_metrics = ClassificationMetrics(10, 4, 4)
+        correct_cause_span_metrics = AccuracyMetrics(6, 4)
+        correct_cause_head_metrics = correct_cause_span_metrics
+        correct_effect_span_metrics = AccuracyMetrics(8, 2)
+        correct_effect_head_metrics = AccuracyMetrics(10, 0)
+        correct_cause_jaccard = 0.45
+        correct_effect_jaccard = 34 / 35.
+        self._test_metrics(
+            summed_metrics, correct_connective_metrics,
+            correct_cause_span_metrics, correct_effect_span_metrics,
+            correct_cause_head_metrics, correct_effect_head_metrics,
+            correct_cause_jaccard, correct_effect_jaccard)
+
+    def test_aggregate_metrics(self):
+        metrics = CausalityMetrics(self.sentences,
+                                   self.modified_sentences, False)
+        aggregated = CausalityMetrics.aggregate([metrics] * 3)
+        self._test_metrics(
+            metrics, aggregated.connective_metrics,
+            aggregated.cause_span_metrics, aggregated.effect_span_metrics,
+            aggregated.cause_head_metrics, aggregated.effect_head_metrics,
+            aggregated.cause_jaccard, aggregated.effect_jaccard)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']

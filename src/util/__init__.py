@@ -103,12 +103,12 @@ def igroup(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return izip_longest(*args, fillvalue=fillvalue)
 
-def floats_are_same(f1, f2):
+def floats_same_or_nearly_equal(f1, f2):
     '''
     NaN != NaN. This function compares floats in a way that considers them equal
-    if they are both NaNs OR they are actually equal.
+    if they are both NaNs OR they are actually equal. Useful for testing.
     '''
     if np.isnan(f1):
         return np.isnan(f2)
     else:
-        return f1 == f2
+        return np.allclose(f1, f2)
