@@ -331,8 +331,11 @@ class CausalityMetrics(object):
         return (connective_metrics, matching_instances)
     
     def _get_jaccard(self, matches, arg_property_name):
-        jaccard_numerator = 0
-        instances_ignored = 0
+        '''
+        Returns average Jaccard index across `matches` for property
+        `arg_property_name` (cause or effect).
+        '''
+        jaccard_avg_numerator = 0
         def get_arg_indices(instance):
             arg = getattr(instance, arg_property_name)
             if arg is None:
@@ -342,18 +345,18 @@ class CausalityMetrics(object):
 
         for instance_pair in matches:
             i1_indices, i2_indices = [get_arg_indices(i) for i in instance_pair]
-            # Simply don't include instances missing this argument in the
-            # calculation, either in the numerator or the denominator.
             if i1_indices or i2_indices:
+                # TODO: This could maybe be done more efficiently by walking
+                # along each set of indices.
                 diff = SequenceDiff(i1_indices, i2_indices)
                 num_matching = len(diff.get_matching_pairs())
-                jaccard_numerator += num_matching / (
+                match_jaccard = num_matching / float(
                     len(i1_indices) + len(i2_indices) - num_matching)
             else:
-                instances_ignored += 1
+                match_jaccard = 1.0
+            jaccard_avg_numerator += match_jaccard
 
-        return jaccard_numerator / safe_divisor(
-            float(len(matches) - instances_ignored))
+        return jaccard_avg_numerator / safe_divisor(float(len(matches)))
 
     def _compute_agreement_matrix(self, matches, labels_enum, property_name,
                                   gold_sentences):
