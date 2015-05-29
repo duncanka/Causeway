@@ -1,4 +1,4 @@
-T192	Argument 125 146	lending to a borrower
+T192	Argument 121 146	not lending to a borrower
 T193	Argument 154 212	the lender is sure that the borrower will be able to repay
 T194	Consequence 147 153	unless
 E64	Consequence:T194 Cause:T193 Effect:T192
@@ -33,5 +33,7 @@ A1	Degree E1 Facilitate
 T3	Argument 475 481	invest
 T4	Argument 462 471	unwilling
 #6	AnnotatorNotes E1	Added
-T5	Note 517 522	cause
-#7	AnnotatorNotes T5	Deleted
+T5	Consequence 517 522	cause
+E2	Consequence:T5 Effect:T6
+A2	Degree E2 Facilitate
+T6	Argument 523 527	harm

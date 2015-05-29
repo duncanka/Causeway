@@ -34,10 +34,14 @@ class CausalityMetricsTest(unittest.TestCase):
             swapped_sentences.append(swapped_sentence)
         return swapped_sentences
 
-    def _test_arg_metrics(
-        self, metrics, correct_cause_span_metrics, correct_effect_span_metrics,
+    def _test_metrics(
+        self, metrics, correct_connective_metrics,
+        correct_cause_span_metrics, correct_effect_span_metrics,
         correct_cause_head_metrics, correct_effect_head_metrics,
         correct_cause_jaccard, correct_effect_jaccard):
+
+        self.assertEqual(metrics.connective_metrics,
+                         correct_connective_metrics)
 
         self.assertEqual(metrics.cause_span_metrics,
                          correct_cause_span_metrics)
@@ -48,22 +52,23 @@ class CausalityMetricsTest(unittest.TestCase):
         self.assertEqual(metrics.effect_head_metrics,
                          correct_effect_head_metrics)
 
-        self.assertEqual(metrics.cause_jaccard, correct_cause_jaccard)
-        self.assertEqual(metrics.effect_jaccard, correct_effect_jaccard)
+        self.assertAlmostEqual(metrics.cause_jaccard, correct_cause_jaccard)
+        self.assertAlmostEqual(metrics.effect_jaccard, correct_effect_jaccard)
 
         # TODO: verify type and degree matrices
 
     def setUp(self):
-        self.sentences = self._get_sentences_from_file('standoff_test.ann')
-        # We have 4 unmodified connectives; 1 connective with an added fragment
+        # Unmodified file contains 7 instances.
+        self.sentences = self._get_sentences_from_file('iaa_test.ann')
+        # We have 5 unmodified connectives; 1 connective with an added fragment
         # (still qualifies for partial overlap, so 1 FN + 1 FP if matching
-        # without partial overlap); 2 missing connectives (FN), 1
-        # with two arguments and one with only one; and 1 added connective (FP).
+        # without partial overlap); 1 missing connectives (FN); and 1 added
+        # connective (FP). One of the unmodified connectives has only 1 arg.
         #
         # We also have 1 cause adjusted to partially overlap; 1 cause deleted;
         # and 1 cause changed to a completely different span.
         self.modified_sentences = self._get_sentences_from_file(
-            'standoff_test_modified.ann')
+            'iaa_test_modified.ann')
 
     def test_same_annotations_metrics(self):
         swapped = self._get_sentences_with_swapped_args(self.sentences)
@@ -71,17 +76,24 @@ class CausalityMetricsTest(unittest.TestCase):
         correct_arg_metrics = AccuracyMetrics(7, 0)
         for sentences in [self.sentences, swapped]:
             metrics = CausalityMetrics(sentences, sentences, False)
-            self.assertEqual(metrics.connective_metrics,
-                             correct_connective_metrics)
-            self._test_arg_metrics(metrics, correct_connective_metrics,
-                                   *([correct_arg_metrics] * 4 + [1.0] * 2))
+            self._test_metrics(metrics, correct_connective_metrics,
+                               *([correct_arg_metrics] * 4 + [1.0] * 2))
 
     def test_modified_annotations_metrics(self):
+        # For non-partial matching, the partial overlap counts as 1 FP + 1 FN.
+        correct_connective_metrics = ClassificationMetrics(5, 2, 2)
+        correct_cause_span_metrics = AccuracyMetrics(3, 2)
+        correct_cause_head_metrics = correct_cause_span_metrics
+        correct_effect_span_metrics = AccuracyMetrics(4, 1)
+        correct_effect_head_metrics = AccuracyMetrics(5, 0)
+
         metrics = CausalityMetrics(self.sentences, self.modified_sentences,
                                    False)
-        # For non-partial matching, the partial overlap counts as 1 FP + 1 FN.
-        correct_connective_metrics = ClassificationMetrics(4, 2, 3)
         self.assertEqual(metrics.connective_metrics, correct_connective_metrics)
+        self._test_metrics(
+            metrics, correct_connective_metrics, correct_cause_span_metrics,
+            correct_effect_span_metrics, correct_cause_head_metrics,
+            correct_effect_head_metrics, 0.6, 33 / 35.)
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
