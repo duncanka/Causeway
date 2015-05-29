@@ -86,6 +86,8 @@ class CausalityMetricsTest(unittest.TestCase):
         correct_cause_head_metrics = correct_cause_span_metrics
         correct_effect_span_metrics = AccuracyMetrics(4, 1)
         correct_effect_head_metrics = AccuracyMetrics(5, 0)
+        correct_cause_jaccard = 0.6
+        correct_effect_jaccard = 33 / 35.
 
         metrics = CausalityMetrics(self.sentences, self.modified_sentences,
                                    False)
@@ -93,7 +95,21 @@ class CausalityMetricsTest(unittest.TestCase):
         self._test_metrics(
             metrics, correct_connective_metrics, correct_cause_span_metrics,
             correct_effect_span_metrics, correct_cause_head_metrics,
-            correct_effect_head_metrics, 0.6, 33 / 35.)
+            correct_effect_head_metrics, correct_cause_jaccard,
+            correct_effect_jaccard)
+
+        swapped_sentences, swapped_modified = [
+            self._get_sentences_with_swapped_args(s) for s
+            in self.sentences, self.modified_sentences]
+        swapped_metrics = CausalityMetrics(swapped_sentences, swapped_modified,
+                                           False)
+        # Swap all the correct arguments
+        self._test_metrics(
+            swapped_metrics, correct_connective_metrics, correct_effect_span_metrics,
+            correct_cause_span_metrics, correct_effect_head_metrics,
+            correct_cause_head_metrics, correct_effect_jaccard,
+            correct_cause_jaccard)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
