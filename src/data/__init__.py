@@ -156,9 +156,8 @@ class ParsedSentence(object):
         self.path_predecessors = np.array([[]])
         self.path_costs = np.array([[]])
 
-        token_strings = tokenized_text.split(' ')
-        tag_strings = tagged_lemmas.split(' ')
-        assert len(token_strings) == len(tag_strings), "Tokens do not match tags"
+        token_strings, tag_strings = self.__get_token_strings(tokenized_text,
+                                                              tagged_lemmas)
 
         copy_node_indices = self.__create_tokens(token_strings, tag_strings)
         self.__align_tokens_to_text(document_text)
@@ -577,6 +576,35 @@ class ParsedSentence(object):
     ###########################################
     # Private initialization support functions
     ###########################################
+    
+    @staticmethod
+    def __get_token_strings(tokenized_text, tagged_lemmas):
+        '''
+        This is basically a wrapper for the string split function, which also
+        combines adjacent tokens if there are spaces within tokens. This is
+        detected by looking for a lack of a '/' in the tagged lemma.
+        '''
+        token_strings = tokenized_text.split(' ')
+        lemma_strings = tagged_lemmas.split(' ')
+        assert len(token_strings) == len(lemma_strings), (
+            "Tokens do not match tags")
+
+        if all('/' in lemma for lemma in lemma_strings):
+            return token_strings, lemma_strings
+
+        final_token_strings = []
+        final_lemma_strings = []
+        tokens_to_accumulate = []
+        lemmas_to_accumulate = []
+        for token, lemma in zip(token_strings, lemma_strings):
+            tokens_to_accumulate.append(token)
+            lemmas_to_accumulate.append(lemma)
+            if '/' in lemma:
+                final_token_strings.append(' '.join(tokens_to_accumulate))
+                final_lemma_strings.append(' '.join(lemmas_to_accumulate))
+                tokens_to_accumulate = []
+                lemmas_to_accumulate = []
+        return final_token_strings, final_lemma_strings
 
     def __create_tokens(self, token_strings, tag_strings):
         # We need one more node than we have token strings (for root).
