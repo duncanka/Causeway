@@ -109,7 +109,9 @@ class DependencyPathError(ValueError):
 
 class ParsedSentence(object):
     # TODO: Split this class into general and causality-specific
-    PTB_UNESCAPE_MAP = {'\\*': '*', '...': '. . .', '-LRB-': '(', '-RRB-': ')'}
+    PTB_ESCAPE_MAP = {'*': '\\*', '. . .': '...', '(': '-LRB-', ')': '-RRB-',
+                      '{': '-LCB-', '}': '-RCB-', '[': '-LSB-', ']': '-RSB-'}
+    PTB_UNESCAPE_MAP = {} # filled in later from PTB_ESCAPE_MAP below
     # TODO: Should we be allowing the parser to PTB-escape more things?
     PERIOD_SUBSTITUTES = '.:'
     SUBJECT_EDGE_LABELS = ['nsubj', 'csubj', 'nsubjpass', 'csubjpass']
@@ -120,7 +122,13 @@ class ParsedSentence(object):
 
     @staticmethod
     def unescape_token_text(token_text):
+        token_text = token_text.replace(u'\xa0', ' ')
         return ParsedSentence.PTB_UNESCAPE_MAP.get(token_text, token_text)
+
+    @staticmethod
+    def escape_token_text(token_text):
+        token_text = token_text.replace(' ', u'\xa0')
+        return ParsedSentence.PTB_ESCAPE_MAP.get(token_text, token_text)
 
     @staticmethod
     def get_annotation_text(annotation_tokens):
@@ -407,11 +415,7 @@ class ParsedSentence(object):
             # we'll know later what real node matched.
             recurse = node not in visited
             visited.add(node)
-            lemma = node.lemma
-            if node.lemma == '(':
-                lemma = 'LPR'
-            elif node.lemma == ')':
-                lemma = 'RPR'
+            lemma = self.escape_token_text(node.lemma)
             node_str = '(%s_%d %s %s' % (lemma, node.index,
                                          incoming_arc_label, node.pos)
 
@@ -614,7 +618,10 @@ class ParsedSentence(object):
 
         for i, (token_str, tag_str) in (
                 enumerate(zip(token_strings, tag_strings))):
-            lemma, _, pos = tag_str.partition('/')
+            # Can't use str.partition because there may be a '/' in the token.
+            slash_index = tag_str.rindex('/')
+            lemma = tag_str[:slash_index]
+            pos = tag_str[slash_index + 1:]
             new_token = self.__add_new_token(
                 self.unescape_token_text(token_str), pos, lemma)
             # Detect duplicated tokens.
@@ -815,6 +822,9 @@ class ParsedSentence(object):
         for start, end in graph_excluded_edges:
             self.edge_graph[start, end] = 1.0
         self.edge_graph = self.edge_graph.tocsr()
+
+ParsedSentence.PTB_UNESCAPE_MAP = {v: k for k, v in
+                                   ParsedSentence.PTB_ESCAPE_MAP.items()}
 
 
 class CausationInstance(object):
