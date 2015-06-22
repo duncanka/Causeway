@@ -5,6 +5,7 @@ from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, Duplicate
 import itertools
 import logging
 from numpy import random
+import sys
 
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
@@ -106,6 +107,7 @@ class Pipeline(object):
                     print_indented(1, 'Stage "', stage.name, '" results:',
                                    sep='')
                     self.print_stage_results(2, stage_result)
+            sys.stdout.flush() # make stage results visible immediately
 
             if (FLAGS.cv_debug_stop_after is not None
                 and i + 1 >= FLAGS.cv_debug_stop_after):
