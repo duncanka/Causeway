@@ -1,0 +1,79 @@
+diff --git a/src/edu/stanford/nlp/trees/TreePrint.java b/src/edu/stanford/nlp/trees/TreePrint.java
+index 2dfd374..d78b77f 100644
+--- a/src/edu/stanford/nlp/trees/TreePrint.java
++++ b/src/edu/stanford/nlp/trees/TreePrint.java
+@@ -4,7 +4,6 @@ import edu.stanford.nlp.ling.*;
+ import edu.stanford.nlp.process.PTBTokenizer;
+ import edu.stanford.nlp.trees.international.pennchinese.ChineseEnglishWordMap;
+ import edu.stanford.nlp.util.*;
+-import edu.stanford.nlp.util.XMLUtils;
+ 
+ import java.io.*;
+ import java.util.*;
+@@ -793,7 +792,8 @@ public class TreePrint {
+    *  <li> -tLP class (the TreebankLanguagePack, default "edu.stanford.nlp.tree.PennTreebankLanguagePack")
+    *  <li> -hf class (the HeadFinder, default, the one in the class specified by -tLP)
+    *  <li> -useTLPTreeReader (use the treeReaderFactory() inside
+-   *       the -tLP class; otherwise a PennTreeReader with no normalization is used)
++   *       the -tLP class; otherwise, a PennTreeReader with the normalization specified by -norm is used)
++   *  <li> -norm class (normalizer class to use if not using TLP tree reader; defaults to TreeNormalizer)
+    *  </ol>
+    *  The single argument should be a file containing Trees in the format that is either
+    *  Penn Treebank s-expressions or as specified by -useTLPTreeReader and the -tLP class,
+@@ -807,11 +807,13 @@ public class TreePrint {
+     String options = "";
+     String tlpName = "edu.stanford.nlp.trees.PennTreebankLanguagePack";
+     String hfName = null;
++    String normalizerClass = "edu.stanford.nlp.trees.TreeNormalizer";
+     Map<String,Integer> flagMap = Generics.newHashMap();
+     flagMap.put("-format", 1);
+     flagMap.put("-options", 1);
+     flagMap.put("-tLP", 1);
+     flagMap.put("-hf", 1);
++    flagMap.put("-norm", 1);
+     Map<String,String[]> argsMap = StringUtils.argsToMap(args,flagMap);
+     args = argsMap.get(null);
+     if(argsMap.keySet().contains("-format")) {
+@@ -826,6 +828,10 @@ public class TreePrint {
+     if (argsMap.keySet().contains("-hf")) {
+       hfName = argsMap.get("-hf")[0];
+     }
++    if (argsMap.keySet().contains("-norm")) {
++      normalizerClass = argsMap.get("-norm")[0];
++    }
++
+     TreebankLanguagePack tlp;
+     try {
+       tlp = (TreebankLanguagePack) Class.forName(tlpName).newInstance();
+@@ -833,6 +839,7 @@ public class TreePrint {
+       e.printStackTrace();
+       return;
+     }
++
+     HeadFinder hf;
+     if (hfName != null) {
+       try {
+@@ -844,6 +851,7 @@ public class TreePrint {
+     } else {
+       hf = tlp.headFinder();
+     }
++
+     TreePrint print = new TreePrint(format, options, tlp, (hf == null) ? tlp.headFinder(): hf, tlp.typedDependencyHeadFinder());
+     Iterator<Tree> i; // initialized below
+     if (args.length > 0) {
+@@ -852,7 +860,14 @@ public class TreePrint {
+       if (argsMap.keySet().contains("-useTLPTreeReader")) {
+         trf = tlp.treeReaderFactory();
+       } else {
+-        trf = in -> new PennTreeReader(in, new LabeledScoredTreeFactory(new StringLabelFactory()), new TreeNormalizer());
++        TreeNormalizer normalizer;
++        try {
++          normalizer = (TreeNormalizer) Class.forName(normalizerClass).newInstance();
++        } catch (Exception e) {
++          e.printStackTrace();
++          return;
++        }
++        trf = in -> new PennTreeReader(in, new LabeledScoredTreeFactory(new StringLabelFactory()), normalizer);
+       }
+       trees = new DiskTreebank(trf);
+       trees.loadPath(args[0]);

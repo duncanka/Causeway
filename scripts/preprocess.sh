@@ -2,9 +2,11 @@
 
 # TODO: Make it use $STANFORD_PARSER_DIR for PARSERDIR if no second arg
 
-FILESDIR=$1
 if [ $# -ge 2 ]; then
     PARSERDIR=$2
+elif [ $# -le 1]; then
+    echo "Usage: preprocess.sh input-dir [parser-dir]"
+    exit;
 else
     PARSERDIR=../../../stanford-parser
 fi
