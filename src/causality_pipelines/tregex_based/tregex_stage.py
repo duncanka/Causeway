@@ -679,8 +679,8 @@ class TRegexConnectiveModel(Model):
                     return
                 bytes_output = sum([t.get_progress() for t in threads])
                 # Never allow > 99% completion as long as we're still running.
-                # (This could theoretically happen if our estimated max sizes
-                # turned out to be off.)
+                # (This can happen if our estimated max sizes turn out to be
+                # off.)
                 try:
                     progress = min(
                         bytes_output / float(total_estimated_bytes), 0.99)
@@ -711,6 +711,5 @@ class TRegexConnectiveStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
-        # TODO: figure out why this doesn't print test instances
         return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
                             True, True, 'possible_causations')

@@ -2,7 +2,7 @@
 Define basic causality datatypes
 '''
 
-from copy import copy
+from copy import copy, deepcopy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 from nltk.tree import ImmutableParentedTree, Tree
@@ -462,12 +462,14 @@ class ParsedSentence(object):
 
     def substitute_dep_ptb_graph(self, ptb_str):
         '''
-        Returns a shallow copy of the ParsedSentence object, whose edge graph
-        has been replaced by the one represented in `ptb_str`.
+        Returns a copy of the ParsedSentence object, whose edge graph has been
+        replaced by the one represented in `ptb_str`. Uses
+        `shallow_copy_with_sentences_fixed` to get a mostly shallow copy, but
+        with correctly parented CausationInstance and Token objects.
         '''
         edge_graph, edge_labels, excluded_edges = (
             self._sentence_graph_from_ptb_str(ptb_str, len(self.tokens)))
-        new_sentence = copy(self)
+        new_sentence = self.shallow_copy_with_sentences_fixed(self)
         new_sentence.edge_graph = edge_graph
         new_sentence.edge_labels = edge_labels
         new_sentence.__initialize_graph(excluded_edges)
@@ -508,11 +510,8 @@ class ParsedSentence(object):
     def shallow_copy_with_sentences_fixed(sentence):
         '''
         Creates a shallow copy of sentence, but with causation_instances and
-        Tokens on the new object set to copies of the CausationInstance objects,
+        Tokens on the new object set to shallow copies of the original objects,
         so that they can know their correct source sentence.
-        
-        N.B.: This means that all tokens in the copy will point back to the
-        *original* sentence!
         '''
         cls = sentence.__class__
         new_sentence = cls.__new__(cls)
