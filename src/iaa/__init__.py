@@ -237,9 +237,14 @@ class CausalityMetrics(object):
                     instance_1.connective, instance_2.connective)
         else:
             compare_connectives = compare_connectives_exact
-        # Sort instances by connective, just in case they're somehow out of
-        # order.
-        sort_key = lambda inst: inst.connective[0].start_offset
+        # Sort instances in case they're somehow out of order, or there are
+        # multiple annotations with the same connective that may be unordered.
+        # TODO: is this sufficient? Do we need to worry about, e.g., ordering by
+        # head, or what happens if the cause is None?
+        sort_key = lambda inst: (
+            inst.connective[0].start_offset,
+            inst.cause[0].start_offset if inst.cause else 0,
+            inst.effect[0].start_offset if inst.effect else 0)
 
         matching_instances = []
         gold_only_instances = []
