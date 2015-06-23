@@ -2,7 +2,7 @@ from copy import copy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 
-from data import ParsedSentence
+from data import ParsedSentence, CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented
@@ -22,6 +22,9 @@ class PossibleCausation(object):
         self.cause = cause
         self.effect = effect
         # TODO: Add spans of plausible ranges for argument spans
+
+    def __repr__(self):
+        return CausationInstance.pprint(self)
 
 
 class IAAEvaluator(Evaluator):

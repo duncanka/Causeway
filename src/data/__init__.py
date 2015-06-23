@@ -14,6 +14,7 @@ from util import Enum, merge_dicts, listify
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
 from util.streams import *
+from textwrap import TextWrapper
 
 
 try:
@@ -867,3 +868,17 @@ class CausationInstance(object):
             cause, effect = effect, cause
 
         return (cause, effect)
+
+    __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
+    @staticmethod
+    def pprint(instance):
+        # TODO: replace with same code as IAA?
+        connective, cause, effect = [' '.join([t.original_text for t in annotation]
+                                              if annotation else [None])
+                                     for annotation in [instance.connective, instance.cause, instance.effect]]
+        self_str = 'CausationInstance(connective=%s, cause=%s, effect=%s)' % (
+            connective, cause, effect)
+        return '\n'.join(CausationInstance.__wrapper.wrap(self_str))
+
+    def __repr__(self):
+        return self.pprint(self)
