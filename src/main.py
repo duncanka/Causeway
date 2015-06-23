@@ -1,26 +1,27 @@
 #!/usr/bin/env python
 
 import gflags
-from sklearn import tree, neighbors, linear_model, svm, ensemble
 import logging
 import numpy as np
 import os
+from sklearn import tree, neighbors, linear_model, svm, ensemble
 import sys
-from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
-from data import ParsedSentence
-from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
+
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
+from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
+from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
+from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
+from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
+from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
+from data import ParsedSentence
+from data.readers import DirectoryReader, StandoffReader
+from pipeline import Pipeline
+from pipeline.models import ClassBalancingModelWrapper
 from util import print_indented
 
 FLAGS = gflags.FLAGS
 
-from data.readers import DirectoryReader, StandoffReader
-from pipeline import Pipeline
-from pipeline.models import ClassBalancingModelWrapper
-from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
-from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
-from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 
 try:
     gflags.DEFINE_enum('classifier_model', 'forest',
