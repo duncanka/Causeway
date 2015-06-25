@@ -13,6 +13,12 @@ try:
                 'Whether to turn all degrees into "Facilitate" and "Inhibit"')
     DEFINE_string('reader_codec', 'utf-8',
                   'The encoding to assume for data files')
+    DEFINE_bool('reader_gold_parses', False,
+                'Whether to read .parse.gold files instead of .parse files for'
+                ' sentence parses')
+    DEFINE_bool('reader_directory_recurse', False,
+                'Whether DirectoryReaders should recurse into their'
+                ' subdirectories')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -52,8 +58,11 @@ class SentenceReader(Reader):
     def open(self, filepath):
         super(SentenceReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
+        parse_file_name = base_path + '.parse'
+        if FLAGS.reader_gold_parses:
+            parse_file_name += ".gold"
         self._parse_file = CharacterTrackingStreamWrapper(
-            io.open(base_path + '.parse', 'rb'), FLAGS.reader_codec)
+            io.open(parse_file_name, 'rb'), FLAGS.reader_codec)
 
     def close(self):
         super(SentenceReader, self).close()
@@ -144,7 +153,12 @@ class DirectoryReader(Reader):
         if not os.path.isdir(dirpath):
             raise IOError("No such directory: '%s" % dirpath)
 
-        self._filenames = recursively_list_files(dirpath)
+        if FLAGS.reader_directory_recurse:
+            self._filenames = recursively_list_files(dirpath)
+        else:
+            filenames = [os.path.join(dirpath, f) for f in os.listdir(dirpath)]
+            self._filenames = (f for f in filenames if os.path.isfile(f))
+
         try:
             self.__open_next_file()
         except StopIteration:
