@@ -4,11 +4,12 @@
 
 if [ $# -ge 2 ]; then
     PARSERDIR=$2
-elif [ $# -le 1]; then
+elif [ $# -eq 0 ]; then
     echo "Usage: preprocess.sh input-dir [parser-dir]"
     exit;
 else
     PARSERDIR=../../../stanford-parser
+    FILESDIR=$1
 fi
 
 find $FILESDIR -type f -name "*.txt" -exec "${0%/*}/cleanup.sh" {} \;
