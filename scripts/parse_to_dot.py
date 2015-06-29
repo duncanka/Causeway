@@ -29,7 +29,7 @@ def make_dot(parse_file, filename):
         sys.stderr.write(err)
     else:
         with open(os.devnull, 'w') as null:
-            subprocess.call(['xdg-open', img_fname], stderr=null)
+            subprocess.Popen(['xdg-open', img_fname], stderr=null)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
