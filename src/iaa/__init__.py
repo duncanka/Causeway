@@ -13,7 +13,7 @@ import os
 import sys
 from textwrap import wrap
 
-from data import CausationInstance, ParsedSentence
+from data import CausationInstance, ParsedSentence, Token
 from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
 from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, \
@@ -44,6 +44,9 @@ try:
     DEFINE_bool('iaa_force_color', False,
                 "Force ANSI color in IAA comparisons even when we're not"
                 " outputting to a TTY")
+    DEFINE_bool('iaa_check_punct', False,
+                'Whether IAA should compare punctuation tokens to determine'
+                ' argument matches')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -349,6 +352,8 @@ class CausalityMetrics(object):
             if arg is None:
                 return []
             else:
+                if not FLAGS.iaa_check_punct:
+                    arg = self._filter_punct_tokens(arg)
                 return [token.index for token in arg]
 
         for instance_pair in matches:
@@ -420,6 +425,10 @@ class CausalityMetrics(object):
                 heads_match = (arg_1_head.index == arg_2_head.index)
 
         return spans_match, heads_match
+    
+    @staticmethod
+    def _filter_punct_tokens(tokens):
+        return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
 
     def _match_arguments(self, matches, gold):
         correct_causes = 0
@@ -430,8 +439,15 @@ class CausalityMetrics(object):
 
         for instance_1, instance_2 in matches:
             sentence_num = gold.index(instance_1.sentence) + 1
-            cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
-            effect_1, effect_2 = [i.effect for i in [instance_1, instance_2]]
+            if FLAGS.iaa_check_punct:
+                cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
+                effect_1, effect_2 = [i.effect for i
+                                      in [instance_1, instance_2]]
+            else:
+                cause_1, cause_2 = [self._filter_punct_tokens(i.cause)
+                                    for i in [instance_1, instance_2]]
+                effect_1, effect_2 = [self._filter_punct_tokens(i.effect)
+                                      for i in [instance_1, instance_2]]
 
             causes_match, cause_heads_match = self._match_instance_args(
                 cause_1, cause_2)
