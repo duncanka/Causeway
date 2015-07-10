@@ -34,6 +34,8 @@ except DuplicateFlagError as e:
 class TRegexClassifierPart(ClassifierPart):
     def __init__(self, possible_causation):
         self.sentence = possible_causation.sentence
+        self.cause = possible_causation.cause
+        self.effect = possible_causation.effect
         self.cause_head = self.sentence.get_head(possible_causation.cause)
         self.effect_head = self.sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
@@ -222,8 +224,8 @@ class TRegexClassifierStage(Stage):
             # The only part type is phrase pair, so we don't have to worry
             # about checking the part type.
             sentence.add_causation_instance(
-                connective=part.connective, cause=[part.cause_head],
-                effect=[part.effect_head])
+                connective=part.connective, cause=part.cause,
+                effect=part.effect)
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats

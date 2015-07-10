@@ -12,6 +12,7 @@ from causality_pipelines.baseline.combiner import BaselineCombinerStage
 from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
+from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
 from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import ParsedSentence
@@ -50,6 +51,7 @@ def get_stages(candidate_classifier):
 
     if FLAGS.pipeline_type == 'tregex':
         stages = [TRegexConnectiveStage('TRegex connectives'),
+                  ArgSpanStage('Argument span expander'),
                   TRegexClassifierStage(candidate_classifier,
                                         'Candidate classifier')]
     elif FLAGS.pipeline_type == 'regex':
@@ -60,6 +62,7 @@ def get_stages(candidate_classifier):
     elif FLAGS.pipeline_type == 'baseline+tregex':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   TRegexConnectiveStage('TRegex connectives'),
+                  ArgSpanStage('Argument span expander'),
                   TRegexClassifierStage(candidate_classifier,
                                         'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
