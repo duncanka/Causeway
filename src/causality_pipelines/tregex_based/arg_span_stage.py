@@ -16,9 +16,17 @@ except DuplicateFlagError as e:
 class ArgSpanModel(Model):
     def __init__(self, *args, **kwargs):
         super(ArgSpanModel, self).__init__(*args, **kwargs)
+        self.connectives_allowed_in_arg = set()
 
     def train(self, possible_causations):
-        pass
+        for pc in possible_causations:
+            if pc.true_causation_instance:
+                for token in pc.connective:
+                    if (token in pc.true_causation_instance.cause or
+                        token in pc.true_causation_instance.effect):
+                        for pattern in pc.matching_patterns:
+                            self.connectives_allowed_in_arg.add((pattern,
+                                                                 token.lemma))
 
     def test(self, possible_causations):
         for pc in possible_causations:
@@ -27,9 +35,9 @@ class ArgSpanModel(Model):
                 if arg is None:
                     expanded_args.append(None)
                 else:
-                    assert len(arg) == 1
+                    # Args only contain one token at this point.
                     expanded_arg = self.expand_argument(
-                        pc.sentence, pc.connective, arg[0], other_arg[0])
+                        pc, arg[0], other_arg[0])
                     if pc.sentence.get_head(expanded_arg) is not arg[0]:
                         logging.warn(
                             'Head changed after expanding args: %s became %s in'
@@ -38,38 +46,44 @@ class ArgSpanModel(Model):
                     expanded_args.append(expanded_arg)
             pc.cause, pc.effect = expanded_args
 
-    @staticmethod
-    def expand_argument(sentence, connective, argument_head,
+    def expand_argument(self, pc, argument_head,
                         other_argument_head):
-        # print "Expanding argument", argument_head, "in", sentence.original_text, "(connective: %s)" % connective
-        argument_tokens = ArgSpanModel.expand_argument_from_token(
-            sentence, connective, argument_head, other_argument_head, set())
+        argument_tokens = self.expand_argument_from_token(
+            pc, argument_head, other_argument_head, set())
         return sorted(argument_tokens, key=lambda token: token.index)
 
-    @staticmethod
-    def expand_argument_from_token(sentence, connective, argument_token,
+    def expand_argument_from_token(self, pc, argument_token,
                                    other_argument_head, visited):
         # print "    Expanding", argument_token
+        is_first_token = not visited
         # Use a set to represent the argument tokens in case, in the process of
         # following a dependency cycle, we re-encounter the same node twice.
-        is_first_token = not visited
         expanded_tokens = set([argument_token])
-        for edge_label, child_token in sentence.get_children(argument_token):
+        for edge_label, child_token in pc.sentence.get_children(argument_token):
             # Don't revisit already-visited nodes, even if we've come back to
             # them through a dependency cycle.
             if child_token in visited:
                 continue
 
-            # Don't expand to conjuncts of the original argument head.
-            if is_first_token and edge_label in ['conj', 'cc']:
+            # Don't expand to conjuncts or parataxes of the original argument
+            # head.
+            if is_first_token and edge_label in ['conj', 'cc', 'parataxis']:
                 continue
 
             # Connective words that are below an argument word are usually part
             # of the grammaticalization of the connective's argument structure,
-            # not part of the argument itself. (Adverbial modifiers are an
-            # exception.)
-            if child_token in connective and edge_label != 'advmod':
-                continue
+            # not part of the argument itself. Only allow words that have been
+            # seen in training to be allowed by this pattern to be included in
+            # the argument.
+            if child_token in pc.connective:
+                pattern_allows_connective_lemma = False
+                for pattern in pc.matching_patterns:
+                    if (pattern, child_token.lemma) in (
+                        self.connectives_allowed_in_arg):
+                        pattern_allows_connective_lemma = True
+                        break
+                if not pattern_allows_connective_lemma:
+                    continue
 
             # Don't add or recurse into the other argument.
             if child_token is other_argument_head:
@@ -77,9 +91,8 @@ class ArgSpanModel(Model):
 
             visited.add(child_token)
             expanded_tokens.update(
-                ArgSpanModel.expand_argument_from_token(
-                    sentence, connective, child_token, other_argument_head,
-                    visited))
+                self.expand_argument_from_token(pc, child_token,
+                                                other_argument_head, visited))
 
         return expanded_tokens
 
