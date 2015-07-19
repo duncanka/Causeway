@@ -875,9 +875,11 @@ class CausationInstance(object):
     @staticmethod
     def pprint(instance):
         # TODO: replace with same code as IAA?
-        connective, cause, effect = [' '.join([t.original_text for t in annotation]
-                                              if annotation else [None])
-                                     for annotation in [instance.connective, instance.cause, instance.effect]]
+        connective, cause, effect = [
+             ' '.join([t.original_text for t in annotation]
+                      if annotation else ['<None>'])
+             for annotation in [instance.connective, instance.cause,
+                                instance.effect]]
         self_str = 'CausationInstance(connective=%s, cause=%s, effect=%s)' % (
             connective, cause, effect)
         return '\n'.join(CausationInstance.__wrapper.wrap(self_str))
