@@ -7,6 +7,7 @@ import Queue
 import subprocess
 import tempfile
 import time
+from threading import Lock
 
 from data import ParsedSentence, Token
 from pipeline import Stage
@@ -497,6 +498,10 @@ class TRegexConnectiveModel(Model):
             self.queue = queue
             self.output_file = None
             self.total_bytes_output = 0
+            # We associate a lock with the output file to prevent concurrency
+            # errors where progress reporting calls tell() at the same time as
+            # the main thread closes the file.
+            self.file_lock = Lock()
 
         dev_null = open('/dev/null', 'w')
 
@@ -521,20 +526,9 @@ class TRegexConnectiveModel(Model):
                         tree_file.writelines(possible_trees)
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
-                        try:
-                            self._process_pattern(
-                                pattern, connective_labels, possible_sentences,
-                                tree_file.name)
-                        except IOError as e:
-                            # Rare error: if tell() was in the middle of
-                            # executing when the file was closed.
-                            logging.warn("IOError in pattern processing: %s"
-                                         % e.message)
-                            if self.output_file:
-                                # Just in case. Technically this could create
-                                # the same problem again, but that's extremely
-                                # improbable.
-                                self.output_file.close()
+                        self._process_pattern(
+                            pattern, connective_labels, possible_sentences,
+                            tree_file.name)
                     self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
@@ -572,6 +566,11 @@ class TRegexConnectiveModel(Model):
                 # Tell the progress reporter how far we've gotten, so that it
                 # will know progress for patterns that have already finished.
                 self.total_bytes_output += self.output_file.tell()
+
+                # Lock the file lock as we close the file
+                self.file_lock.acquire()
+            # Now release the lock once the file is closed
+            self.file_lock.release()
 
             self.output_file = None
 
@@ -661,7 +660,10 @@ class TRegexConnectiveModel(Model):
 
         def get_progress(self):
             try:
-                return self.total_bytes_output + self.output_file.tell()
+                self.file_lock.acquire()
+                progress = self.total_bytes_output + self.output_file.tell()
+                self.file_lock.release()
+                return progress
             except (AttributeError, IOError, ValueError):
                 # AttributeError indicates that self.output_file was None.
                 # IOError/ValueError indicate that we managed to ask for file
