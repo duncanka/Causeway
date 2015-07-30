@@ -23,7 +23,7 @@ try:
                   'stanford-tregex-2014-10-26',
                   'Command to run TRegex')
     DEFINE_integer(
-        'tregex_max_steiners', 10,
+        'tregex_max_steiners', 6,
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
@@ -371,6 +371,17 @@ class TRegexConnectiveModel(Model):
         node_names_to_print = [name for name in node_names.values()
                                if name.startswith('connective')]
 
+        if FLAGS.tregex_pattern_type == 'dependency':
+            # Fix cases where the head of an argument is already in the
+            # connective. The pattern generation will always prefer to name the
+            # node as a connective. Now, we generate a bit of additional pattern
+            # that specifies that the relevant argument head has the same name.
+            for arg, arg_name in [(cause, 'cause'), (effect, 'effect')]:
+                if arg.index in connective_nodes:
+                    # Speed up search for arg node by requiring a POS/edge child
+                    pattern = ('%s : (__=%s == =%s)'
+                               % (pattern, arg_name, node_names[arg.index]))
+
         return pattern, node_names_to_print
 
     @staticmethod
@@ -614,14 +625,11 @@ class TRegexConnectiveModel(Model):
             # connectives.
             batch_size = 2 + len(connective_labels)
             for match_lines in igroup(lines, batch_size):
-                # TODO: If argument heads overlap with connective words, we get
-                # a problem where the pattern fails to include one of them,
-                # which means the match always excludes something important and
-                # we end up with the wrong number of match lines. Fix this
-                # (probably by generating class patterns that can store extra
-                # data like argument mappings).
+                # TODO: If the argument heads overlap, we can't match the
+                # pattern. This is extremely rare, but it's not clear how to
+                # deal with it when it does happen.
                 if None in match_lines:
-                    logging.warn("Skipping invalid TRegex match: %s", lines)
+                    logging.warn("Skipping invalid TRegex match: %s (pattern: %s)", lines, pattern)
                     continue
                 arg_lines = match_lines[:2]
                 connective_lines = match_lines[2:]
