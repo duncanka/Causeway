@@ -31,9 +31,9 @@ class Annotation(object):
         self.id = annot_id
         if isinstance(offsets[0], int):
             offsets = (offsets,)
-        self.offsets = \
+        self.offsets = sorted( # Sort because brat may save indices out of order
             [(start_offset - sentence_offset, end_offset - sentence_offset)
-             for (start_offset, end_offset) in offsets]
+             for (start_offset, end_offset) in offsets])
         self.text = text
 
     def starts_before(self, other):
@@ -371,9 +371,9 @@ class ParsedSentence(object):
                     prev_token = next_token
                     next_token = tokens_iter.next()
                 if next_token.start_offset != start:
-                    warning = ("Annotation index %d does not correspond to a"
-                               " token start" %
-                               (start + self.document_char_offset))
+                    warning = ("Start of annotation %s in file %s does not"
+                               " correspond to a token start"
+                               % (annotation.id, self.source_file_path))
                     if prev_token and prev_token.end_offset >= start:
                         tokens.append(prev_token)
                         warning += '; the token it bisects has been appended'
@@ -390,9 +390,9 @@ class ParsedSentence(object):
                     if next_token.start_offset < end:
                         tokens.append(next_token)
                 if next_token.end_offset != end:
-                    warning = ("Annotation index %d does not correspond to a"
-                               " token end" %
-                               (end + self.document_char_offset))
+                    warning = ("End of annotation %s in file %s does not"
+                               " correspond to a token start"
+                               % (annotation.id, self.source_file_path))
                     # If we appended the next token, that means the index
                     # brought us into the middle of the next word.
                     if tokens[-1] is next_token:
@@ -582,7 +582,7 @@ class ParsedSentence(object):
     ###########################################
     # Private initialization support functions
     ###########################################
-    
+
     @staticmethod
     def __get_token_strings(tokenized_text, tagged_lemmas):
         '''
