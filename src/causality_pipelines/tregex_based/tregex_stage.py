@@ -82,6 +82,7 @@ class TRegexConnectiveModel(Model):
                 1.85 * (int(log10(i + 1)) + 3)
                 for i in range(len(possible_sentence_indices)))
 
+        logging.info("%d patterns in queue", queue.qsize())
         # Start the threads
         threads = []
         for _ in range(FLAGS.tregex_max_threads):
@@ -668,9 +669,8 @@ class TRegexConnectiveModel(Model):
 
         def get_progress(self):
             try:
-                self.file_lock.acquire()
-                progress = self.total_bytes_output + self.output_file.tell()
-                self.file_lock.release()
+                with self.file_lock:
+                    progress = self.total_bytes_output + self.output_file.tell()
                 return progress
             except (AttributeError, IOError, ValueError):
                 # AttributeError indicates that self.output_file was None.
