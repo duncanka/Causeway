@@ -42,7 +42,7 @@ class ArgSpanModel(Model):
                         logging.warn(
                             'Head changed after expanding args: "%s" became'
                             ' "%s" in sentence: "%s"' %
-                            (arg,
+                            (' '.join([t.original_text for t in arg]),
                              ' '.join([t.original_text for t in expanded_arg]),
                              pc.sentence.original_text))
                     expanded_args.append(expanded_arg)
