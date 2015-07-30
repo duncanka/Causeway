@@ -29,7 +29,7 @@ class BaselineCombinerModel(Model):
         return arg_indices + connective_indices
 
     def test(self, parts):
-        # TODO: make this avoid presenting two annotations that differ only in
+        # TODO: make this avoid preserving two annotations that differ only in
         # that one of them is missing an argument. Particularly, make it prefer
         # the one that has an argument.
         last_sentence = None

@@ -164,13 +164,31 @@ class BaselineModel(Model):
                 return
             if counts[1] > counts[0]: # go with majority class
                 sentence = sentences[sentence_num]
-                getattr(sentence, self._save_results_in).append(
-                    PossibleCausation(
-                        sentence, None, connective=connective_tokens,
-                        cause=[possible_cause], effect=[possible_effect]))
+                expanded_cause = self._expand_argument(
+                    possible_cause, connective_tokens + [possible_effect])
+                expanded_effect = self._expand_argument(
+                    possible_effect, connective_tokens + [possible_cause])
+                possible_causations = getattr(sentence, self._save_results_in)
+                pc = PossibleCausation(
+                    sentence, None, connective=connective_tokens,
+                    cause=expanded_cause, effect=expanded_effect)
+                possible_causations.append(pc)
         for sentence in sentences:
             setattr(sentence, self._save_results_in, [])
         self._operate_on_sentences(sentences, test_callback)
+
+    @staticmethod
+    def _expand_argument(arg_head, stop_tokens, expanded_arg=None):
+        initial_call = not expanded_arg
+        if initial_call:
+            expanded_arg = set()
+        expanded_arg.add(arg_head)
+        for _, child in arg_head.parent_sentence.get_children(arg_head):
+            if child not in expanded_arg and child not in stop_tokens:
+                BaselineModel._expand_argument(child, stop_tokens, expanded_arg)
+
+        if initial_call:
+            return sorted(expanded_arg, key=lambda token: token.index)
 
 
 class BaselineStage(Stage):
