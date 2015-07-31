@@ -197,6 +197,13 @@ class ArgumentLabelerStage(Stage):
         else:
             return sentence.possible_causations
 
+    def _decode_labeled_parts(self, sentence, labeled_pcs):
+        # Eliminate any instances for which the CRF didn't produce two
+        # arguments.
+        # TODO: change this when we start caring about single-arg instances.
+        sentence.possible_causations = [pc for pc in labeled_pcs
+                                        if pc.cause and pc.effect]
+
     def _make_evaluator(self):
         return IAAEvaluator(False, False, FLAGS.arg_label_log_differences,
                             True, True, 'possible_causations')
