@@ -48,34 +48,29 @@ class ArgSpanModel(Model):
                     expanded_args.append(expanded_arg)
             pc.cause, pc.effect = expanded_args
 
-    def expand_argument(self, pc, argument_head, other_arg_head):
+    def expand_argument(self, pc, argument_head,
+                        other_argument_head):
         argument_tokens = self.expand_argument_from_token(
-            pc, argument_head, other_arg_head, set(), set([argument_head]))
+            pc, argument_head, other_argument_head, set())
         return sorted(argument_tokens, key=lambda token: token.index)
 
-    def expand_argument_from_token(
-        self, pc, argument_token, other_arg_head, expanded_tokens, visited):
+    def expand_argument_from_token(self, pc, argument_token,
+                                   other_argument_head, visited):
         # print "    Expanding", argument_token
-        # is_first_token = not visited
+        is_first_token = not visited
         # Use a set to represent the argument tokens in case, in the process of
         # following a dependency cycle, we re-encounter the same node twice.
-        expanded_tokens.add(argument_token)
-        for _, child_token in pc.sentence.get_children(argument_token):
+        expanded_tokens = set([argument_token])
+        for edge_label, child_token in pc.sentence.get_children(argument_token):
             # Don't revisit already-visited nodes, even if we've come back to
             # them through a dependency cycle.
             if child_token in visited:
                 continue
 
-            '''
             # Don't expand to conjuncts or parataxes of the original argument
             # head.
             if is_first_token and edge_label in ['conj', 'cc', 'parataxis']:
                 continue
-            '''
-
-            # Now mark as visited: if it's skipped after this point, it'll be
-            # because of a reason that applies for any incoming edge.
-            visited.add(child_token)
 
             # Connective words that are below an argument word are usually part
             # of the grammaticalization of the connective's argument structure,
@@ -93,11 +88,13 @@ class ArgSpanModel(Model):
                     continue
 
             # Don't add or recurse into the other argument.
-            if child_token is other_arg_head:
+            if child_token is other_argument_head:
                 continue
 
-            self.expand_argument_from_token(
-                pc, child_token, other_arg_head, expanded_tokens, visited)
+            visited.add(child_token)
+            expanded_tokens.update(
+                self.expand_argument_from_token(pc, child_token,
+                                                other_argument_head, visited))
 
         return expanded_tokens
 
