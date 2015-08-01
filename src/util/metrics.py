@@ -305,10 +305,10 @@ class AccuracyMetrics(object):
 
     def pretty_format(self):
         if FLAGS.metrics_log_raw_counts:
-            return ('Correct: {:}\nIncorrect: {:}\n% Agreement: {:.2}'
+            return ('Correct: {:}\nIncorrect: {:}\n% Agreement: {:}'
                     .format(self.correct, self.incorrect, self.accuracy))
         else:
-            return '% Agreement: {:.2}'.format(self.accuracy)
+            return '% Agreement: {:}'.format(self.accuracy)
 
     def __repr__(self):
         return self.pretty_format()
