@@ -57,6 +57,29 @@ class ArgSpanModel(Model):
     def expand_argument_from_token(self, pc, argument_token,
                                    other_argument_head, visited):
         # print "    Expanding", argument_token
+        # is_first_token = not visited
+        # Use a set to represent the argument tokens in case, in the process of
+        # following a dependency cycle, we re-encounter the same node twice.
+        expanded_tokens = set([argument_token])
+        for _, child_token in pc.sentence.get_children(argument_token):
+            # Don't revisit already-visited nodes, even if we've come back to
+            # them through a dependency cycle.
+            if child_token in visited:
+                continue
+            visited.add(child_token)
+
+            if child_token is other_argument_head or child_token in pc.connective:
+                continue
+
+            expanded_tokens.update(
+                self.expand_argument_from_token(pc, child_token,
+                                                other_argument_head, visited))
+
+        return expanded_tokens
+
+    def expand_argument_from_token_old(self, pc, argument_token,
+                                   other_argument_head, visited):
+        # print "    Expanding", argument_token
         is_first_token = not visited
         # Use a set to represent the argument tokens in case, in the process of
         # following a dependency cycle, we re-encounter the same node twice.
