@@ -114,7 +114,7 @@ class TRegexClassifierModel(ClassifierModel):
 
     @staticmethod
     def extract_incoming_dep(part):
-        edge_label, parent = part.sentence.get_most_direct_parent(
+        edge_label, _parent = part.sentence.get_most_direct_parent(
             part.connective_head)
         return edge_label
 

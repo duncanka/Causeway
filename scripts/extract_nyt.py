@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
 from nltk.corpus.reader import XMLCorpusReader
-from glob import glob
 import os
 import sys
 from collections import defaultdict
 #from multiprocessing import Process, Queue, cpu_count
-import time
 
 ### Functions to create extractors ###
 
@@ -188,7 +186,7 @@ def main(argv):
     target_path = argv[2] if len(argv) > 2 else None
 
     file_paths = []
-    for dirpath, dirs, files in os.walk(root_path, topdown=False):
+    for dirpath, _dirs, files in os.walk(root_path, topdown=False):
         file_paths.extend([os.path.join(dirpath, filename) for filename in files
                            if filename.endswith('.xml')])
     num_paths = len(file_paths)

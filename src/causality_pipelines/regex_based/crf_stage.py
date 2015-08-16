@@ -189,8 +189,8 @@ class ArgumentLabelerStage(Stage):
 
     def _extract_parts(self, sentence, is_train):
         if is_train:
-            # Filter to possible causations for which we can actually extract
-            # the correct labels, i.e., gold-standard causations.
+            # Filter to possible causations for which we can actually
+            # extract the correct labels, i.e., gold-standard causations.
             return [possible_causation for possible_causation
                     in sentence.possible_causations
                     if possible_causation.true_causation_instance]
@@ -198,8 +198,7 @@ class ArgumentLabelerStage(Stage):
             return sentence.possible_causations
 
     def _decode_labeled_parts(self, sentence, labeled_pcs):
-        # Eliminate any instances for which the CRF didn't produce two
-        # arguments.
+        # Eliminate instances that were not given two arguments.
         # TODO: change this when we start caring about single-arg instances.
         sentence.possible_causations = [pc for pc in labeled_pcs
                                         if pc.cause and pc.effect]

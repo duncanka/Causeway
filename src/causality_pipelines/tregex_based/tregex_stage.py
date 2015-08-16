@@ -220,7 +220,7 @@ class TRegexConnectiveModel(Model):
         else:
             options = ['<1 ' + edge_label]
         if edge_label != 'dep':
-            options += ['<1 dep']
+            options.append('<1 dep')
         return '[%s]' % ' | '.join(options)
 
     @staticmethod

@@ -11,7 +11,7 @@ def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot'):
     fname_base = os.path.splitext(filename)[0]
     img_fname = "%s.png" % fname_base
     dot_proc = subprocess.Popen(["dot", "-Tpng", "-o%s" % img_fname, filename])
-    (std, err) = dot_proc.communicate()
+    (_std, err) = dot_proc.communicate()
     if err:
         sys.stderr.write(err)
     else:

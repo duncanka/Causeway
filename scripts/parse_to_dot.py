@@ -24,7 +24,7 @@ def make_dot(parse_file, filename):
     img_fname = "%s.png" % fname_base
     dot_proc = subprocess.Popen(["dot", "-Tpng", "-o%s" % img_fname],
                                 stdin=subprocess.PIPE)
-    (std, err) = dot_proc.communicate(input=dot_str)
+    (_std, err) = dot_proc.communicate(input=dot_str)
     if err:
         sys.stderr.write(err)
     else:
