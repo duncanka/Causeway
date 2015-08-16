@@ -118,9 +118,10 @@ class ParsedSentence(object):
     # TODO: Should we be allowing the parser to PTB-escape more things?
     PERIOD_SUBSTITUTES = '.:'
     SUBJECT_EDGE_LABELS = ['nsubj', 'csubj', 'nsubjpass', 'csubjpass']
-    INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass']
+    INCOMING_CLAUSE_EDGES = ['ccomp', 'xcomp', 'csubj', 'csubjpass', 'advcl',
+                             'acl', 'acl:relcl'] # TODO: allow conj/parataxis?
     EDGE_REGEX = re.compile(
-        "([A-Za-z_\\-/\\.']+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
+        "([A-Za-z_\\-/\\.':]+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
     DEPTH_EXCLUDED_EDGE_LABELS = ['ref']
 
     @staticmethod
@@ -206,27 +207,21 @@ class ParsedSentence(object):
         # TODO: Update to match SEMAFOR's heuristic algorithm?
         min_depth = np.inf
         head = None
-        # equal_replacement = None
         for token in tokens:
             depth = self.get_depth(token)
-            if depth < min_depth or (depth == min_depth and
-                head is not None and
-                self._token_is_preferred_for_head_to(token, head)):
+            if depth < min_depth:
                 head = token
                 min_depth = depth
-                '''
-                if depth == min_depth:
-                    equal_replacement = (token, head)
-                else:
-                    equal_replacement = None
-                '''
-        '''
-        if equal_replacement is not None:
-            logging.debug("Preferring %s over %s as head of '%s' in '%s'" %
-                         (equal_replacement[0], equal_replacement[1],
-                          ' '.join([t.original_text for t in tokens]),
-                          tokens[0].parent_sentence.original_text))
-        '''
+            elif (depth == min_depth and
+                  head is not None and
+                  self._token_is_preferred_for_head_to(token, head)):
+                logging.debug(
+                    "Preferring %s over %s as head of '%s' in '%s'" %
+                    (token, head,
+                     ' '.join([t.original_text for t in tokens]),
+                     tokens[0].parent_sentence.original_text))
+                head = token
+                min_depth = depth
 
         if head is None:
             logging.warn('Returning null head for tokens %s'
