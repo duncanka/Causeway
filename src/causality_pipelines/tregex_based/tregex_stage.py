@@ -122,14 +122,22 @@ class TRegexConnectiveModel(Model):
                 ptb_strings.append(sentence.constituency_tree.pformat() + '\n')
 
         if FLAGS.tregex_pattern_type == 'dependency':
+            # TODO: is it a problem that the acl passives also occasionally
+            # catch "by means of" expressions (e.g., "killed by strangulation")?
+            # TODO: Write a TSurgeon sequence to normalize verbal modifier
+            # passives with clausal causes? (e.g., "cancer, caused by smoking
+            # too much,..."). Requires handling acl -> advcl -> mark(by) rather
+            # than acl -> nmod -> case(by). Problematic because usually seems to
+            # occur in "by means of" cases.
+            # TODO: Edit to not transform "by means" or "by reason"?
             # Order matters a lot here.
             tsurgeon_script_names = [
                 'normalize_passives',
-                'normalize_vmod_passives_1',
-                'normalize_vmod_passives_2',
-                'normalize_vmod_no_agent_1',
-                'normalize_vmod_no_agent_2',
-                'normalize_vmod_no_agent_3']
+                'normalize_acl_passives_1',
+                'normalize_acl_passives_2',
+                'normalize_acl_no_agent_1',
+                'normalize_acl_no_agent_2',
+                'normalize_acl_no_agent_3']
             tsurgeon_script_names = [
                 path.join('causality_pipelines', 'tregex_based', 'tsurgeon_dep',
                           script_name) + '.ts'

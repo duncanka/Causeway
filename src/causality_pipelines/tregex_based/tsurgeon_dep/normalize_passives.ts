@@ -1,10 +1,10 @@
-__=subjpass < nsubjpass=subjpassdep
+__=subjpass <1 nsubjpass=subjpassdep
             > (__ <2 /VB*/ < (/be_[0-9]+/=be <1 auxpass=berel <2 __=bepos)
-                           < (/by_[0-9]+/=by <1 __=byrel <2 __=bypos < (__=agent <1 pobj=agentdep)))
+                                             < (__=agent <1 nmod=agentdep
+                                                         < (/by_[0-9]+/=by <1 case=byrel <2 IN=bypos)))
 
 relabel agentdep nsubj
 relabel subjpassdep dobj
-move agent $+ subjpass
 % Remove POS/edge label children of by and be before merging up any children
 delete berel
 delete bepos

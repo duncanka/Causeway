@@ -1,4 +1,4 @@
-__=subjpass < (__=passiveverb < vmod_marker
+__=subjpass < (__=passiveverb < acl
                               < (~subjpass <1 __=subjpassrel
                                            <3 __=todel))
 
