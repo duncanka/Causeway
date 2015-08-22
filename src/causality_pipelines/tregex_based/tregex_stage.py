@@ -5,6 +5,7 @@ from math import log10
 from os import path
 import Queue
 import subprocess
+import sys
 import tempfile
 import time
 from threading import Lock
@@ -501,6 +502,8 @@ class TRegexConnectiveModel(Model):
                                              in instance.connective]
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
+        if FLAGS.tregex_print_patterns:
+           sys.stdout.flush()
         logging.info('Done extracting patterns.')
 
         return preprocessed_ptb_strings
@@ -604,7 +607,7 @@ class TRegexConnectiveModel(Model):
                 all_treepositions[treeposition_index - 1]]
             head = sentence.constituent_heads[node]
             return sentence.get_token_for_constituency_node(head)
-        
+
         @staticmethod
         def _get_dependency_token_from_tregex_line(line, sentence):
             token_index = int(line.split("_")[-1])
@@ -621,7 +624,7 @@ class TRegexConnectiveModel(Model):
             while next_line:
                 lines.append(next_line)
                 next_line = self.output_file.readline().strip()
-                
+
             true_connectives = {
                 tuple(instance.connective): instance
                 for instance in sentence.causation_instances
@@ -723,7 +726,7 @@ class TRegexConnectiveStage(Stage):
         self.pairwise_only_metrics = None # used during evaluation
 
     produced_attributes = ['possible_causations']
-    
+
     def _extract_parts(self, sentence, is_train):
         return [sentence]
 
