@@ -1,3 +1,4 @@
+from collections import defaultdict
 from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 from nltk.corpus import wordnet
@@ -219,13 +220,31 @@ class TRegexClassifierStage(Stage):
         return [TRegexClassifierPart(p) for p in sentence.possible_causations]
 
     def _decode_labeled_parts(self, sentence, labeled_parts):
+        # Deduplicate the results.
+
+        tokens_to_parts = defaultdict(int)
+        positive_parts = [p for p in labeled_parts if p.label]
+        for part in positive_parts:
+            # Count every instance each connective word is part of.
+            for connective_token in part.connective:
+                tokens_to_parts[connective_token] += 1
+
         sentence.causation_instances = []
-        for part in [p for p in labeled_parts if p.label]:
-            # The only part type is phrase pair, so we don't have to worry
-            # about checking the part type.
-            sentence.add_causation_instance(
-                connective=part.connective, cause=part.cause,
-                effect=part.effect)
+        for part in positive_parts:
+            keep_part = True
+            for token in part.connective:
+                if tokens_to_parts[token] > 1:
+                    # Assume that if there are other matches for a word, and
+                    # this match relies on Steiner nodes, it's probably wrong.
+                    # TODO: should we worry about cases where all connectives
+                    # on this word were found using Steiner patterns?
+                    if 'steiner_0' in part.connective_pattern:
+                        keep_part = False
+                        break
+            if keep_part:
+                sentence.add_causation_instance(
+                    connective=part.connective,
+                    cause=part.cause, effect=part.effect)
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
