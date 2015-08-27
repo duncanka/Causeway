@@ -445,8 +445,10 @@ class CausalityMetrics(object):
                                       in [instance_1, instance_2]]
             else:
                 cause_1, cause_2 = [self._filter_punct_tokens(i.cause)
+                                    if i.cause else None
                                     for i in [instance_1, instance_2]]
                 effect_1, effect_2 = [self._filter_punct_tokens(i.effect)
+                                      if i.effect else None
                                       for i in [instance_1, instance_2]]
 
             causes_match, cause_heads_match = self._match_instance_args(
