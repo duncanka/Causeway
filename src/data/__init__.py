@@ -209,7 +209,11 @@ class ParsedSentence(object):
         head = None
         for token in tokens:
             depth = self.get_depth(token)
-            if depth < min_depth:
+            parent_of_current_head = head in self.get_children(token, '*')
+            child_of_current_head = (head is not None and
+                                     token in self.get_children(head, '*'))
+            if parent_of_current_head or (
+                depth < min_depth and not child_of_current_head):
                 head = token
                 min_depth = depth
             elif (depth == min_depth and
@@ -269,16 +273,21 @@ class ParsedSentence(object):
         an edge with label edge_type. Otherwise, returns a list of
         (edge_label, child_token) tuples.
 
-        `edge_type` may be a single type or a list of types.
+        `edge_type` may be a single type or a list of types. The special value
+        '*' indicates that all children should be returned, without edge labels.
         '''
         # Grab the sparse column of the edge matrix with the edges of this
         # token. Iterate over the edge end indices therein.
         if edge_type:
-            edge_type = listify(edge_type)
-            return [self.tokens[edge_end_index] for edge_end_index
-                    in self.edge_graph[token.index].indices
-                    if (self.edge_labels[(token.index, edge_end_index)]
-                        in edge_type)]
+            if edge_type == '*':
+                return [self.tokens[edge_end_index] for edge_end_index
+                        in self.edge_graph[token.index].indices]
+            else:
+                edge_type = listify(edge_type)
+                return [self.tokens[edge_end_index] for edge_end_index
+                        in self.edge_graph[token.index].indices
+                        if (self.edge_labels[(token.index, edge_end_index)]
+                            in edge_type)]
         else:
             return [(self.edge_labels[(token.index, edge_end_index)],
                      self.tokens[edge_end_index])

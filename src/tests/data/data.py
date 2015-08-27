@@ -69,3 +69,11 @@ class HeadFindingTests(unittest.TestCase):
         self._check_head(
             [sentence.tokens[1]] + sentence.tokens[6:10],
             'i to find my daughter', 7, 'find')
+        # Check in the other order, just to make sure that it's not dependent on
+        # the order in which the tokens are considered. (Since this test
+        # requires the head finder to consider things other than tree depth,
+        # this is possible if checks for better head qualifications aren't done
+        # symmetrically.)
+        self._check_head(
+            sentence.tokens[6:10] + [sentence.tokens[1]],
+            'to find my daughter i', 7, 'find')
