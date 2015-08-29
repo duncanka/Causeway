@@ -20,6 +20,7 @@ from data.readers import DirectoryReader, StandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingModelWrapper
 from util import print_indented
+import subprocess
 
 FLAGS = gflags.FLAGS
 
@@ -86,6 +87,10 @@ if __name__ == '__main__':
         # Print command line in case we ever want to re-run from output file
         print "Flags:"
         print_indented(1, FLAGS.FlagsIntoString())
+        print "Git info:"
+        print_indented(1, subprocess.check_output("git rev-parse HEAD".split()),
+                       "Modified:", sep='')
+        print_indented(2, subprocess.check_output("git ls-files -m".split()))
     except gflags.FlagsError, e:
         print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
