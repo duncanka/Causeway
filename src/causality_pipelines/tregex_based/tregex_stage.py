@@ -234,18 +234,31 @@ class TRegexConnectiveModel(Model):
 
     @staticmethod
     def _add_dep_edge_to_pattern(sentence, steiner_graph, pattern,
-                                 node_pattern, edge_start, edge_end):
-        if steiner_graph[edge_start, edge_end]: # forward edge
+                                 node_pattern, edge_start, edge_end,
+                                 node_names):
+        forward_weight = steiner_graph[edge_start, edge_end]
+        back_weight = steiner_graph[edge_end, edge_start]
+        independent_pattern = ''
+        if forward_weight > back_weight: # forward edge dominates
             edge_pattern = TRegexConnectiveModel._get_dep_edge_pattern(
                 edge_start, edge_end, sentence)
             pattern = '%s < (%s %s' % (pattern, node_pattern,
                                        edge_pattern)
-        else: # back edge
+        else: # back edge dominates
             edge_pattern = TRegexConnectiveModel._get_dep_edge_pattern(
                 edge_end, edge_start, sentence)
-            pattern = '%s %s > (%s' % (pattern, edge_pattern,
-                                       node_pattern)
-        return pattern
+            # Paths with opposing arrows meeting at a single node mess up our
+            # scheme for edge patterns. (This happens particularly often with
+            # parse graphs that have been TSurgeoned.) Add these dependency
+            # labels as independent patterns, if necessary.
+            if pattern.endswith(']'):
+                pattern = '%s > (%s' % (pattern, node_pattern)
+                independent_pattern = ('~%s %s' %
+                                       (node_names[edge_end], edge_pattern))
+            else:
+                pattern = '%s %s > (%s' % (pattern, edge_pattern,
+                                           node_pattern)
+        return pattern, independent_pattern
 
     @staticmethod
     def _get_cons_node_pattern(sentence, node_index, node_names,
@@ -275,13 +288,14 @@ class TRegexConnectiveModel(Model):
 
     @staticmethod
     def _add_cons_edge_to_pattern(sentence, steiner_graph, pattern,
-                                  node_pattern, edge_start, edge_end):
+                                  node_pattern, edge_start, edge_end,
+                                  node_names):
         # TODO: Make this use <+(VP) for VPs.
         if steiner_graph[edge_start, edge_end]: # forward edge
             pattern = '%s < (%s' % (pattern, node_pattern)
         else: # back edge
             pattern = '%s > (%s' % (pattern, node_pattern)
-        return pattern
+        return pattern, ''
 
     @staticmethod
     def _generate_pattern_from_steiners(sentence, steiner_graph, steiner_nodes,
@@ -339,13 +353,17 @@ class TRegexConnectiveModel(Model):
 
         node_names = {}
         edges = [(None, longest_path[0])] + list(pairwise(longest_path))
+        independent_patterns = []
         for edge_start, edge_end in edges:
             end_node_pattern = node_pattern_fn(
                 sentence, edge_end, node_names, connective_nodes,
                 steiner_nodes, cause, effect)
             if edge_start is not None:
-                pattern = add_edge_fn(sentence, steiner_graph, pattern,
-                                      end_node_pattern, edge_start, edge_end)
+                pattern, independent_pattern = add_edge_fn(
+                    sentence, steiner_graph, pattern, end_node_pattern,
+                    edge_start, edge_end, node_names)
+                if independent_pattern:
+                    independent_patterns.append(independent_pattern)
             else: # start of path
                 pattern = '(%s' % end_node_pattern
         pattern += ')' * len(edges)
@@ -370,12 +388,19 @@ class TRegexConnectiveModel(Model):
             # Link end to start using add_edge_fn, as though start were the
             # entire pattern so far. It will, in fact, be the entire pattern so
             # far after the colon.
-            edge_pattern = add_edge_fn(
+            edge_pattern, independent_pattern = add_edge_fn(
                 sentence, steiner_graph, start_node_pattern, end_node_pattern,
-                edge_start, edge_end)
+                edge_start, edge_end, node_names)
+            if independent_pattern:
+                independent_patterns.append(independent_pattern)
             # The final paren is because the edge pattern functions don't close
             # their parens.
             pattern = '%s : (%s))' % (pattern, edge_pattern)
+
+        # Add fragments of pattern that couldn't be embedded in edge patterns.
+        for pattern_frag in independent_patterns:
+            logging.debug('Adding fragment %s to %s', pattern_frag, pattern)
+            pattern = '%s : (%s)' % (pattern, pattern_frag)
 
         # All connective node IDs should be printed by TRegex.
         node_names_to_print = [name for name in node_names.values()
