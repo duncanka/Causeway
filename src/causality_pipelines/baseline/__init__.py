@@ -183,7 +183,7 @@ class BaselineModel(Model):
         if initial_call:
             expanded_arg = set()
         expanded_arg.add(arg_head)
-        for _, child in arg_head.parent_sentence.get_children(arg_head):
+        for child in arg_head.parent_sentence.get_children(arg_head, '*'):
             if child not in expanded_arg and child not in stop_tokens:
                 BaselineModel._expand_argument(child, stop_tokens, expanded_arg)
 

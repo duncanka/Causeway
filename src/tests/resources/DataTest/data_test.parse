@@ -227,3 +227,28 @@ xcomp(try-5, find-7)
 nmod:poss(daughter-9, my-8)
 dobj(find-7, daughter-9)
 
+He died from injuries caused by an explosion .
+
+he/PRP die/VBD from/IN injury/NNS cause/VBN by/IN a/DT explosion/NN ./.
+
+(ROOT
+  (S
+    (NP (PRP he))
+    (VP (VBD die)
+      (PP (IN from)
+        (NP
+          (NP (NNS injury))
+          (VP (VBN cause)
+            (PP (IN by)
+              (NP (DT a) (NN explosion)))))))
+    (. .)))
+
+nsubj(die-2, he-1)
+root(ROOT-0, die-2)
+case(injury-4, from-3)
+nmod(die-2, injury-4)
+acl(injury-4, cause-5)
+case(explosion-8, by-6)
+det(explosion-8, a-7)
+nmod(cause-5, explosion-8)
+

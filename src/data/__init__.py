@@ -71,8 +71,9 @@ class Token(object):
         return Token.POS_GENERAL.get(self.pos, self.pos)
 
     def __repr__(self):
-        return "Token(%s/%s [%s:%s])" % (
-            self.original_text, self.pos, self.start_offset, self.end_offset)
+        return "Token(%s_%d/%s [%s:%s])" % (
+            self.original_text, self.index, self.pos, self.start_offset,
+            self.end_offset)
 
     def get_unnormalized_original_text(self):
         # Return real original text, not the lowercased version that's in
@@ -212,8 +213,8 @@ class ParsedSentence(object):
             parent_of_current_head = head in self.get_children(token, '*')
             child_of_current_head = (head is not None and
                                      token in self.get_children(head, '*'))
-            if parent_of_current_head or (
-                depth < min_depth and not child_of_current_head):
+            if ((depth < min_depth or parent_of_current_head)
+                and not child_of_current_head):
                 head = token
                 min_depth = depth
             elif (depth == min_depth and
@@ -784,9 +785,9 @@ class ParsedSentence(object):
 
         '''
         For the undirected shortest paths we save, we'll want to:
-         a) prefer xcomp-> ->nsubj paths over nsubj-> nsubj<- and
-            nsubj<- xcomp-> paths.
-         b) disprefer paths that rely on expletives and vmods.
+         a) prefer xcomp-> __ ->nsubj paths over nsubj-> __ <-nsubj and
+            nsubj<- __ ->xcomp paths.
+         b) disprefer paths that rely on expletives and acls.
          c) treat the graph as undirected, EXCEPT for edges where we already
             have a reverse edge, in which case that edge's weight should be
             left alone.
@@ -801,7 +802,7 @@ class ParsedSentence(object):
                     edge_end_token, self.SUBJECT_EDGE_LABELS)
                 for child in subj_children:
                     self.edge_graph[edge[1], child.index] = 0.985
-            elif label == 'expl' or label == 'vmod':
+            elif label == 'expl' or label.startswith('acl'):
                 self.edge_graph[edge] = 1.01
 
         # Create duplicate edges to simulate undirectedness, EXCEPT where we

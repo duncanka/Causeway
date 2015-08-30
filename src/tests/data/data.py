@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import os
 import unittest
 
 from data.readers import SentenceReader
@@ -77,3 +76,13 @@ class HeadFindingTests(unittest.TestCase):
         self._check_head(
             sentence.tokens[6:10] + [sentence.tokens[1]],
             'to find my daughter i', 7, 'find')
+        
+    def testHeadDuplicatedAsChildsArg(self):
+        sentence = self.sentences[4]
+        # Duplicate passive subject.
+        sentence.edge_graph[5, 4] = 1.0
+        sentence.edge_labels[(5, 4)] = 'dobj'
+        sentence.edge_labels[(5, 8)] = 'nsubj'
+        self._check_head(
+            sentence.tokens[4:9],
+            'injuries caused by an explosion', 4, 'injuries')

@@ -61,7 +61,7 @@ class ArgSpanModel(Model):
         # Use a set to represent the argument tokens in case, in the process of
         # following a dependency cycle, we re-encounter the same node twice.
         expanded_tokens = set([argument_token])
-        for _, child_token in pc.sentence.get_children(argument_token):
+        for child_token in pc.sentence.get_children(argument_token, '*'):
             # Don't revisit already-visited nodes, even if we've come back to
             # them through a dependency cycle.
             if child_token in visited:

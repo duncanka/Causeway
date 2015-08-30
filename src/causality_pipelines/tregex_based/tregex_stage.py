@@ -503,7 +503,7 @@ class TRegexConnectiveModel(Model):
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
         if FLAGS.tregex_print_patterns:
-           sys.stdout.flush()
+            sys.stdout.flush()
         logging.info('Done extracting patterns.')
 
         return preprocessed_ptb_strings
