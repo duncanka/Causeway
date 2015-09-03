@@ -92,8 +92,15 @@ Token.ALL_POS_TAGS = (Token.NOUN_TAGS + Token.VERB_TAGS + Token.ADVERB_TAGS +
                       Token.ADJECTIVE_TAGS + Token.PUNCT_TAGS + ["IN"])
 
 class DependencyPath(list):
+    def __init__(self, path_start, *args, **kwargs):
+        super(DependencyPath, self).__init__(*args, **kwargs)
+        self.start = path_start
+
     def __str__(self):
-        last_node = None
+        if not self:
+            return ''
+
+        last_node = self.start
         dep_names = []
         for source, target, dep_name in self:
             if source is last_node:
@@ -337,7 +344,7 @@ class ParsedSentence(object):
             if label != 'conj' or include_conj:
                 edges.append((start, end, label))
             target = predecessor
-        return DependencyPath(reversed(edges))
+        return DependencyPath(source, reversed(edges))
 
     def get_closest_of_tokens(self, source, possible_targets, use_tree=True):
         '''

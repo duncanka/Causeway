@@ -86,3 +86,35 @@ class HeadFindingTests(unittest.TestCase):
         self._check_head(
             sentence.tokens[4:9],
             'injuries caused by an explosion', 4, 'injuries')
+
+class DependencyPathTests(unittest.TestCase):
+    def setUp(self):
+        self.sentences = get_sentences_from_file(SentenceReader, 'DataTest',
+                                                 'data_test.txt')
+
+    def testAllForwardPaths(self):
+        sentence = self.sentences[0]
+        path_14_9 = sentence.extract_dependency_path(sentence.tokens[14],
+                                                     sentence.tokens[9])
+        self.assertEqual('mark', str(path_14_9))
+        path_8_9 = sentence.extract_dependency_path(sentence.tokens[8],
+                                                     sentence.tokens[9])
+        self.assertEqual('ccomp mark', str(path_8_9))
+
+    def testAllBackwardPaths(self):
+        sentence = self.sentences[0]
+        path_9_14 = sentence.extract_dependency_path(sentence.tokens[9],
+                                                     sentence.tokens[14])
+        self.assertEqual("mark'", str(path_9_14))
+        path_9_8 = sentence.extract_dependency_path(sentence.tokens[9],
+                                                     sentence.tokens[8])
+        self.assertEqual("mark' ccomp'", str(path_9_8))
+
+    def testMixedPaths(self):
+        sentence = self.sentences[0]
+        path_27_32 = sentence.extract_dependency_path(sentence.tokens[27],
+                                                     sentence.tokens[32])
+        self.assertEqual("nmod' advcl", str(path_27_32))
+        path_17_15 = sentence.extract_dependency_path(sentence.tokens[17],
+                                                     sentence.tokens[15])
+        self.assertEqual("mark' advcl' dobj amod", str(path_17_15))
