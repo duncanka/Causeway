@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import unittest
 
+from data import ParsedSentence
 from data.readers import SentenceReader
 from tests import get_sentences_from_file
 
@@ -118,3 +119,38 @@ class DependencyPathTests(unittest.TestCase):
         path_17_15 = sentence.extract_dependency_path(sentence.tokens[17],
                                                      sentence.tokens[15])
         self.assertEqual("mark' advcl' dobj amod", str(path_17_15))
+        path_15_17 = sentence.extract_dependency_path(sentence.tokens[15],
+                                                     sentence.tokens[17])
+        self.assertEqual("amod' dobj' advcl mark", str(path_15_17))
+
+    def testDomination(self):
+        sentence = self.sentences[0]
+
+        # Test single links
+        domination = sentence.get_domination_relation(sentence.tokens[14],
+                                                      sentence.tokens[13])
+        self.assertEqual(domination,
+                         ParsedSentence.DOMINATION_DIRECTION.Dominates)
+
+        domination = sentence.get_domination_relation(sentence.tokens[13],
+                                                      sentence.tokens[14])
+        self.assertEqual(domination,
+                         ParsedSentence.DOMINATION_DIRECTION.DominatedBy)
+
+        # Test multiple links
+        domination = sentence.get_domination_relation(sentence.tokens[14],
+                                                      sentence.tokens[26])
+        self.assertEqual(domination,
+                         ParsedSentence.DOMINATION_DIRECTION.Dominates)
+
+        domination = sentence.get_domination_relation(sentence.tokens[26],
+                                                      sentence.tokens[14])
+        self.assertEqual(domination,
+                         ParsedSentence.DOMINATION_DIRECTION.DominatedBy)
+
+        # Test unrelated
+        domination = sentence.get_domination_relation(sentence.tokens[4],
+                                                      sentence.tokens[14])
+        self.assertEqual(domination,
+                         ParsedSentence.DOMINATION_DIRECTION.Independent)
+

@@ -591,6 +591,32 @@ class ParsedSentence(object):
 
         return '_'.join(aux_token_strings)
 
+    DOMINATION_DIRECTION = Enum(['Dominates', 'DominatedBy', 'Independent'])
+    def get_domination_relation(self, token1, token2):
+        # TODO: do we need to worry about conj's here?
+        path = self.extract_dependency_path(token1, token2, True)
+        last_node = path.start
+        all_forward = True
+        all_backward = True
+        for source, target, _dep_name in path:
+            if source is last_node: # forward edge
+                all_backward = False
+                if not all_forward:
+                    break
+                last_node = target
+            else: # back edge
+                all_forward = False
+                if not all_backward:
+                    break
+                last_node = source
+        if all_forward:
+            return self.DOMINATION_DIRECTION.Dominates
+        elif all_backward:
+            return self.DOMINATION_DIRECTION.DominatedBy
+        else:
+            return self.DOMINATION_DIRECTION.Independent
+
+
     ###########################################
     # Private initialization support functions
     ###########################################
