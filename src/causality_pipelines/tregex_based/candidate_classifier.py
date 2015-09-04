@@ -1,5 +1,6 @@
 from collections import defaultdict
 from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
+import itertools
 import logging
 from nltk.corpus import wordnet
 
@@ -7,14 +8,13 @@ from causality_pipelines import IAAEvaluator
 from data import Token
 from pipeline import Stage
 from pipeline.models import ClassifierModel, ClassifierPart
-from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, \
-    SetValuedFeatureExtractor
+from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor
 
 try:
     DEFINE_list(
         'tregex_cc_features',
-        ['cause_pos', 'effect_pos', 'wordsbtw', 'deppath', 'deplen', 'tenses',
-         'connective', 'cn_lemmas'],
+        'cause_pos effect_pos wordsbtw deppath deplen connective cn_lemmas'
+        ' tenses cause_case_children effect_case_children domination'.split(),
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -138,6 +138,21 @@ class TRegexClassifierModel(ClassifierModel):
     def extract_parent_pos(part):
         return part.sentence.get_most_direct_parent(part.connective_head)[1].pos
 
+    _ALL_POS_PAIRS = ['/'.join(tags) for tags in itertools.product(
+                        Token.ALL_POS_TAGS, Token.ALL_POS_TAGS)]
+    @staticmethod
+    def extract_pos_bigram(part, argument_head):
+        if argument_head.index < 2:
+            prev_pos = 'NONE'
+        else:
+            previous_token = part.sentence.tokens[argument_head.index - 1]
+            # TODO: would this be helpful or harmful?
+            # while previous_token.pos in Token.PUNCT_TAGS:
+            #     previous_token = part.sentence.tokens[
+            #         previous_token.index - 1]
+            prev_pos = previous_token.pos
+        '/'.join([prev_pos, argument_head.pos])
+
     @staticmethod
     def extract_wn_hypernyms(token):
         ''' Extracts all Wordnet hypernyms, including the token's lemma. '''
@@ -156,15 +171,35 @@ class TRegexClassifierModel(ClassifierModel):
 
         return tuple(synset.name() for synset in synsets_with_hypernyms)
 
+    @staticmethod
+    def extract_case_children(arg_head):
+        child_tokens = arg_head.parent_sentence.get_children(arg_head, 'case')
+        child_tokens.sort(key=lambda token: token.index)
+        return ' '.join([token.lemma for token in child_tokens])
+
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
+
 
 TRegexClassifierModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
                                 Token.ALL_POS_TAGS),
+    KnownValuesFeatureExtractor('pos_pair', lambda part: '/'.join([
+                                    part.cause_head.pos, part.effect_head.pos]),
+                                TRegexClassifierModel._ALL_POS_PAIRS),
+    KnownValuesFeatureExtractor(
+        'cause_pos_bigram',
+        lambda part: TRegexClassifierModel.extract_pos_bigram(part,
+                                                              part.cause_head),
+                                TRegexClassifierModel._ALL_POS_PAIRS),
+    KnownValuesFeatureExtractor(
+        'effect_pos_bigram',
+        lambda part: TRegexClassifierModel.extract_pos_bigram(part,
+                                                              part.effect_head),
+                                TRegexClassifierModel._ALL_POS_PAIRS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
         'cause_pos_gen', lambda part: part.cause_head.get_gen_pos(),
@@ -206,6 +241,15 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
         'effect_hypernyms',
         lambda part: TRegexClassifierModel.extract_wn_hypernyms(
             part.effect_head)),
+    FeatureExtractor('cause_case_children',
+                     lambda part: TRegexClassifierModel.extract_case_children(
+                         part.cause_head)),
+    FeatureExtractor('effect_case_children',
+                     lambda part: TRegexClassifierModel.extract_case_children(
+                         part.effect_head)),
+    FeatureExtractor('domination',
+                     lambda part: part.sentence.get_domination_relation(
+                        part.cause_head, part.effect_head)),
 ]
 
 
