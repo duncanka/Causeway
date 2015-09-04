@@ -13,8 +13,8 @@ from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtr
 try:
     DEFINE_list(
         'tregex_cc_features',
-        'cause_pos effect_pos wordsbtw deppath deplen connective cn_lemmas'
-        ' tenses cause_case_children effect_case_children domination'.split(),
+        'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
+        'tenses,cause_case_children,effect_case_children,domination'.split(','),
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
