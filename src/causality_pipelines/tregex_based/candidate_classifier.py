@@ -3,18 +3,22 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 import itertools
 import logging
 from nltk.corpus import wordnet
+import numpy as np
 
 from causality_pipelines import IAAEvaluator
-from data import Token
+from data import Token, ParsedSentence
 from pipeline import Stage
 from pipeline.models import ClassifierModel, ClassifierPart
-from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor
+from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, \
+    VectorValuedFeatureExtractor
+from nlp.senna import SennaEmbeddings
 
 try:
     DEFINE_list(
         'tregex_cc_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'tenses,cause_case_children,effect_case_children,domination'.split(','),
+        'tenses,cause_case_children,effect_case_children,domination,'
+        'vector_dist'.split(','),
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -177,6 +181,22 @@ class TRegexClassifierModel(ClassifierModel):
         child_tokens.sort(key=lambda token: token.index)
         return ' '.join([token.lemma for token in child_tokens])
 
+    _embeddings = None # only initialize if being used
+    @staticmethod
+    def extract_vector(arg_head):
+        if not TRegexClassifierModel._embeddings:
+            TRegexClassifierModel._embeddings = SennaEmbeddings()
+        try:
+            return TRegexClassifierModel._embeddings[arg_head.original_text]
+        except KeyError: # Unknown word; return special vector
+            return TRegexClassifierModel._embeddings['UNKNOWN']
+
+    @staticmethod
+    def extract_vector_dist(head1, head2):
+        v1 = TRegexClassifierModel.extract_vector(head1)
+        v2 = TRegexClassifierModel.extract_vector(head2)
+        return np.linalg.norm(v1 - v2)
+
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
@@ -247,8 +267,18 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('effect_case_children',
                      lambda part: TRegexClassifierModel.extract_case_children(
                          part.effect_head)),
-    FeatureExtractor('domination',
-                     lambda part: part.sentence.get_domination_relation(
+    KnownValuesFeatureExtractor('domination',
+        lambda part: part.sentence.get_domination_relation(
+        part.cause_head, part.effect_head),
+        range(len(ParsedSentence.DOMINATION_DIRECTION))),
+    VectorValuedFeatureExtractor(
+        'cause_vector',
+        lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),
+    VectorValuedFeatureExtractor(
+        'effect_vector',
+        lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),
+    FeatureExtractor('vector_dist',
+                     lambda part: TRegexClassifierModel.extract_vector_dist(
                         part.cause_head, part.effect_head)),
 ]
 
