@@ -100,9 +100,10 @@ class TrainableFeatureExtractor(FeatureExtractor):
 class SetValuedFeatureExtractor(FeatureExtractor):
     '''
     Class for extracting features where the same feature name can legally take
-    on multiple values simultaneously -- i.e., the feature is set-valued -- but
-    where we want to represent that set as a collection of individual indicator
-    features, rather than a single indicator for each possible set value.  
+    on multiple discrete values simultaneously -- i.e., the feature is
+    set-valued -- but where we want to represent that set as a collection of
+    individual indicator features, rather than a single indicator for each
+    possible set value.  
     '''
 
     def __init__(self, name, extractor_fn):
@@ -129,3 +130,24 @@ class SetValuedFeatureExtractor(FeatureExtractor):
         feature_names = [self._get_categorical_feature_name(self.name, value)
                          for value in feature_values]
         return {feature_name: 1.0 for feature_name in feature_names}
+
+class VectorValuedFeatureExtractor(FeatureExtractor):
+    '''
+    Class for extracting vector-valued features, where each vector is a fixed
+    size and we want to record a feature for every position in the vector.
+    '''
+    def __init__(self, name, extractor_fn):
+        super(VectorValuedFeatureExtractor, self).__init__(
+            name, extractor_fn, self.FeatureTypes.Numerical)
+
+    def extract_subfeature_names(self, parts):
+        # NOTE: Assumes at least one part.
+        vector_size = len(self._extractor_fn(parts[0]))
+        return ['%s[%d]' % (self.name, i) for i in range(vector_size)]
+
+    def extract(self, part):
+        feature_values = {}
+        for i, subfeature_value in enumerate(self._extractor_fn(part)):
+            subfeature_name = '%s[%d]' % (self.name, i)
+            feature_values[subfeature_name] = subfeature_value
+        return feature_values
