@@ -8,6 +8,7 @@ from scipy.sparse import lil_matrix, vstack
 import time
 from types import MethodType
 
+from util import NameDictionary
 from util.metrics import diff_binary_vectors
 
 try:
@@ -32,31 +33,6 @@ class Model(object):
 
 
 class FeaturizedModel(Model):
-    class NameDictionary(object):
-        def __init__(self):
-            self.names_to_ids = {}
-            self.ids_to_names = []
-
-        def insert(self, entry):
-            if not self.names_to_ids.has_key(entry):
-                self.names_to_ids[entry] = len(self.names_to_ids)
-                self.ids_to_names.append(entry)
-
-        def clear(self):
-            self.__init__()
-
-        def __getitem__(self, entry):
-            if isinstance(entry, int):
-                return self.ids_to_names[entry]
-            else: # it's a string name
-                return self.names_to_ids[entry]
-
-        def __len__(self):
-            return len(self.names_to_ids)
-
-        def __contains__(self, entry):
-            return self.names_to_ids.has_key(entry)
-
     def __init__(self, part_type, feature_extractors, selected_features):
         """
         part_type is the class object corresponding to the part type this model
@@ -66,7 +42,7 @@ class FeaturizedModel(Model):
         selected_features is a list of names of features to extract.
         """
         super(FeaturizedModel, self).__init__(part_type)
-        self.feature_name_dictionary = FeaturizedModel.NameDictionary()
+        self.feature_name_dictionary = NameDictionary()
         self.feature_extractors = [extractor for extractor in feature_extractors
                                    if extractor.name in selected_features]
         self.feature_training_data = None

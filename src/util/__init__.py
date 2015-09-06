@@ -9,6 +9,32 @@ import struct
 import termios
 
 
+class NameDictionary(object):
+    def __init__(self):
+        self.names_to_ids = {}
+        self.ids_to_names = []
+
+    def insert(self, entry):
+        if not self.names_to_ids.has_key(entry):
+            self.names_to_ids[entry] = len(self.names_to_ids)
+            self.ids_to_names.append(entry)
+
+    def clear(self):
+        self.__init__()
+
+    def __getitem__(self, entry):
+        if isinstance(entry, int):
+            return self.ids_to_names[entry]
+        else: # it's a string name
+            return self.names_to_ids[entry]
+
+    def __len__(self):
+        return len(self.names_to_ids)
+
+    def __contains__(self, entry):
+        return self.names_to_ids.has_key(entry)
+
+
 # Add some Colorama functionality.
 class AnsiFormats:
     BOLD = 1
