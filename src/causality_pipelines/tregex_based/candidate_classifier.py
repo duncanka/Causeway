@@ -4,6 +4,7 @@ import itertools
 import logging
 from nltk.corpus import wordnet
 import numpy as np
+from scipy.spatial import distance
 
 from causality_pipelines import IAAEvaluator
 from data import Token, ParsedSentence
@@ -18,7 +19,7 @@ try:
         'tregex_cc_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination,'
-        'vector_dist'.split(','),
+        'vector_dist,vector_cos_dist'.split(','),
         'Features to use for TRegex-based classifier model')
     DEFINE_integer('tregex_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -197,6 +198,12 @@ class TRegexClassifierModel(ClassifierModel):
         v2 = TRegexClassifierModel.extract_vector(head2)
         return np.linalg.norm(v1 - v2)
 
+    @staticmethod
+    def extract_vector_cos_dist(head1, head2):
+        v1 = TRegexClassifierModel.extract_vector(head1)
+        v2 = TRegexClassifierModel.extract_vector(head2)
+        return distance.cosine(v1, v2)
+
     # We can't initialize this properly yet because we don't have access to the
     # class' static methods to define the list.
     FEATURE_EXTRACTORS = []
@@ -279,7 +286,12 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
         lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),
     FeatureExtractor('vector_dist',
                      lambda part: TRegexClassifierModel.extract_vector_dist(
-                        part.cause_head, part.effect_head)),
+                        part.cause_head, part.effect_head),
+                     FeatureExtractor.FeatureTypes.Numerical),
+    FeatureExtractor('vector_cos_dist',
+                     lambda part: TRegexClassifierModel.extract_vector_cos_dist(
+                        part.cause_head, part.effect_head),
+                     FeatureExtractor.FeatureTypes.Numerical),
 ]
 
 
