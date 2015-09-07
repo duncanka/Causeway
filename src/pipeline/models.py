@@ -33,19 +33,23 @@ class Model(object):
 
 
 class FeaturizedModel(Model):
-    def __init__(self, part_type, feature_extractors, selected_features):
+    def __init__(self, part_type, feature_extractors, selected_features,
+                 save_featurized=False):
         """
         part_type is the class object corresponding to the part type this model
-        is for.
+            is for.
         feature_extractors is a list of
-        `pipeline.feature_extractors.FeatureExtractor` objects.
+            `pipeline.feature_extractors.FeatureExtractor` objects.
         selected_features is a list of names of features to extract.
+        save_featurized indicates whether to store features and labels
+            properties after featurization. Useful for debugging/development.
         """
         super(FeaturizedModel, self).__init__(part_type)
         self.feature_name_dictionary = NameDictionary()
         self.feature_extractors = [extractor for extractor in feature_extractors
                                    if extractor.name in selected_features]
         self.feature_training_data = None
+        self.save_featurized = save_featurized
 
     def train(self, parts):
         # Reset state in case we've been previously trained.
@@ -96,6 +100,9 @@ class ClassifierModel(FeaturizedModel):
 
     def _featurized_train(self, parts):
         features, labels = self._featurize(parts)
+        if self.save_featurized:
+            self.features = features
+            self.labels = labels
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
