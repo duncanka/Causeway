@@ -100,21 +100,20 @@ class ClassifierModel(FeaturizedModel):
 
     def _featurized_train(self, parts):
         features, labels = self._featurize(parts)
-        if self.save_featurized:
-            self.features = features
-            self.labels = labels
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
 
     def _featurized_test(self, parts):
-        features, old_labels = self._featurize(parts)
+        features, gold_labels = self._featurize(parts)
+        if self.save_featurized:
+            self.gold_labels = gold_labels
         labels = self.classifier.predict(features)
         for part, label in zip(parts, labels):
             part.label = label
-        logging.debug('%d data points' % len(old_labels))
-        logging.debug('Raw classifier performance:')
-        logging.debug('\n' + str(diff_binary_vectors(labels, old_labels)))
+        # logging.debug('%d data points' % len(gold_labels))
+        # logging.debug('Raw classifier performance:')
+        # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))
 
     def _featurize(self, parts):
         logging.info('Featurizing...')
@@ -147,6 +146,9 @@ class ClassifierModel(FeaturizedModel):
         features = features.tocsr()
         elapsed_seconds = time.time() - start_time
         logging.info('Done featurizing in %0.2f seconds' % elapsed_seconds)
+        if self.save_featurized:
+            self.features = features
+            self.labels = labels
         return features, labels
 
 
