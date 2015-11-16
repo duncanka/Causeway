@@ -188,7 +188,7 @@ class TRegexClassifierModel(ClassifierModel):
         if not TRegexClassifierModel._embeddings:
             TRegexClassifierModel._embeddings = SennaEmbeddings()
         try:
-            return TRegexClassifierModel._embeddings[arg_head.original_text]
+            return TRegexClassifierModel._embeddings[arg_head.lowered_text]
         except KeyError: # Unknown word; return special vector
             return TRegexClassifierModel._embeddings['UNKNOWN']
 
@@ -255,7 +255,7 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                      TRegexClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos', TRegexClassifierModel.extract_parent_pos),
     FeatureExtractor('cn_words',
-                     lambda part: ' '.join([t.original_text
+                     lambda part: ' '.join([t.lowered_text
                                             for t in part.connective])),
     FeatureExtractor('cn_lemmas',
                      lambda part: ' '.join([t.lemma

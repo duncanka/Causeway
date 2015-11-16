@@ -8,6 +8,7 @@ from pipeline import Stage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import FeatureExtractor, KnownValuesFeatureExtractor, SetValuedFeatureExtractor
 from util.diff import SequenceDiff
+from causality_pipelines.common import StanfordNERStage
 
 try:
     DEFINE_list('regex_cc_features',
@@ -135,7 +136,12 @@ RegexClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [RegexClassifierModel.extract_tense(head)
-                         for head in part.cause_head, part.effect_head]))]
+                         for head in part.cause_head, part.effect_head])),
+    KnownValuesFeatureExtractor(
+        'ners', lambda part: '/'.join(
+                    StanfordNERStage.NER_TYPES[arg_head.ner_tag]
+                    for arg_head in [part.cause_head, part.effect_head]),
+        StanfordNERStage.NER_TYPES)]
 
 
 class RegexClassifierStage(Stage):

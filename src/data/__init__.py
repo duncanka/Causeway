@@ -56,7 +56,8 @@ class Token(object):
                  copy_of=None):
         self.index = index
         self.parent_sentence = parent_sentence
-        self.original_text = original_text.lower()
+        self.original_text = original_text
+        self.lowered_text = original_text.lower() # TODO: remove?
         self.pos = pos
         self.lemma = lemma
         self.start_offset = start_offset
@@ -75,12 +76,6 @@ class Token(object):
             self.original_text, self.index, self.pos, self.start_offset,
             self.end_offset)
 
-    def get_unnormalized_original_text(self):
-        # Return real original text, not the lowercased version that's in
-        # token.original_text.
-        # TODO: Why did we do that again??
-        return self.parent_sentence.original_text[
-            self.start_offset:self.end_offset]
 
 Token.POS_GENERAL = merge_dicts(
     [{tag: 'NN' for tag in Token.NOUN_TAGS},
@@ -145,7 +140,8 @@ class ParsedSentence(object):
     @staticmethod
     def get_annotation_text(annotation_tokens):
         try:
-            return ' '.join([token.original_text for token in annotation_tokens])
+            return ' '.join([token.original_text
+                             for token in annotation_tokens])
         except TypeError: # Happens if None is passed
             return ''
 
@@ -586,8 +582,8 @@ class ParsedSentence(object):
                     aux_token_strings.append('COP.' + token.pos)
                 else:
                     aux_token_strings.append(
-                         CONTRACTION_DICT.get(token.original_text,
-                                              token.original_text))
+                         CONTRACTION_DICT.get(token.lowered_text,
+                                              token.lowered_text))
 
         return '_'.join(aux_token_strings)
 

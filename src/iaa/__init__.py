@@ -652,7 +652,7 @@ class CausalityMetrics(object):
         '*effect*'. 
         '''
         def get_printable_word(token):
-            word = token.get_unnormalized_original_text()
+            word = token.original_text
             if token in instance.connective:
                 word = _get_printable_connective_word(word)
 
@@ -664,7 +664,7 @@ class CausalityMetrics(object):
             
         tokens = instance.sentence.tokens[1:] # skip ROOT
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
-            words = [token.get_unnormalized_original_text()
+            words = [token.original_text
                      for token in tokens]
             # -10 allows viewing later in a slightly smaller terminal/editor.
             available_term_width = get_terminal_size()[0] - indent * 4 - 10
