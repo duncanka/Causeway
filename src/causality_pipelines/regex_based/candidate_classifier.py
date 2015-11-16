@@ -8,7 +8,7 @@ from pipeline import Stage
 from pipeline.models import ClassifierPart, ClassifierModel
 from pipeline.feature_extractors import FeatureExtractor, KnownValuesFeatureExtractor, SetValuedFeatureExtractor
 from util.diff import SequenceDiff
-from causality_pipelines.common import StanfordNERStage
+from causality_pipelines import StanfordNERStage
 
 try:
     DEFINE_list('regex_cc_features',
