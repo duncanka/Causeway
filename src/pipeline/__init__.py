@@ -116,7 +116,8 @@ class Pipeline(object):
         # It may be slightly expensive to construct new evaluators again just to
         # access their aggregator functions. Oh, well.
         evaluators = [stage._make_evaluator() for stage in self.stages]
-        results = [stage_evaluator.aggregate_results(stage_results)
+        results = [(stage_evaluator.aggregate_results(stage_results)
+                    if stage_evaluator else None)
                    for stage_evaluator, stage_results in zip(
                        evaluators, results)]
         self.eval_results = results
@@ -181,7 +182,7 @@ class Pipeline(object):
         self._evaluators_by_stage = [stage._make_evaluator()
                                      for stage in self.stages]
         self.test(instances)
-        eval_results = [evaluator.complete_evaluation()
+        eval_results = [evaluator.complete_evaluation() if evaluator else None
                         for evaluator in self._evaluators_by_stage]
 
         self._evaluators_by_stage = []
@@ -194,7 +195,7 @@ class Pipeline(object):
         for i, stage in enumerate(self.stages):
             logging.info('Testing stage "%s"...' % stage.name)
             stage.test(instances)
-            if self._evaluators_by_stage:
+            if self._evaluators_by_stage and self._evaluators_by_stage[i]:
                 self._evaluators_by_stage[i].evaluate(instances,
                                                       original_instances)
 
@@ -326,10 +327,11 @@ class Stage(object):
 
     def _make_evaluator(self):
         '''
-        Creates a new Evaluator object that knows how to properly
-        evaluate instances for this stage. Must be overridden.
+        Creates a new Evaluator object that knows how to properly evaluate
+        instances for this stage. Must be overridden for any stage that supports
+        evaluation.
         '''
-        raise NotImplementedError
+        return None
 
     def _consume_attributes(self, instance):
         for attribute_name in self.consumed_attributes:
