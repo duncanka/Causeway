@@ -1,9 +1,14 @@
 from __future__ import absolute_import
 import numpy as np
+import numpy.ma as ma
 from scipy.sparse import lil_matrix
 import unittest
 
-from util.scipy import add_rows_and_cols_to_matrix, dreyfus_wagner, longest_path_in_tree, UnconnectedNodesError
+from util.scipy import add_rows_and_cols_to_matrix, dreyfus_wagner, longest_path_in_tree, UnconnectedNodesError, \
+    CycleError, tarjan_topological_sort, get_incoming_indices, \
+    get_outgoing_indices
+from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix
+
 
 class ScipyTestCase(unittest.TestCase):
     def assertArraysEqual(self, array1, array2):
@@ -226,6 +231,93 @@ class LongestPathTestCase(ScipyTestCase):
         self.assertArraysEqual(longest_path, np.array([0]))
         longest_path = longest_path_in_tree(graph, 1)
         self.assertArraysEqualOrReversed(longest_path, np.array([1, 2]))
+
+
+_ALL_GRAPH_GENERATORS = [
+    np.zeros, lambda *args, **kwargs: ma.masked_array(np.zeros(*args,
+                                                               **kwargs)),
+    bsr_matrix, coo_matrix, csc_matrix, csr_matrix, lil_matrix]
+
+def _generate_graph(graph_generator, size, edges):
+    generate_and_convert = [bsr_matrix, coo_matrix, csc_matrix, csr_matrix]
+    if graph_generator in generate_and_convert:
+        graph = _generate_graph(lil_matrix, size, edges)
+        method = getattr(graph, 'to' + graph_generator.__name__.split('_')[0])
+        return method()
+    else:
+        graph = graph_generator(size, dtype=bool)
+        for source, target in edges:
+            graph[source, target] = True
+        return graph
+
+class EdgeFinderTest(unittest.TestCase):
+    def _test_on_wikipedia_topological_sort_example(self, edge_fn,
+                                                    nodes_with_relatives):
+        # Wikipedia topological sort example
+        for graph_generator in _ALL_GRAPH_GENERATORS:
+            edges = [(0, 3), (1, 3), (1, 4), (2, 4), (2, 7), (3, 5), (3, 6),
+                     (4, 6)]
+            graph = _generate_graph(graph_generator, (8, 8), edges)
+
+            for node, relatives in nodes_with_relatives:
+                retrieved_relatives = edge_fn(graph, node)
+                retrieved_relatives = set(retrieved_relatives)
+                relatives = set(relatives)
+                self.assertEqual(
+                    relatives, retrieved_relatives,
+                    ('%s != %s (node: %d; graph type: %s)' %
+                     (retrieved_relatives, relatives, node,
+                      graph.__class__.__name__)))
+
+    def test_incoming_edges(self):
+        node_parent_pairs = [(0, []), (1, []), (2, []), (3, [0, 1]),
+                             (4, [1, 2]), (5, [3]), (6, [3, 4]), (7, [2])]
+        self._test_on_wikipedia_topological_sort_example(
+            get_incoming_indices, node_parent_pairs)
+
+    def test_outgoing_edges(self):
+        node_child_pairs = [(0, [3]), (1, [3, 4]), (2, [4, 7]), (3, [5, 6]),
+                             (4, [6]), (5, []), (6, []), (7, [])]
+        self._test_on_wikipedia_topological_sort_example(
+            get_outgoing_indices, node_child_pairs)
+
+
+class TopologicalSortTest(unittest.TestCase):
+    def assert_sorted_order(self, sorted_nodes, node_pairs, graph_format):
+        for earlier_node, later_node in node_pairs:
+            self.assertLess(
+                sorted_nodes.index(earlier_node),
+                sorted_nodes.index(later_node),
+                ('Incorrect sort order: node %d should be before %d (in format'
+                 ' %s)' % (earlier_node, later_node, graph_format.__name__)))
+
+    def test_one_level_binary_tree(self):
+        for graph_generator in _ALL_GRAPH_GENERATORS:
+            edges = [(0, 1), (0, 2)]
+            graph = _generate_graph(graph_generator, (3, 3), edges)
+            sorted_nodes = tarjan_topological_sort(graph)
+            self.assert_sorted_order(sorted_nodes, [(0, 1), (0, 2)],
+                                     graph.__class__)
+
+    def test_wikipedia_example(self):
+        for graph_generator in _ALL_GRAPH_GENERATORS:
+            edges = [(0, 3), (1, 3), (1, 4), (2, 4), (2, 7), (3, 5), (3, 6),
+                     (4, 6)]
+            graph = _generate_graph(graph_generator, (8, 8), edges)
+
+            sorted_nodes = tarjan_topological_sort(graph)
+            ordered_pairs = [
+                (0, 3), (0, 5), (0, 6), (1, 3), (1, 5), (1, 6), (1, 4), (2, 4),
+                (2, 6), (2, 7), (3, 5), (3, 6), (4, 6)]
+            self.assert_sorted_order(sorted_nodes, ordered_pairs,
+                                     graph.__class__)
+
+    def test_complains_about_dag(self):
+        for graph_generator in _ALL_GRAPH_GENERATORS:
+            edges = [[1, 0], [0, 1]]
+            graph = _generate_graph(graph_generator, (3, 3), edges)
+            self.assertRaises(CycleError,
+                              lambda: tarjan_topological_sort(graph))
 
 
 if __name__ == "__main__":

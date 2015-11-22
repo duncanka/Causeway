@@ -1,10 +1,11 @@
 from __future__ import absolute_import
 from itertools import izip
 import numpy as np
+import numpy.ma as ma
 from scipy.sparse import lil_matrix
 from scipy.sparse.csgraph import shortest_path, breadth_first_order
 
-from util import pairwise
+from util import pairwise, Enum
 
 def add_rows_and_cols_to_matrix(matrix, indices_to_add):
     '''
@@ -482,3 +483,59 @@ def longest_path_in_tree(tree, start_from=0):
     # it's often more aesthetically appealing to have the path go the other
     # direction, so we reverse what we get from tracing predecessors.
     return path[::-1]
+
+
+def get_incoming_indices(graph, node):
+    if isinstance(graph, np.ndarray) or isinstance(graph, ma.masked_array):
+        incoming = graph[:, node]
+    else:
+        incoming = graph.getcol(node)
+    return incoming.nonzero()[0]
+
+
+def get_outgoing_indices(graph, node):
+    if isinstance(graph, np.ndarray) or isinstance(graph, ma.masked_array):
+        incoming = graph[node, :]
+        return incoming.nonzero()[0] # ndarray-like nonzero produces only 1 dim
+    else:
+        incoming = graph.getrow(node)
+        return incoming.nonzero()[1]
+
+
+class CycleError(Exception):
+    def __init__(self):
+        super(Exception, self).__init__("Cycle detected; graph is not a DAG")
+
+
+def topological_sort(tree, algorithm='tarjan'):
+    return tarjan_topological_sort(tree)
+    
+
+_SORT_MARKS = Enum(['Unvisited', 'Visiting', 'Visited'])
+def tarjan_topological_sort(tree):
+    sorted_nodes = []
+    # assumes a square matrix, which a graph should be
+    marks = [_SORT_MARKS.Unvisited] * tree.shape[0]
+
+    def visit(node):
+        if isinstance(node, np.ndarray):
+            raise Exception()
+        if marks[node] == _SORT_MARKS.Visiting:
+            raise CycleError()
+        if marks[node] != _SORT_MARKS.Visited:
+            marks[node] = _SORT_MARKS.Visiting
+            for child in get_outgoing_indices(tree, node):
+                visit(child)
+            marks[node] = _SORT_MARKS.Visited
+            sorted_nodes.append(node)
+
+    next_node = 0
+    try:
+        while True:
+            visit(next_node)
+            next_node = marks.index(_SORT_MARKS.Unvisited)
+    except ValueError: # Unvisited was not found -> all have been visited
+        pass
+
+    sorted_nodes.reverse()
+    return sorted_nodes
