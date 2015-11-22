@@ -22,9 +22,6 @@ try:
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
-# TODO: convert readers into the more Pythonic paradigm of essentially acting
-# like generators.
-
 class Reader(object):
     def __init__(self, filepath=None):
         self._file_stream = None
@@ -52,16 +49,12 @@ class Reader(object):
         if self._file_stream:
             self._file_stream.close()
 
+    # TODO: convert into the more Pythonic paradigm of next()
     def get_next(self):
         raise NotImplementedError
 
     def get_all(self):
-        instances = []
-        instance = self.get_next()
-        while instance is not None:
-            instances.append(instance)
-            instance = self.get_next()
-        return instances
+        return list(self)
 
 
 class SentenceReader(Reader):

@@ -25,4 +25,17 @@ class ReaderTest(unittest.TestCase):
                 lines = [line for line in reader]
 
             self.assertEqual(true_lines[:-1], lines)
-            self.assertEqual([call(), call(), call()], reader.get_next.call_args_list)
+            self.assertEqual([call(), call(), call()],
+                             reader.get_next.call_args_list)
+
+    def test_get_all(self):
+        true_lines = ['Hi', 'there', None]
+        with patch.multiple(Reader, open=DEFAULT, get_next=DEFAULT,
+                            close=DEFAULT) as MockReader:
+            MockReader['get_next'].side_effect = true_lines
+            reader = Reader('/test/path.txt')
+            lines = reader.get_all()
+
+            self.assertEqual(true_lines[:-1], lines)
+            self.assertEqual([call(), call(), call()],
+                             reader.get_next.call_args_list)
