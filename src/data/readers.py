@@ -26,8 +26,22 @@ except DuplicateFlagError as e:
 # like generators.
 
 class Reader(object):
-    def __init__(self):
+    def __init__(self, filepath=None):
         self._file_stream = None
+        if filepath:
+            self.open(filepath)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def __iter__(self):
+        next_instance = self.get_next()
+        while next_instance is not None:
+            yield next_instance
+            next_instance = self.get_next()
 
     def open(self, filepath):
         self.close()
