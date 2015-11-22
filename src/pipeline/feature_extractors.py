@@ -2,6 +2,11 @@ import itertools
 
 from util import Enum, merge_dicts
 
+
+class FeatureExtractionError(Exception):
+    pass
+
+
 class FeatureExtractor(object):
     FeatureTypes = Enum(['Categorical', 'Numerical']) # Numerical includes bool
 

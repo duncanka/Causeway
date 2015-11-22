@@ -1,9 +1,12 @@
 from collections import defaultdict
+from gflags import UnrecognizedFlag
+from mock import MagicMock
 import numpy as np
 from scipy.sparse import lil_matrix, vstack
 import unittest
 
-from pipeline.models import ClassBalancingModelWrapper
+from pipeline.feature_extractors import FeatureExtractor
+from pipeline.models import ClassBalancingModelWrapper, FeaturizedModel
 
 
 class SmallClassBalancingTest(unittest.TestCase):
@@ -83,3 +86,35 @@ class SmallClassBalancingTest(unittest.TestCase):
             self.data, self.labels, 10)
         # Rebalancing should have added 5 copies of the zero row, for a total of 8.
         self._test_for_count(data, labels, 8)
+
+
+class FeaturizedModelTest(unittest.TestCase):
+    def setUp(self):
+        self.identity_extractor = FeatureExtractor(
+            'identity', lambda x: x, FeatureExtractor.FeatureTypes.Categorical)
+        self.add1_extractor = FeatureExtractor(
+            'add1', lambda x: x + 1, FeatureExtractor.FeatureTypes.Categorical)
+        self.model = FeaturizedModel(
+            int, [self.identity_extractor, self.add1_extractor],
+            ['identity', 'add1', 'identity:add1'])
+        self.model._featurized_train = MagicMock(return_value=None)
+
+    def test_subfeature_names(self):
+        self.model.train([1, 2])
+        subfeature_names = set(
+            self.model.feature_name_dictionary.names_to_ids.keys())
+        correct = set(['identity=1', 'identity=2', 'add1=2', 'add1=3',
+                       'identity=1:add1=2', 'identity=2:add1=3',
+                       'identity=2:add1=2', 'identity=1:add1=3'])
+        self.assertSetEqual(correct, subfeature_names)
+
+    def test_complains_for_invalid_feature_names(self):
+        def set_invalid_feature():
+            self.model = FeaturizedModel(int, [self.identity_extractor],
+                                         ['add1'])
+        self.assertRaises(UnrecognizedFlag, set_invalid_feature)
+
+        def set_invalid_combination():
+            self.model = FeaturizedModel(int, [self.identity_extractor],
+                                         ['identity:add1'])
+        self.assertRaises(UnrecognizedFlag, set_invalid_combination)

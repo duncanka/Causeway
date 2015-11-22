@@ -1,6 +1,7 @@
 """ Define standard machine-learned model framework for pipelines. """
 
-from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError, UnrecognizedFlag
+import itertools
 import logging
 import numpy as np
 import pycrfsuite
@@ -8,8 +9,9 @@ from scipy.sparse import lil_matrix, vstack
 import time
 from types import MethodType
 
+from pipeline.feature_extractors import FeatureExtractor, FeatureExtractionError
 from util import NameDictionary
-from util.metrics import diff_binary_vectors
+# from util.metrics import diff_binary_vectors
 
 try:
     DEFINE_bool(
@@ -31,8 +33,46 @@ class Model(object):
     def test(self, parts):
         raise NotImplementedError
 
+    def save(self, filepath):
+        raise NotImplementedError
+
+    def load(self, filepath):
+        raise NotImplementedError
+
 
 class FeaturizedModel(Model):
+    class ConjoinedFeatureExtractor(FeatureExtractor):
+        '''
+        A FeaturizedModel allows combining features. This class provides the
+        necessary functionality of combining the FeatureExtractors' outputs.
+        '''
+        SEPARATOR = ':'
+
+        def __init__(self, name, extractors):
+            self.name = name
+            self.feature_type = self.FeatureTypes.Categorical
+            for extractor in extractors:
+                if extractor.feature_type != self.FeatureTypes.Categorical:
+                    raise FeatureExtractionError(
+                        "Only categorical features can be conjoined (attempted"
+                        " to conjoin %s)" % [e.name for e in extractors])
+            self._extractors = extractors
+
+        def extract_subfeature_names(self, parts):
+            subfeature_name_components = [
+                extractor.extract_subfeature_names(parts)
+                for extractor in self._extractors]
+            return [self.SEPARATOR.join(components) for components
+                    in itertools.product(*subfeature_name_components)]
+
+        def train(self, parts):
+            for extractor in self._extractors:
+                extractor.train(parts)
+
+        def extract(self, part):
+            return self.SEPARATOR.join([extractor.extract(part)
+                                        for extractor in self._extractors])
+
     def __init__(self, part_type, feature_extractors, selected_features,
                  save_featurized=False):
         """
@@ -40,14 +80,39 @@ class FeaturizedModel(Model):
             is for.
         feature_extractors is a list of
             `pipeline.feature_extractors.FeatureExtractor` objects.
-        selected_features is a list of names of features to extract.
+        selected_features is a list of names of features to extract. Names may
+            be combinations of feature names, separated by ':'.
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
         """
         super(FeaturizedModel, self).__init__(part_type)
         self.feature_name_dictionary = NameDictionary()
-        self.feature_extractors = [extractor for extractor in feature_extractors
-                                   if extractor.name in selected_features]
+
+        self.feature_extractors = []
+        for feature_name in selected_features:
+            extractor_names = feature_name.split(
+                self.ConjoinedFeatureExtractor.SEPARATOR)
+            if len(extractor_names) > 1:
+                extractors = [extractor for extractor in feature_extractors
+                              if extractor.name in extractor_names]
+                if len(extractors) != len(extractor_names):
+                    raise UnrecognizedFlag("Invalid conjoined feature name: %s"
+                                           % feature_name)
+                self.feature_extractors.append(
+                    self.ConjoinedFeatureExtractor(feature_name, extractors))
+            else:
+                try:
+                    # Find the correct extractor with a generator, which will
+                    # stop searching once it's found.
+                    extractor_generator = (
+                        extractor for extractor in feature_extractors
+                        if extractor.name == feature_name)
+                    extractor = extractor_generator.next()
+                    self.feature_extractors.append(extractor)
+                except StopIteration:
+                    raise UnrecognizedFlag("Invalid feature name: %s"
+                                           % feature_name)
+
         self.feature_training_data = None
         self.save_featurized = save_featurized
 
