@@ -68,7 +68,7 @@ class HeadFindingTests(unittest.TestCase):
         sentence = self.sentences[3]
         self._check_head(
             [sentence.tokens[1]] + sentence.tokens[6:10],
-            'i to find my daughter', 7, 'find')
+            'I to find my daughter', 7, 'find')
         # Check in the other order, just to make sure that it's not dependent on
         # the order in which the tokens are considered. (Since this test
         # requires the head finder to consider things other than tree depth,
@@ -76,7 +76,7 @@ class HeadFindingTests(unittest.TestCase):
         # symmetrically.)
         self._check_head(
             sentence.tokens[6:10] + [sentence.tokens[1]],
-            'to find my daughter i', 7, 'find')
+            'to find my daughter I', 7, 'find')
         
     def testHeadDuplicatedAsChildsArg(self):
         sentence = self.sentences[4]
