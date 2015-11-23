@@ -13,7 +13,7 @@ from causality_pipelines import StanfordNERStage
 try:
     DEFINE_list('regex_cc_features',
                 ['cause_pos', 'effect_pos', 'wordsbtw', 'args_dep_path',
-                 'args_dep_len', 'connective', 'tenses', 'pattern'],
+                 'args_dep_len', 'connective', 'tenses'],
                 'Features for regex-based candidate classifier')
     DEFINE_integer('regex_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -41,6 +41,7 @@ class RegexClassifierPart(ClassifierPart):
                            if possible_causation.cause else None)
         self.effect_head = (sentence.get_head(possible_causation.effect)
                            if possible_causation.effect else None)
+
 
 class RegexClassifierModel(ClassifierModel):
     def __init__(self, classifier):
@@ -131,7 +132,7 @@ RegexClassifierModel.FEATURE_EXTRACTORS = [
     FeatureExtractor('connective',
                      lambda part: ' '.join(
                         [t.lemma for t in part.possible_causation.connective])),
-    SetValuedFeatureExtractor(
+    SetValuedFeatureExtractor(# TODO: fix me
         'patterns', lambda observation: observation.part.matching_patterns),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
