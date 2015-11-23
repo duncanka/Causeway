@@ -108,7 +108,7 @@ class SetValuedFeatureExtractor(FeatureExtractor):
     on multiple discrete values simultaneously -- i.e., the feature is
     set-valued -- but where we want to represent that set as a collection of
     individual indicator features, rather than a single indicator for each
-    possible set value.  
+    possible set value.
     '''
 
     def __init__(self, name, extractor_fn):

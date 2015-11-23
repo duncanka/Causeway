@@ -105,6 +105,7 @@ def _get_printable_connective_word(word):
         return word.upper()
 
 def _wrapped_sentence_highlighting_instance(instance):
+    # TODO: use GFlags wrapping machinery?
     sentence = instance.sentence
     words = [(_get_printable_connective_word(t.original_text)
               if t in instance.connective else t.original_text)

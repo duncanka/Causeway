@@ -146,41 +146,25 @@ class FeaturizedModel(Model):
         self._featurized_test(parts)
 
     def _featurized_train(self, parts):
+        '''
+        The exact training procedure depends on the type of model. This method
+        must be overridden by subclasses.
+        '''
         raise NotImplementedError
 
     def _featurized_test(self, parts):
+        '''
+        The exact testing procedure depends on the type of model. This method
+        must be overridden by subclasses.
+        '''
         raise NotImplementedError
-
-
-class ClassifierModel(FeaturizedModel):
-    def __init__(self, part_type, feature_extractors, selected_features,
-                 classifier):
-        """
-        Note that classifier must support the fit and predict methods in the
-        style of scikit-learn.
-        """
-        super(ClassifierModel, self).__init__(part_type, feature_extractors,
-                                              selected_features)
-        self.classifier = classifier
-
-    def _featurized_train(self, parts):
-        features, labels = self._featurize(parts)
-        logging.info('Fitting classifier...')
-        self.classifier.fit(features, labels)
-        logging.info('Done fitting classifier.')
-
-    def _featurized_test(self, parts):
-        features, gold_labels = self._featurize(parts)
-        if self.save_featurized:
-            self.gold_labels = gold_labels
-        labels = self.classifier.predict(features)
-        for part, label in zip(parts, labels):
-            part.label = label
-        # logging.debug('%d data points' % len(gold_labels))
-        # logging.debug('Raw classifier performance:')
-        # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))
 
     def _featurize(self, parts):
+        '''
+        The process of generating a feature matrix from a bunch of instances
+        is common to all models, even though they may do different things with
+        the resulting matrix.
+        '''
         logging.info('Featurizing...')
         start_time = time.time()
 
@@ -189,8 +173,6 @@ class ClassifierModel(FeaturizedModel):
         features = lil_matrix(
             (len(relevant_parts), len(self.feature_name_dictionary)),
             dtype=np.float32) # TODO: Make this configurable?
-        labels = np.fromiter((part.label for part in relevant_parts),
-                             int, len(relevant_parts))
 
         for extractor in self.feature_extractors:
             feature_values_by_part = extractor.extract_all(parts)
@@ -213,8 +195,46 @@ class ClassifierModel(FeaturizedModel):
         logging.info('Done featurizing in %0.2f seconds' % elapsed_seconds)
         if self.save_featurized:
             self.features = features
+        return features
+
+
+class ClassifierModel(FeaturizedModel):
+    def __init__(self, part_type, feature_extractors, selected_features,
+                 classifier):
+        """
+        Note that classifier must support the fit and predict methods in the
+        style of scikit-learn.
+        """
+        super(ClassifierModel, self).__init__(part_type, feature_extractors,
+                                              selected_features)
+        self.classifier = classifier
+
+    def _featurize(self, parts):
+        features = super(FeaturizedModel, self)._featurize(parts)
+        relevant_parts = [part for part in parts if isinstance(part,
+                                                               self.part_type)]
+        labels = np.fromiter((part.label for part in relevant_parts),
+                             int, len(relevant_parts))
+        if self.save_featurized:
             self.labels = labels
         return features, labels
+
+    def _featurized_train(self, parts):
+        features, labels = self._featurize(parts)
+        logging.info('Fitting classifier...')
+        self.classifier.fit(features, labels)
+        logging.info('Done fitting classifier.')
+
+    def _featurized_test(self, parts):
+        features, gold_labels = self._featurize(parts)
+        if self.save_featurized:
+            self.gold_labels = gold_labels
+        labels = self.classifier.predict(features)
+        for part, label in zip(parts, labels):
+            part.label = label
+        # logging.debug('%d data points' % len(gold_labels))
+        # logging.debug('Raw classifier performance:')
+        # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))
 
 
 class ClassifierPart(object):
