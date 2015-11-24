@@ -2,7 +2,7 @@ import os
 from sklearn import tree
 import subprocess
 import sys
-from pipeline.models import ClassBalancingModelWrapper
+from pipeline.models import ClassBalancingClassifierWrapper
 
 def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot',
              open_imgs=True):
@@ -25,7 +25,7 @@ def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot',
 
 def vis_pipeline_trees(pipeline, stage_num, model_num=0, open_imgs=True):
     model = pipeline.stages[stage_num].models[model_num]
-    if isinstance(model.classifier, ClassBalancingModelWrapper):
+    if isinstance(model.classifier, ClassBalancingClassifierWrapper):
         classifier = model.classifier.classifier
     else:
         classifier = model.classifier

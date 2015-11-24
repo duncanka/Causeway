@@ -16,9 +16,9 @@ from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
 from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import ParsedSentence
-from data.readers import DirectoryReader, StandoffReader
+from data.readers import DirectoryReader, CausalityStandoffReader
 from pipeline import Pipeline
-from pipeline.models import ClassBalancingModelWrapper
+from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
 import subprocess
 
@@ -117,13 +117,13 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'forest':
         candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
     
-    candidate_classifier = ClassBalancingModelWrapper(candidate_classifier,
-                                                      FLAGS.rebalance_ratio)
+    candidate_classifier = ClassBalancingClassifierWrapper(
+        candidate_classifier, FLAGS.rebalance_ratio)
 
     stages = get_stages(candidate_classifier)
 
     causality_pipeline = Pipeline(
-        stages, DirectoryReader((r'.*\.ann$',), StandoffReader()),
+        stages, DirectoryReader((r'.*\.ann$',), CausalityStandoffReader()),
         copy_fn=ParsedSentence.shallow_copy_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:

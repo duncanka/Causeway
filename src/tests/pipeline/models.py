@@ -6,7 +6,7 @@ from scipy.sparse import lil_matrix, vstack
 import unittest
 
 from pipeline.feature_extractors import FeatureExtractor
-from pipeline.models import ClassBalancingModelWrapper, FeaturizedModel
+from pipeline.models import ClassBalancingClassifierWrapper, FeaturizedModel
 
 
 class SmallClassBalancingTest(unittest.TestCase):
@@ -22,7 +22,7 @@ class SmallClassBalancingTest(unittest.TestCase):
 
     def test_unchanged_for_low_ratios(self):
         for ratio in [0.5, 1.0]:
-            data, labels = ClassBalancingModelWrapper.rebalance(
+            data, labels = ClassBalancingClassifierWrapper.rebalance(
                 self.data, self.labels, ratio)
             self.assertEqual(data.shape, self.data.shape)
             self.assertEqual(labels.shape, self.labels.shape)
@@ -56,19 +56,19 @@ class SmallClassBalancingTest(unittest.TestCase):
         self.assertEqual(counts_by_row_val[(10.,11.,12.)], 1)
 
     def test_unlimited_balancing(self):
-        data, labels = ClassBalancingModelWrapper.rebalance(
+        data, labels = ClassBalancingClassifierWrapper.rebalance(
             self.data, self.labels)
         self._test_for_count(data, labels, 3)
 
     def test_normal_balancing(self):
         for ratio in [2.0, 3.0]:
-            data, labels = ClassBalancingModelWrapper.rebalance(
+            data, labels = ClassBalancingClassifierWrapper.rebalance(
                 self.data, self.labels, ratio)
             self._test_for_count(data, labels, int(ratio))
 
     def test_fractional_balancing(self):
         for ratio in [1.7, 2.2]:
-            data, labels = ClassBalancingModelWrapper.rebalance(
+            data, labels = ClassBalancingClassifierWrapper.rebalance(
                 self.data, self.labels, ratio)
             self._test_for_count(data, labels, int(ratio))
 
@@ -82,7 +82,7 @@ class SmallClassBalancingTest(unittest.TestCase):
                 + ([[13, 13, 13]] * 5),
             format='lil')
         self.labels = np.append(self.labels, [0, 0] + [1] * 5)
-        data, labels = ClassBalancingModelWrapper.rebalance(
+        data, labels = ClassBalancingClassifierWrapper.rebalance(
             self.data, self.labels, 10)
         # Rebalancing should have added 5 copies of the zero row, for a total of 8.
         self._test_for_count(data, labels, 8)

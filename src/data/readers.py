@@ -197,22 +197,22 @@ class DirectoryReader(Reader):
                     return
 
 
-class StandoffReader(Reader):
+class CausalityStandoffReader(Reader):
     ''' Returns ParsedSentence instances, with CausationInstances added. '''
     def __init__(self):
-        super(StandoffReader, self).__init__()
+        super(CausalityStandoffReader, self).__init__()
         self.sentence_reader = SentenceReader()
         self.instances = []
         self.iterator = iter([])
 
     def open(self, filepath):
-        super(StandoffReader, self).open(filepath)
+        super(CausalityStandoffReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
         self.sentence_reader.open(base_path + '.txt')
         self.__read_all_instances()
 
     def close(self):
-        super(StandoffReader, self).close()
+        super(CausalityStandoffReader, self).close()
         # self.sentence_reader gets closed immediately after opening, so we
         # don't need to bother closing it again.
         self.instances = []
@@ -343,7 +343,7 @@ class StandoffReader(Reader):
             annotation_offsets.append(tuple(index_pair))
 
         # Create the new annotation.
-        containing_sentence = StandoffReader.find_containing_sentence(
+        containing_sentence = CausalityStandoffReader.find_containing_sentence(
             annotation_offsets, self.instances, line)
         self.__raise_warning_if(
             containing_sentence is None,

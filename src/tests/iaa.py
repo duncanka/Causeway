@@ -5,7 +5,7 @@ import gflags
 import os
 import unittest
 
-from data.readers import StandoffReader
+from data.readers import CausalityStandoffReader
 from iaa import CausalityMetrics
 from tests import get_sentences_from_file
 from util.metrics import ClassificationMetrics, AccuracyMetrics
@@ -51,7 +51,7 @@ class CausalityMetricsTest(unittest.TestCase):
 
     def setUp(self):
         # Unmodified file contains 7 instances.
-        self.sentences = get_sentences_from_file(StandoffReader,
+        self.sentences = get_sentences_from_file(CausalityStandoffReader,
                                                  'IAATest', 'iaa_test.ann')
         # We have 5 unmodified connectives; 1 connective with an added fragment
         # (still qualifies for partial overlap, so 1 FN + 1 FP if matching
@@ -61,7 +61,7 @@ class CausalityMetricsTest(unittest.TestCase):
         # We also have 1 cause adjusted to partially overlap; 1 cause deleted;
         # and 1 cause changed to a completely different span.
         self.modified_sentences = get_sentences_from_file(
-            StandoffReader, 'IAATest', 'iaa_test_modified.ann')
+            CausalityStandoffReader, 'IAATest', 'iaa_test_modified.ann')
 
     def test_same_annotations_metrics(self):
         correct_connective_metrics = ClassificationMetrics(7, 0, 0)

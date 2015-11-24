@@ -243,7 +243,7 @@ class ClassifierPart(object):
         self.label = int(label)
 
 
-class ClassBalancingModelWrapper(object):
+class ClassBalancingClassifierWrapper(object):
     def __init__(self, classifier, ratio=float('inf')):
         self.classifier = classifier
         self.ratio = ratio

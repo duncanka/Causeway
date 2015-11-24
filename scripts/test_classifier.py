@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline as SKLPipeline
 from sklearn.feature_selection.univariate_selection import SelectPercentile, \
     f_classif
 
-from pipeline.models import ClassBalancingModelWrapper
+from pipeline.models import ClassBalancingClassifierWrapper
 from util.metrics import diff_binary_vectors, ClassificationMetrics
 from sklearn.tree.tree import DecisionTreeClassifier
 import vis_features
@@ -29,7 +29,7 @@ labels_test_gold.shape = (labels_test_gold.shape[1],)
 
 print "Loaded data; testing classifier..."
 
-features_train, labels_train = ClassBalancingModelWrapper.rebalance(
+features_train, labels_train = ClassBalancingClassifierWrapper.rebalance(
     features_train, labels_train, ratio=2)
 
 

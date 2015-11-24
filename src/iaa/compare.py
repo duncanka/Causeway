@@ -5,7 +5,7 @@ import itertools
 import logging
 import sys
 
-from data.readers import DirectoryReader, StandoffReader
+from data.readers import DirectoryReader, CausalityStandoffReader
 from iaa import CausalityMetrics, print_indented
 
 try:
@@ -91,7 +91,7 @@ def main(argv):
         level=logging.WARN)
     logging.captureWarnings(True)
 
-    reader = DirectoryReader(FLAGS.iaa_file_regexes, StandoffReader())
+    reader = DirectoryReader(FLAGS.iaa_file_regexes, CausalityStandoffReader())
     all_instances = []
     for path in FLAGS.iaa_paths:
         reader.open(path)
