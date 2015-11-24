@@ -210,7 +210,7 @@ class ClassifierModel(FeaturizedModel):
         self.classifier = classifier
 
     def _featurize(self, parts):
-        features = super(FeaturizedModel, self)._featurize(parts)
+        features = super(ClassifierModel, self)._featurize(parts)
         relevant_parts = [part for part in parts if isinstance(part,
                                                                self.part_type)]
         labels = np.fromiter((part.label for part in relevant_parts),
