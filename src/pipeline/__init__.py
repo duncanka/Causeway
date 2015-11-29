@@ -7,6 +7,7 @@ import logging
 from numpy import random
 import sys
 
+from data import SentencesDocument
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
 
@@ -29,7 +30,6 @@ try:
                    ' negative value indicates leave-one-out CV.')
     DEFINE_integer('cv_debug_stop_after', None,
                    'Number of CV rounds to stop after (for debugging)')
-    DEFINE_integer('test_batch_size', 1024, 'Batch size for testing.')
     DEFINE_boolean('cv_print_fold_results', True,
                    "Whether to print each fold's results as they are computed")
 except DuplicateFlagError as e:
@@ -39,32 +39,39 @@ except DuplicateFlagError as e:
 class Pipeline(object):
     def __init__(self, stages, reader, writer=None, copy_fn=deepcopy):
         '''
-        copy_fn is the function to use when copying over instances to avoid
+        copy_fn is the function to use when copying over documents to avoid
         lasting impacts of modification during testing. Defaults to built-in
         deep copy; providing an alternative function can make copying faster if
         not all elements need to be copied to protect originals from
         modification. Clients should make certain that the copy function
-        provided duplicates all instance properties that may be modified by
+        provided duplicates all document properties that may be modified by
         testing at *any point* in the pipeline. 
         '''
         self.stages = listify(stages)
         self.reader = reader
-        self.writer = writer
+        self.writer = writer # TODO: make and test writers
         self._evaluators_by_stage = []
         self._copy_fn = copy_fn
 
-    def _read_instances(self, paths=None):
-        logging.info("Creating instances...")
-        instances = []
+    def _read_documents(self, paths=None):
+        documents = []
         for path in paths:
-            logging.info('Reading instances from %s' % path)
+            logging.info('Reading documents from %s' % path)
             self.reader.open(path)
-            instances.extend(self.reader.get_all())
+            documents.extend(self.reader.get_all())
         self.reader.close()
-        return instances
+        return documents
 
-    def cross_validate(self, num_folds=None):
+    @staticmethod
+    def weight_doc_by_sentences(document): # a common document weight function
+        return len(document.sentences)
+
+    def cross_validate(self, document_weight_fn=None, num_folds=None):
         '''
+        By default, divides documents up into num_folds folds of equal number.
+        If document_weight_fn is provided, it is used to weight documents in each
+        fold (e.g., by counting the number of sentences or words).
+
         Returns a list of results, organized by stage. Results are also saved in
         self.eval_results. Results are aggregated across all folds using the
         aggregator functions provided by the stage's evaluators (see
@@ -79,11 +86,17 @@ class Pipeline(object):
                          % (FLAGS.cv_debug_stop_after,
                             '' if FLAGS.cv_debug_stop_after == 1 else 's'))
 
-        instances = self._read_instances(FLAGS.train_paths + FLAGS.test_paths)
-        random.shuffle(instances)
+        documents = self._read_documents(FLAGS.train_paths + FLAGS.test_paths)
+        # TODO: investigate if there's a way to do CV at the sub-document level.
+        random.shuffle(documents)
         if num_folds < 0:
-            num_folds = len(instances)
-        folds = partition(instances, num_folds)
+            num_folds = len(documents)
+        document_weights = ([document_weight_fn(d) for d in documents]
+                            if document_weight_fn else None)
+        folds = partition(documents, num_folds, document_weights)
+
+        # TODO: delete me
+        print [sum([document_weight_fn(d) for d in fold]) for fold in folds]
         results = [[] for _ in self.stages] # each list holds results by fold
 
         for i, fold in enumerate(folds):
@@ -94,19 +107,19 @@ class Pipeline(object):
             self.train(training)
 
             # Evaluation copies the data for testing, so we don't have to worry
-            # about overwriting our original instances.
+            # about overwriting our original documents.
             fold_results = self.evaluate(testing)
 
             if FLAGS.cv_print_fold_results:
                 print "Fold", i + 1, "results:"
 
-            for stage, stage_results, stage_result in zip(
+            for stage, stage_results, stage_fold_result in zip(
                 self.stages, results, fold_results):
-                stage_results.append(stage_result)
+                stage_results.append(stage_fold_result)
                 if FLAGS.cv_print_fold_results:
                     print_indented(1, 'Stage "', stage.name, '" results:',
                                    sep='')
-                    self.print_stage_results(2, stage_result)
+                    self.print_stage_results(2, stage_fold_result)
             sys.stdout.flush() # make stage results visible immediately
 
             if (FLAGS.cv_debug_stop_after is not None
@@ -138,27 +151,29 @@ class Pipeline(object):
                            stage.name, '":', sep='')
             self.print_stage_results(indent_baseline + 1, result)
 
-    def train(self, instances=None):
+    def train(self, documents=None):
         '''
-        Trains all stages in the pipeline. Each stage is trained on instances
+        Trains all stages in the pipeline. Each stage is trained on documents
         on which the previous stage has been tested on, so that it sees a
-        realistic view of what its inputs will look like. The instance objects
-        provided in instances are not modified in this process.
+        realistic view of what its inputs will look like. The elements of the
+        documents argument, if provided, are not modified in this process.
         '''
-        if instances is None:
-            instances = self._read_instances(FLAGS.train_paths)
-            logging.info("%d instances found" % len(instances))
+        if documents is None:
+            documents = self._read_documents(FLAGS.train_paths)
+            logging.info("%d documents found" % len(documents))
         else:
-            # Copy over instances so that when test() is called below, it won't
+            # Copy over documents so that when test() is called below, it won't
             # overwrite the originals. This is especially important during
             # cross-validation, when we could otherwise overwrite data that will
             # later be used again for both training and testing.
-            instances = [self._copy_fn(instance) for instance in instances]
-            logging.info("Training on %d instances" % len(instances))
+            documents = [self._copy_fn(document) for document in documents]
+            logging.info("Training on %d documents" % len(documents))
 
         for stage in self.stages:
             logging.info('Training stage "%s"...' % stage.name)
-            stage.train(instances)
+            instances_by_document = [stage._extract_instances(document, True)
+                                     for document in documents]
+            stage.train(documents, instances_by_document)
             logging.info('Finished training stage "%s"' % stage.name)
             # For training, each stage needs a realistic view of what its inputs
             # will look like. So now that we've trained the stage, if there is
@@ -168,36 +183,47 @@ class Pipeline(object):
             if stage is not self.stages[-1]:
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
-                stage.test(instances)
+                for document, instances in zip(documents, instances_by_document):
+                    stage.test(document, instances)
                 logging.info('Done testing stage "%s"' % stage.name)
-            else: # consume attributes because it won't happen via test()
-                for instance in instances:
-                    stage._consume_attributes(instance)
 
-    def evaluate(self, instances=FLAGS.test_batch_size):
+            # TODO: Fix attribute consumption
+            else: # consume attributes because it won't happen via test()
+                for document, instances in zip(documents,
+                                               instances_by_document):
+                    stage._consume_attributes(document, instances)
+
+    def evaluate(self, documents):
         '''
-        Evaluates a single batch of instances. Returns a list of evaluation
-        metrics by stage.
+        Evaluates the pipeline on a collection of documents (by running the
+        pipeline and then letting the stages' evaluators compare the results to
+        the originals, which are assumed to have gold-standard labels). Returns
+        a list of evaluation metrics by stage.
         '''
         self._evaluators_by_stage = [stage._make_evaluator()
                                      for stage in self.stages]
-        self.test(instances)
+        self.test(documents)
         eval_results = [evaluator.complete_evaluation() if evaluator else None
                         for evaluator in self._evaluators_by_stage]
 
         self._evaluators_by_stage = []
         return eval_results
 
-    def __test_instances(self, instances):
-        original_instances = instances
-        if self._evaluators_by_stage: # we're evaluating
-            instances = [self._copy_fn(instance) for instance in instances]
+    def __test_documents(self, documents):
+        original_documents = documents
+        if self._evaluators_by_stage: # we're evaluating, so avoid overwriting
+            documents = [self._copy_fn(document) for document in documents]
         for i, stage in enumerate(self.stages):
             logging.info('Testing stage "%s"...' % stage.name)
-            stage.test(instances)
-            if self._evaluators_by_stage and self._evaluators_by_stage[i]:
-                self._evaluators_by_stage[i].evaluate(instances,
-                                                      original_instances)
+            for document, original_document in zip(documents,
+                                                   original_documents):
+                instances = stage._extract_instances(document, False)
+                stage.test(document, instances)
+                if self._evaluators_by_stage and self._evaluators_by_stage[i]:
+                    original_instances = stage._extract_instances(
+                        original_document, False)
+                    self._evaluators_by_stage[i].evaluate(instances,
+                                                          original_instances)
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
@@ -210,59 +236,55 @@ class Pipeline(object):
                 assert (len(FLAGS.test_paths) == len(FLAGS.test_output_paths)
                         ), ("Test path count & test output path count conflict")
 
-    def __test_instances_from_reader(self, batch_size):
-        logging.info('Testing %d instances at a time' % batch_size)
+    def __test_documents_from_reader(self):
         if (not self.writer):
             logging.warn("No writer provided; pipeline results not written"
                          " anywhere")
 
         for path, output_path in zip(FLAGS.test_paths,
                                      FLAGS.test_output_paths):
+            print 'Testing files from %s...' % output_path
             self.reader.open(path)
             if self.writer:
                 self.writer.open(output_path)
 
-            last_batch = False
-            while not last_batch:
-                instances = []
-                for _ in xrange(batch_size):
-                    next_instance = self.reader.get_next()
-                    if not next_instance:
-                        last_batch = True
-                        break
-                    instances.append(next_instance)
-                self.__test_instances(instances)
+            for document in self.reader:
+                self.__test_documents([document])
                 if self.writer:
-                    self.writer.write(instances)
+                    self.writer.write(document)
 
         if self.writer:
             self.writer.close()
 
-    def test(self, instances=FLAGS.test_batch_size):
+    def test(self, documents=None):
         """
-        If instances is an integer, instances are read from the files specified
-        in the test_path flags, and the parameter is interpreted as the number
-        of instances to read/process per batch. If instances is a list, it is
-        used instead of reading instances from files, and the original instances
-        are modified during testing. (Note that the original instance are NOT
-        modified during evaluation.)
+        If a documents list is provided, it is used instead of reading documents
+        from files, and the original documents are modified during testing.
+        (Note that the original documents are NOT modified during evaluation.)
+        Otherwise, documents are read from the files specified in the test_path
+        flags, and the results are written by the pipeline's Writer (if it has
+        one). 
         """
 
-        if isinstance(instances, list):
-            print 'Testing', len(instances), 'instances'
-            self.__test_instances(instances)
-        else: # it's an int
-            batch_size = instances
+        if documents is not None:
+            print 'Testing', len(documents), 'documents'
+            self.__test_documents(documents)
+        else:
             self.__set_up_paths()
-            self.__test_instances_from_reader(batch_size)
+            self.__test_documents_from_reader()
 
 
 class Evaluator(object):
+    '''
+    Base class for evaluating models. Assumes that the instances extracted by
+    each stage for its model are all that's of interest for evaluation.
+    '''
+
     def evaluate(self, instances, original_instances):
         '''
-        Evaluates a single batch of instances. original_instances is the
-        list of instances unmodified by testing, and from which instances were
-        copied before testing.
+        Evaluates a batch of instances. original_instances is the list of
+        instances unmodified by testing, and from which instances were copied
+        before testing.
         '''
         raise NotImplementedError
 
@@ -288,54 +310,37 @@ class Evaluator(object):
 
 
 class Stage(object):
-    def __init__(self, name, models):
+    def __init__(self, name, model):
         self.name = name
-        self.models = listify(models)
+        self.model = model
 
-    def train(self, instances):
-        all_parts = []
+    def train(self, documents, instances_by_document):
+        '''
+        In general, the instances should encapsulate everything the model needs
+        to know to train, but just in case, the Stage is provided with
+        information on what documents the instances came from. Stages can
+        override this function to make use of this information.
+        '''
+        self.model.train(list(itertools.chain(*instances_by_document)))
+
+    def test(self, document, instances):
         for instance in instances:
-            all_parts.extend(self._extract_parts(instance, True))
-
-        for model in self.models:
-            model.train(all_parts)
-
-    def test(self, instances):
-        all_parts = []
-        instance_part_counts = [0 for _ in instances]
-        parts_by_model = {model.part_type:[] for model in self.models}
-
-        for i, instance in enumerate(instances):
-            parts = self._extract_parts(instance, False)
-            self._consume_attributes(instance)
-            all_parts.extend(parts)
-            instance_part_counts[i] = len(parts)
-            for part in parts:
-                # Throws an exception if any parts aren't handled by some model.
-                parts_by_model[type(part)].append(part)
-
-        for model in self.models:
-            parts = parts_by_model[model.part_type]
-            model.test(parts)
-
-        parts_processed = 0
-        for instance, part_count in zip(instances, instance_part_counts):
-            next_parts_processed = parts_processed + part_count
-            self._decode_labeled_parts(
-                instance, all_parts[parts_processed:next_parts_processed])
-            parts_processed = next_parts_processed
+            predicted_output = self.model.test(instance)
+            self._label_instance(document, instance, predicted_output)
 
     def _make_evaluator(self):
         '''
         Creates a new Evaluator object that knows how to properly evaluate
-        instances for this stage. Must be overridden for any stage that supports
+        documents for this stage. Must be overridden for any stage that supports
         evaluation.
         '''
         return None
 
-    def _consume_attributes(self, instance):
+    def _consume_attributes(self, document, instances):
+        # TODO: fix me
         for attribute_name in self.consumed_attributes:
-            delattr(instance, attribute_name)
+            for instance in instances:
+                delattr(instance, attribute_name)
 
     '''
     Default list of attributes the stage adds to instances. Add a class-wide
@@ -351,10 +356,19 @@ class Stage(object):
     '''
     consumed_attributes = []
 
-    def _extract_parts(self, instance, is_train):
-        raise NotImplementedError
+    def _extract_instances(self, document, is_train):
+        '''
+        Sentences are the most commonly used unit of analysis for models, so
+        the default for SentencesDocuments is to return sentences as instances.
+        For other document types or to implement other behavior, this method
+        must be overridden.
+        '''
+        if isinstance(document, SentencesDocument):
+            return document.sentences
+        else:
+            raise NotImplementedError
 
-    def _decode_labeled_parts(self, instance, labeled_parts):
+    def _label_instance(self, document, instance, predicted_labels):
         pass
 
 

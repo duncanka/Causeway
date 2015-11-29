@@ -26,6 +26,20 @@ try:
 except DuplicateFlagError:
     pass
 
+
+class Document(object):
+    # TODO: there are probably a lot of other things we should offer here.
+    # Starting with the ability to recover the text of the document...
+    def __init__(self, filename):
+        self.filename = filename
+
+
+class SentencesDocument(Document):
+    def __init__(self, filename, sentences):
+        super(SentencesDocument, self).__init__(filename)
+        self.sentences = sentences
+
+
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
         ''' offsets is a tuple or list of (start, end) tuples. '''

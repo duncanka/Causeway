@@ -6,7 +6,7 @@ import re
 
 from util import recursively_list_files
 from util.streams import read_stream_until, CharacterTrackingStreamWrapper
-from data import StanfordParsedSentence, Annotation, CausationInstance
+from data import StanfordParsedSentence, Annotation, CausationInstance, SentencesDocument
 
 try:
     DEFINE_bool('reader_binarize_degrees', False,
@@ -22,17 +22,36 @@ try:
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
-class Reader(object):
+
+class DocumentStream(object):
     def __init__(self, filepath=None):
         self._file_stream = None
         if filepath:
             self.open(filepath)
 
-    def __enter__(self):
-        return self
+    def close(self):
+        if self._file_stream:
+            self._file_stream.close()
 
-    def __exit__(self, exc_type, exc_value, traceback):
+
+class DocumentWriter(DocumentStream):
+    def open(self, filepath):
         self.close()
+        self._file_stream = io.open(filepath, 'w')
+
+    def write(self, document):
+        raise NotImplementedError
+
+    def write_all(self, documents):
+        return [self.write(document) for document in documents]
+
+
+class DocumentReader(DocumentStream):
+    '''
+    A document reader reads a file and produces a sequence of Documents. Often
+    there is only one document per file, but there may be more. (For example, a
+    reader may want to return every sentence as a separate "document.")
+    '''
 
     def __iter__(self):
         next_instance = self.get_next()
@@ -45,10 +64,6 @@ class Reader(object):
         self._file_stream = CharacterTrackingStreamWrapper(
             io.open(filepath, 'rb'), FLAGS.reader_codec)
 
-    def close(self):
-        if self._file_stream:
-            self._file_stream.close()
-
     # TODO: convert into the more Pythonic paradigm of next()
     def get_next(self):
         raise NotImplementedError
@@ -57,10 +72,11 @@ class Reader(object):
         return list(self)
 
 
-class StanfordParsedSentenceReader(Reader):
+class StanfordParsedSentenceReader(DocumentReader):
     '''
     Reads a single text document, along with pre-parsed Stanford parser output
-    for that file.
+    for that file. Returns one SentencesDocument of StanfordParsedSentences per
+    file.
     '''
     def __init__(self):
         super(StanfordParsedSentenceReader, self).__init__()
@@ -81,9 +97,19 @@ class StanfordParsedSentenceReader(Reader):
             self._parse_file.close()
 
     def get_next(self):
-        if not self._parse_file:
+        sentences = []
+        while True:
+            next_sentence = self._get_next_sentence()
+            if next_sentence is None: # end of file
+                break
+            sentences.append(next_sentence)
+
+        if sentences: # There were some sentences in the file
+            return SentencesDocument(self._file_stream.name, sentences)
+        else:
             return None
 
+    def _get_next_sentence(self):
         # Read the next 3 blocks of the parse file.
         tokenized = self._parse_file.readline()
         if not tokenized: # empty string means we've hit the end of the file
@@ -152,7 +178,12 @@ class StanfordParsedSentenceReader(Reader):
             assert found_token, ('Skipped token not found: %s'
                                  % unescaped).encode('ascii', 'replace')
 
-class DirectoryReader(Reader):
+
+class DirectoryReader(DocumentReader):
+    '''
+    Reads all the Documents matching a set of regexes, using an underlying file
+    reader. Thus, it will return many Documents for a single path.
+    '''
     def __init__(self, file_regexes, base_reader):
         self._regexes = [re.compile(regex) for regex in file_regexes]
         self._base_reader = base_reader
@@ -185,10 +216,10 @@ class DirectoryReader(Reader):
         while not next_instance:
             try:
                 self.__open_next_file()
+                next_instance = self._base_reader.get_next()
             except StopIteration:
                 self._filenames = iter([])
                 return None
-            next_instance = self._base_reader.get_next()
         return next_instance
 
     def __open_next_file(self):
@@ -201,33 +232,28 @@ class DirectoryReader(Reader):
                     return
 
 
-class CausalityStandoffReader(Reader):
-    ''' Returns ParsedSentence instances, with CausationInstances added. '''
+class CausalityStandoffReader(DocumentReader):
+    '''
+    Returns a Stanford-parsed SentencesDocument, with CausationInstances added
+    to each sentence.
+    '''
     def __init__(self):
         super(CausalityStandoffReader, self).__init__()
         self.sentence_reader = StanfordParsedSentenceReader()
-        self.instances = []
-        self.iterator = iter([])
 
     def open(self, filepath):
         super(CausalityStandoffReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
         self.sentence_reader.open(base_path + '.txt')
-        self.__read_all_instances()
 
     def close(self):
         super(CausalityStandoffReader, self).close()
         # self.sentence_reader gets closed immediately after opening, so we
         # don't need to bother closing it again.
-        self.instances = []
-        self.iterator = iter([])
+        self.sentence_reader.close()
 
     def get_next(self):
-        return next(self.iterator, None)
-
-    def __read_all_instances(self):
-        self.instances = self.sentence_reader.get_all()
-        self.sentence_reader.close()
+        document = self.sentence_reader.get_next()
 
         lines = self._file_stream.readlines()
         if not lines:
@@ -240,9 +266,9 @@ class CausalityStandoffReader(Reader):
             ids_to_instances = {}
             unused_arg_ids = set()
             self.__process_lines(lines, ids_to_annotations, ids_to_instances,
-                                 unused_arg_ids)
+                                 unused_arg_ids, document)
 
-        self.iterator = iter(self.instances)
+        return document
 
     @staticmethod
     def __raise_warning_if(condition, message):
@@ -250,7 +276,7 @@ class CausalityStandoffReader(Reader):
             raise UserWarning(message)
 
     def __process_lines(self, lines, ids_to_annotations, ids_to_instances,
-                        unused_arg_ids, previous_line_count=float('inf')):
+                        unused_arg_ids, document, previous_line_count=float('inf')):
         lines_to_reprocess = []
         ids_to_reprocess = set()
         ids_needed_to_reprocess = set()
@@ -268,7 +294,7 @@ class CausalityStandoffReader(Reader):
                     self.__process_text_annotation(
                         line, line_parts, ids_to_annotations, ids_to_instances,
                         lines_to_reprocess, ids_to_reprocess,
-                        ids_needed_to_reprocess, unused_arg_ids)
+                        ids_needed_to_reprocess, unused_arg_ids, document)
                 elif line_id[0] == 'A': # it's an event attribute (degree)
                     self.__process_attribute(
                         line, line_parts, ids_to_annotations, ids_to_instances,
@@ -315,7 +341,8 @@ class CausalityStandoffReader(Reader):
                         % (id_needed, self._file_stream.name))
         if recurse:
             self.__process_lines(lines_to_reprocess, ids_to_annotations,
-                                 ids_to_instances, unused_arg_ids, len(lines))
+                                 ids_to_instances, unused_arg_ids, document,
+                                 len(lines))
         else:
             for arg_id in unused_arg_ids:
                 logging.warn('Unused argument: %s: "%s" (file: %s)'
@@ -325,7 +352,7 @@ class CausalityStandoffReader(Reader):
     def __process_text_annotation(self, line, line_parts, ids_to_annotations,
                                   ids_to_instances, lines_to_reprocess,
                                   ids_to_reprocess, ids_needed_to_reprocess,
-                                  unused_arg_ids):
+                                  unused_arg_ids, document):
         try:
             line_id, type_and_indices_str, text_str = line_parts
         except ValueError:
@@ -348,7 +375,7 @@ class CausalityStandoffReader(Reader):
 
         # Create the new annotation.
         containing_sentence = CausalityStandoffReader.find_containing_sentence(
-            annotation_offsets, self.instances, line)
+            annotation_offsets, document.sentences, line)
         self.__raise_warning_if(
             containing_sentence is None,
             "Skipping annotation for which no sentence could be found")

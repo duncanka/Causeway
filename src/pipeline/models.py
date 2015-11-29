@@ -24,9 +24,6 @@ except DuplicateFlagError as e:
 
 
 class Model(object):
-    def __init__(self, part_type):
-        self.part_type = part_type
-
     def train(self, parts):
         raise NotImplementedError
 
@@ -77,11 +74,9 @@ class FeaturizedModel(Model):
             return self.SEPARATOR.join([extractor.extract(part)
                                         for extractor in self._extractors])
 
-    def __init__(self, part_type, feature_extractors, selected_features,
-                 save_featurized=False):
+    def __init__(self, feature_extractors, selected_features=None,
+                 model_path=None, save_featurized=False):
         """
-        part_type is the class object corresponding to the part type this model
-            is for.
         feature_extractors is a list of
             `pipeline.feature_extractors.FeatureExtractor` objects.
         selected_features is a list of names of features to extract. Names may
@@ -89,8 +84,16 @@ class FeaturizedModel(Model):
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
         """
-        super(FeaturizedModel, self).__init__(part_type)
         self.feature_name_dictionary = NameDictionary()
+
+        if model_path is not None:
+            selected_features = self.load(model_path)
+            if selected_features is not None:
+                logging.warn("Selected features overridden by loaded model")
+        elif selected_features is None:
+            raise FeaturizationError(
+                "FeaturizedModel must be initialized with either selected"
+                " features or a model path to load")
 
         self.feature_extractors = []
         for feature_name in selected_features:

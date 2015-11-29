@@ -130,20 +130,20 @@ class StanfordNERStage(Stage):
         self.name = name
         # Omit models
 
-    def train(self, instances):
+    def train(self, documents):
         pass
 
-    def test(self, instances):
+    def test(self, documents):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
         st = NERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
-            for sentence in instances]
+            for sentence in documents]
         # Batch process sentences (faster than repeatedly running Stanford NLP)
         ner_results = st.tag_sents(tokens_by_sentence)
-        for sentence, sentence_result in zip(instances, ner_results):
+        for sentence, sentence_result in zip(documents, ner_results):
             sentence.tokens[0].ner_tag = None # ROOT has no NER tag
             for token, token_result in zip(sentence.tokens[1:], sentence_result):
                 tag = token_result[1]

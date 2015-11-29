@@ -82,16 +82,41 @@ def truncated_string(string, truncate_to=25):
         truncated += '...'
     return truncated
 
-def partition(list_to_partition, num_partitions):
+def partition(list_to_partition, num_partitions, item_weights=None):
     '''
     Returns a list of lists, dividing list_to_partition as evenly as possible
-    into sublists.
-    From http://stackoverflow.com/a/2660034/4044809
+    into sublists. item_weights, if provided, are assumed to be positive, and
+    must be the same size as list_to_partition.
+    Based on http://stackoverflow.com/a/2660034/4044809.
     '''
-    division = len(list_to_partition) / float(num_partitions)
-    partitions = [list_to_partition[int(round(division * i)):
-                                    int(round(division * (i + 1)))]
-                  for i in xrange(num_partitions)]
+    # TODO: replaced weighted version with a cleverer algorithm?
+    if item_weights:
+        assert len(item_weights) == len(list_to_partition)
+        division = sum(item_weights) / float(num_partitions)
+        partitions = [[] for _ in range(num_partitions)]
+        partition_weight = 0
+        partition_iter = iter(partitions)
+        partition = partition_iter.next()
+        for item, weight in zip(list_to_partition, item_weights):
+            partition.append(item)
+            partition_weight += weight
+            if (partition_weight + weight > division
+                and partition is not partitions[-1]):
+                partition_weight = 0
+                partition = partition_iter.next()
+
+        # TODO: delete me
+        try:
+            partition_iter.next()
+            assert False
+        except StopIteration:
+            pass
+
+    else:
+        division = len(list_to_partition) / float(num_partitions)
+        partitions = [list_to_partition[int(round(division * i)):
+                                        int(round(division * (i + 1)))]
+                      for i in xrange(num_partitions)]
     return partitions
 
 def print_indented(indent_level, *args, **kwargs):

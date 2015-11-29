@@ -163,7 +163,7 @@ class RegexClassifierStage(Stage):
 
     consumed_attributes = ['possible_causations']
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         # In training, we need to match the causation instances the pipeline has
         # thus far detected against the original causation instances (provided
         # by previous pipeline stages). We do this the same way that the IAA
@@ -188,9 +188,9 @@ class RegexClassifierStage(Stage):
                      for pc in sentence.possible_causations]
         return parts
 
-    def _decode_labeled_parts(self, sentence, labeled_parts):
+    def _label_instance(self, sentence, parts, labels):
         sentence.causation_instances = [
             CausationInstance(
                 sentence, None, None, part.possible_causation.connective,
                 part.possible_causation.cause, part.possible_causation.effect)
-            for part in labeled_parts if part.label]
+            for part, label in zip(parts, labels) if label]

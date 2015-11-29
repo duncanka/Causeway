@@ -187,7 +187,7 @@ class ArgumentLabelerStage(Stage):
         super(ArgumentLabelerStage, self).__init__(
             name, ArgumentLabelerModel(training_algorithm, training_params))
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         if is_train:
             # Filter to possible causations for which we can actually
             # extract the correct labels, i.e., gold-standard causations.
@@ -197,7 +197,7 @@ class ArgumentLabelerStage(Stage):
         else:
             return sentence.possible_causations
 
-    def _decode_labeled_parts(self, sentence, labeled_pcs):
+    def _label_instance(self, sentence, pcs, labels):
         # Eliminate instances that were not given two arguments.
         # TODO: change this when we start caring about single-arg instances.
         sentence.possible_causations = [pc for pc in labeled_pcs

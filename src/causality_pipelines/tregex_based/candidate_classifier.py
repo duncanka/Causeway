@@ -302,10 +302,10 @@ class TRegexClassifierStage(Stage):
 
     consumed_attributes = ['possible_causations']
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         return [TRegexClassifierPart(p) for p in sentence.possible_causations]
 
-    def _decode_labeled_parts(self, sentence, labeled_parts):
+    def _label_instance(self, sentence, labeled_parts):
         # Deduplicate the results.
 
         tokens_to_parts = defaultdict(int)

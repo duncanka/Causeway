@@ -127,7 +127,8 @@ if __name__ == '__main__':
         copy_fn=StanfordParsedSentence.shallow_copy_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:
-        eval_results = causality_pipeline.cross_validate()
+        eval_results = causality_pipeline.cross_validate(
+            Pipeline.weight_doc_by_sentences)
         causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:

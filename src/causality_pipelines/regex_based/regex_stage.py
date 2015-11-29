@@ -206,5 +206,5 @@ class RegexConnectiveStage(Stage):
 
     produced_attributes = ['possible_causations']
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         return [sentence]

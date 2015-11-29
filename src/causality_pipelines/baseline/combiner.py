@@ -56,7 +56,7 @@ class BaselineCombinerStage(Stage):
                                                     BaselineCombinerModel())
         self.consumed_attributes = [baseline_causations_attr_name]
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         if is_train:
             return []
         else:

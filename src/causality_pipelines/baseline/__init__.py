@@ -197,7 +197,7 @@ class BaselineStage(Stage):
             name=name, models=BaselineModel(record_results_in))
         self.produced_attributes = [record_results_in]
 
-    def _extract_parts(self, sentence, is_train):
+    def _extract_instances(self, sentence, is_train):
         return [sentence]
 
     def _make_evaluator(self):
