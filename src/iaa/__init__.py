@@ -13,7 +13,7 @@ import os
 import sys
 from textwrap import wrap
 
-from data import CausationInstance, ParsedSentence, Token
+from data import CausationInstance, StanfordParsedSentence, Token
 from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
 from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, \
@@ -707,7 +707,7 @@ class CausalityMetrics(object):
         
         for instance_1, instance_2, sentence_num in self.argument_differences:
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
-            connective_text = ParsedSentence.get_annotation_text(
+            connective_text = StanfordParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)')
             print_indented(
                 indent,
@@ -743,7 +743,7 @@ class CausalityMetrics(object):
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             print_indented(
                 indent, property_name, 's for connective "',
-                ParsedSentence.get_annotation_text(
+                StanfordParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)'),
                 '" differ: ', values[0], ' vs. ', values[1],
                 ' (', filename, ':', sentence_num, ': "',

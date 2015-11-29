@@ -4,7 +4,7 @@ import logging
 from nltk.tag.stanford import NERTagger
 from os import path
 
-from data import ParsedSentence, CausationInstance
+from data import StanfordParsedSentence, CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented, Enum

@@ -7,7 +7,7 @@ import numpy as np
 from scipy.spatial import distance
 
 from causality_pipelines import IAAEvaluator
-from data import Token, ParsedSentence
+from data import Token, StanfordParsedSentence
 from pipeline import Stage
 from pipeline.models import ClassifierModel, ClassifierPart
 from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, \
@@ -277,7 +277,7 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
     KnownValuesFeatureExtractor('domination',
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
-        range(len(ParsedSentence.DOMINATION_DIRECTION))),
+        range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
     VectorValuedFeatureExtractor(
         'cause_vector',
         lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),

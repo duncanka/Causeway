@@ -6,7 +6,7 @@ import re
 
 from util import recursively_list_files
 from util.streams import read_stream_until, CharacterTrackingStreamWrapper
-from data import ParsedSentence, Annotation, CausationInstance
+from data import StanfordParsedSentence, Annotation, CausationInstance
 
 try:
     DEFINE_bool('reader_binarize_degrees', False,
@@ -57,13 +57,17 @@ class Reader(object):
         return list(self)
 
 
-class SentenceReader(Reader):
+class StanfordParsedSentenceReader(Reader):
+    '''
+    Reads a single text document, along with pre-parsed Stanford parser output
+    for that file.
+    '''
     def __init__(self):
-        super(SentenceReader, self).__init__()
+        super(StanfordParsedSentenceReader, self).__init__()
         self._parse_file = None
 
     def open(self, filepath):
-        super(SentenceReader, self).open(filepath)
+        super(StanfordParsedSentenceReader, self).open(filepath)
         base_path, _ = os.path.splitext(filepath)
         parse_file_name = base_path + '.parse'
         if FLAGS.reader_gold_parses:
@@ -72,7 +76,7 @@ class SentenceReader(Reader):
             io.open(parse_file_name, 'rb'), FLAGS.reader_codec)
 
     def close(self):
-        super(SentenceReader, self).close()
+        super(StanfordParsedSentenceReader, self).close()
         if self._parse_file:
             self._parse_file.close()
 
@@ -100,7 +104,7 @@ class SentenceReader(Reader):
             'Invalid parse file: expected blank line after lemmas: %s'
             % lemmas).encode('ascii', 'replace')
 
-        # If the sentence was unparsed, don't return a new ParsedSentence for
+        # If the sentence was unparsed, don't return a new StanfordParsedSentence for
         # it, but do advance the stream past the unparsed words.
         # NOTE: This relies on the printWordsForUnparsed flag we introduced to
         # the Stanford parser.
@@ -129,7 +133,7 @@ class SentenceReader(Reader):
         # of a file, it won't make us think there's another entry coming.
 
         # Now create the sentence from the read data + the text file.
-        sentence = ParsedSentence(
+        sentence = StanfordParsedSentence(
             tokenized, lemmas, constituency_parse, parse_lines,
             self._file_stream)
         assert (len(sentence.original_text) ==
@@ -142,7 +146,7 @@ class SentenceReader(Reader):
     def __skip_tokens(self, tokenized, message):
         print '%s: %s' % (message, tokenized)
         for token in tokenized.split():
-            unescaped = ParsedSentence.unescape_token_text(token)
+            unescaped = StanfordParsedSentence.unescape_token_text(token)
             _, found_token = read_stream_until(
                 self._parse_file, unescaped, False, False)
             assert found_token, ('Skipped token not found: %s'
@@ -201,7 +205,7 @@ class CausalityStandoffReader(Reader):
     ''' Returns ParsedSentence instances, with CausationInstances added. '''
     def __init__(self):
         super(CausalityStandoffReader, self).__init__()
-        self.sentence_reader = SentenceReader()
+        self.sentence_reader = StanfordParsedSentenceReader()
         self.instances = []
         self.iterator = iter([])
 

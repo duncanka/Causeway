@@ -10,7 +10,7 @@ import tempfile
 import time
 from threading import Lock
 
-from data import ParsedSentence, Token
+from data import StanfordParsedSentence, Token
 from pipeline import Stage
 from pipeline.models import Model
 from causality_pipelines import PossibleCausation, IAAEvaluator
@@ -747,7 +747,7 @@ class TRegexConnectiveStage(Stage):
     def __init__(self, name):
         super(TRegexConnectiveStage, self).__init__(
             name=name,
-            models=TRegexConnectiveModel(part_type=ParsedSentence))
+            models=TRegexConnectiveModel(part_type=StanfordParsedSentence))
         self.pairwise_only_metrics = None # used during evaluation
 
     produced_attributes = ['possible_causations']

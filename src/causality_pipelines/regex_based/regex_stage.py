@@ -5,7 +5,7 @@ import re
 import time
 
 from causality_pipelines import PossibleCausation, IAAEvaluator
-from data import ParsedSentence
+from data import StanfordParsedSentence
 from pipeline import Stage
 from pipeline.models import Model
 from util import Enum
@@ -24,7 +24,7 @@ except DuplicateFlagError as e:
 
 class RegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
-        super(RegexConnectiveModel, self).__init__(part_type=ParsedSentence,
+        super(RegexConnectiveModel, self).__init__(part_type=StanfordParsedSentence,
                                                    *args, **kwargs)
         self.regexes = []
 

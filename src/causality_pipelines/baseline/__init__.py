@@ -3,7 +3,7 @@ from gflags import DEFINE_integer, FLAGS, DuplicateFlagError
 from itertools import product
 
 from causality_pipelines import IAAEvaluator, PossibleCausation
-from data import ParsedSentence
+from data import StanfordParsedSentence
 import logging
 from pipeline import Stage
 from pipeline.models import Model
@@ -21,7 +21,7 @@ class BaselineModel(Model):
     _STOP_POSES = ['MD', 'CC', 'UH', ':', "''", ',' '.']
     
     def __init__(self, save_results_in):
-        super(BaselineModel, self).__init__(ParsedSentence)
+        super(BaselineModel, self).__init__(StanfordParsedSentence)
         self._connectives = set()
         # (connective word tuple, parse path to cause, parse path to effect) ->
         #   list of [# causal, # non-causal]

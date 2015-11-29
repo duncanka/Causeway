@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 import sys
-from data.readers import SentenceReader
+from data.readers import StanfordParsedSentenceReader
 
 for filepath in sys.argv[1:]:
-    reader = SentenceReader()
+    reader = StanfordParsedSentenceReader()
     reader.open(filepath)
     sentences = reader.get_all()
     reader.close()

@@ -2,14 +2,14 @@ from __future__ import absolute_import
 
 import unittest
 
-from data import ParsedSentence
-from data.readers import SentenceReader
+from data import StanfordParsedSentence
+from data.readers import StanfordParsedSentenceReader
 from tests import get_sentences_from_file
 
 class HeadFindingTests(unittest.TestCase):
     def setUp(self):
-        self.sentences = get_sentences_from_file(SentenceReader, 'DataTest',
-                                                 'data_test.txt')
+        self.sentences = get_sentences_from_file(
+            StanfordParsedSentenceReader, 'DataTest', 'data_test.txt')
 
     def _check_head(self, tokens, text, correct_head_index, correct_head_text):
         # Sanity check: make sure we grabbed the intended tokens.
@@ -90,8 +90,8 @@ class HeadFindingTests(unittest.TestCase):
 
 class DependencyPathTests(unittest.TestCase):
     def setUp(self):
-        self.sentences = get_sentences_from_file(SentenceReader, 'DataTest',
-                                                 'data_test.txt')
+        self.sentences = get_sentences_from_file(
+            StanfordParsedSentenceReader, 'DataTest', 'data_test.txt')
 
     def testAllForwardPaths(self):
         sentence = self.sentences[0]
@@ -129,28 +129,28 @@ class DependencyPathTests(unittest.TestCase):
         # Test single links
         domination = sentence.get_domination_relation(sentence.tokens[14],
                                                       sentence.tokens[13])
-        self.assertEqual(domination,
-                         ParsedSentence.DOMINATION_DIRECTION.Dominates)
+        self.assertEqual(
+            domination, StanfordParsedSentence.DOMINATION_DIRECTION.Dominates)
 
         domination = sentence.get_domination_relation(sentence.tokens[13],
                                                       sentence.tokens[14])
-        self.assertEqual(domination,
-                         ParsedSentence.DOMINATION_DIRECTION.DominatedBy)
+        self.assertEqual(
+            domination, StanfordParsedSentence.DOMINATION_DIRECTION.DominatedBy)
 
         # Test multiple links
         domination = sentence.get_domination_relation(sentence.tokens[14],
                                                       sentence.tokens[26])
         self.assertEqual(domination,
-                         ParsedSentence.DOMINATION_DIRECTION.Dominates)
+                         StanfordParsedSentence.DOMINATION_DIRECTION.Dominates)
 
         domination = sentence.get_domination_relation(sentence.tokens[26],
                                                       sentence.tokens[14])
-        self.assertEqual(domination,
-                         ParsedSentence.DOMINATION_DIRECTION.DominatedBy)
+        self.assertEqual(
+            domination, StanfordParsedSentence.DOMINATION_DIRECTION.DominatedBy)
 
         # Test unrelated
         domination = sentence.get_domination_relation(sentence.tokens[4],
                                                       sentence.tokens[14])
         self.assertEqual(domination,
-                         ParsedSentence.DOMINATION_DIRECTION.Independent)
+                         StanfordParsedSentence.DOMINATION_DIRECTION.Independent)
 

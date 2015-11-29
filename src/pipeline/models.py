@@ -1,6 +1,6 @@
 """ Define standard machine-learned model framework for pipelines. """
 
-from gflags import DEFINE_bool, FLAGS, DuplicateFlagError, UnrecognizedFlag
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
@@ -38,6 +38,10 @@ class Model(object):
 
     def load(self, filepath):
         raise NotImplementedError
+
+
+class FeaturizationError(Exception):
+    pass
 
 
 class FeaturizedModel(Model):
@@ -96,8 +100,8 @@ class FeaturizedModel(Model):
                 extractors = [extractor for extractor in feature_extractors
                               if extractor.name in extractor_names]
                 if len(extractors) != len(extractor_names):
-                    raise UnrecognizedFlag("Invalid conjoined feature name: %s"
-                                           % feature_name)
+                    raise FeaturizationError("Invalid conjoined feature name: %s"
+                                             % feature_name)
                 self.feature_extractors.append(
                     self.ConjoinedFeatureExtractor(feature_name, extractors))
             else:
@@ -110,8 +114,8 @@ class FeaturizedModel(Model):
                     extractor = extractor_generator.next()
                     self.feature_extractors.append(extractor)
                 except StopIteration:
-                    raise UnrecognizedFlag("Invalid feature name: %s"
-                                           % feature_name)
+                    raise FeaturizationError("Invalid feature name: %s"
+                                             % feature_name)
 
         self.feature_training_data = None
         self.save_featurized = save_featurized
@@ -310,6 +314,7 @@ class ClassBalancingClassifierWrapper(object):
 
     def predict(self, data):
         return self.classifier.predict(data)
+
 
 class CRFModel(Model):
     # Theoretically, this class ought to be a type of FeaturizedModel. But that

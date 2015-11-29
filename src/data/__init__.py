@@ -20,8 +20,9 @@ from textwrap import TextWrapper
 try:
     DEFINE_bool('use_constituency_parse', False,
                 'Whether to build constituency parse trees from the provided'
-                ' constituency parse string when constructing ParsedSentences.'
-                ' Setting to false makes reading in data more efficient.')
+                ' constituency parse string when constructing'
+                ' StanfordParsedSentences. Setting to false makes reading in'
+                ' data more efficient.')
 except DuplicateFlagError:
     pass
 
@@ -31,13 +32,15 @@ class Annotation(object):
         self.id = annot_id
         if isinstance(offsets[0], int):
             offsets = (offsets,)
-        self.offsets = sorted( # Sort because brat may save indices out of order
+        # Sort because indices could be out of order (particularly in brat)
+        self.offsets = sorted(
             [(start_offset - sentence_offset, end_offset - sentence_offset)
              for (start_offset, end_offset) in offsets])
         self.text = text
 
     def starts_before(self, other):
         return self.offsets[0][0] < other.offsets[0][0]
+
 
 class Token(object):
     NOUN_TAGS = ["NN", "NP", "NNS", "NNP", "NNPS", "PRP", "WP", "WDT"]
@@ -86,6 +89,7 @@ Token.POS_GENERAL = merge_dicts(
 Token.ALL_POS_TAGS = (Token.NOUN_TAGS + Token.VERB_TAGS + Token.ADVERB_TAGS +
                       Token.ADJECTIVE_TAGS + Token.PUNCT_TAGS + ["IN"])
 
+
 class DependencyPath(list):
     def __init__(self, path_start, *args, **kwargs):
         super(DependencyPath, self).__init__(*args, **kwargs)
@@ -106,6 +110,7 @@ class DependencyPath(list):
             dep_names.append(dep_name)
         return ' '.join(dep_names)
 
+
 class DependencyPathError(ValueError):
     def __init__(self, source, target):
         self.source = source
@@ -113,7 +118,8 @@ class DependencyPathError(ValueError):
         super(DependencyPathError, self).__init__(
             '%s is not reachable from %s' % (target, source))
 
-class ParsedSentence(object):
+
+class StanfordParsedSentence(object):
     # TODO: Split this class into general and causality-specific
     PTB_ESCAPE_MAP = {'*': '\\*', '. . .': '...', '(': '-LRB-', ')': '-RRB-',
                       '{': '-LCB-', '}': '-RCB-', '[': '-LSB-', ']': '-RSB-'}
@@ -130,12 +136,12 @@ class ParsedSentence(object):
     @staticmethod
     def unescape_token_text(token_text):
         token_text = token_text.replace(u'\xa0', ' ')
-        return ParsedSentence.PTB_UNESCAPE_MAP.get(token_text, token_text)
+        return StanfordParsedSentence.PTB_UNESCAPE_MAP.get(token_text, token_text)
 
     @staticmethod
     def escape_token_text(token_text):
         token_text = token_text.replace(' ', u'\xa0')
-        return ParsedSentence.PTB_ESCAPE_MAP.get(token_text, token_text)
+        return StanfordParsedSentence.PTB_ESCAPE_MAP.get(token_text, token_text)
 
     @staticmethod
     def get_annotation_text(annotation_tokens):
@@ -458,7 +464,7 @@ class ParsedSentence(object):
             node_label = node.label()
             node_index = int(node_label[node_label.rindex('_') + 1:])
             edge_label = node[0]  # 0th child is always edge label
-            if edge_label in ParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
+            if edge_label in StanfordParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
                 excluded_edges.append((parent_index, node_index))
             else:
                 edge_graph[parent_index, node_index] = 1.0
@@ -473,7 +479,7 @@ class ParsedSentence(object):
 
     def substitute_dep_ptb_graph(self, ptb_str):
         '''
-        Returns a copy of the ParsedSentence object, whose edge graph has been
+        Returns a copy of the StanfordParsedSentence object, whose edge graph has been
         replaced by the one represented in `ptb_str`. Uses
         `shallow_copy_with_sentences_fixed` to get a mostly shallow copy, but
         with correctly parented CausationInstance and Token objects.
@@ -758,7 +764,6 @@ class ParsedSentence(object):
                     ).encode('utf-8')
             '''
 
-
     def __make_token_copy(self, token_index, copy_num, copy_node_indices):
         copies = copy_node_indices[token_index]
         token = self.tokens[token_index]
@@ -770,7 +775,7 @@ class ParsedSentence(object):
 
     def __create_edges(self, edges, copy_node_indices):
         edge_lines = [line for line in edges if line] # skip blanks
-        matches = [ParsedSentence.EDGE_REGEX.match(edge_line)
+        matches = [StanfordParsedSentence.EDGE_REGEX.match(edge_line)
                    for edge_line in edge_lines]
 
         # First, we need to create tokens for all the copy nodes so that we have
@@ -859,8 +864,9 @@ class ParsedSentence(object):
             self.edge_graph[start, end] = 1.0
         self.edge_graph = self.edge_graph.tocsr()
 
-ParsedSentence.PTB_UNESCAPE_MAP = {v: k for k, v in
-                                   ParsedSentence.PTB_ESCAPE_MAP.items()}
+StanfordParsedSentence.PTB_UNESCAPE_MAP = {
+    v: k for k, v in StanfordParsedSentence.PTB_ESCAPE_MAP.items()
+}
 
 
 class CausationInstance(object):
