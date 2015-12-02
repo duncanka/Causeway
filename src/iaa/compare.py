@@ -1,11 +1,10 @@
 from __future__ import print_function
-from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, \
-    DuplicateFlagError, FlagsError, FLAGS
+from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, DuplicateFlagError, FlagsError, FLAGS
 import itertools
 import logging
 import sys
 
-from data.readers import DirectoryReader, CausalityStandoffReader
+from data.io import DirectoryReader, CausalityStandoffReader
 from iaa import CausalityMetrics, print_indented
 
 try:

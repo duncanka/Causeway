@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-from data.readers import StanfordParsedSentenceReader
+from data.io import StanfordParsedSentenceReader
 
 for filepath in sys.argv[1:]:
     reader = StanfordParsedSentenceReader()

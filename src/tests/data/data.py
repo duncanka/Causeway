@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import unittest
 
 from data import StanfordParsedSentence
-from data.readers import StanfordParsedSentenceReader
+from data.io import StanfordParsedSentenceReader
 from tests import get_sentences_from_file
 
 class HeadFindingTests(unittest.TestCase):

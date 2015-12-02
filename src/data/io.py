@@ -1,5 +1,7 @@
-import io
+from __future__ import absolute_import
+
 from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
+import io
 import logging
 import os
 import re
@@ -34,7 +36,6 @@ class DocumentStream(object):
             self._file_stream.close()
 
 
-# TODO: move this class or rename module
 class DocumentWriter(DocumentStream):
     def open(self, filepath, mode='w'):
         self.close()
