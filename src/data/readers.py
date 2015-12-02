@@ -34,10 +34,11 @@ class DocumentStream(object):
             self._file_stream.close()
 
 
+# TODO: move this class or rename module
 class DocumentWriter(DocumentStream):
-    def open(self, filepath):
+    def open(self, filepath, mode='w'):
         self.close()
-        self._file_stream = io.open(filepath, 'w')
+        self._file_stream = io.open(filepath, mode)
 
     def write(self, document):
         raise NotImplementedError

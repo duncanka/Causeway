@@ -1,6 +1,6 @@
 """ Define standard machine-learned model framework for pipelines. """
 
-from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
+from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
@@ -24,10 +24,10 @@ except DuplicateFlagError as e:
 
 
 class Model(object):
-    def train(self, parts):
+    def train(self, instances):
         raise NotImplementedError
 
-    def test(self, parts):
+    def test(self, instances):
         raise NotImplementedError
 
     def save(self, filepath):
@@ -35,6 +35,9 @@ class Model(object):
 
     def load(self, filepath):
         raise NotImplementedError
+
+    def reset(self):
+        pass
 
 
 class FeaturizationError(Exception):
@@ -47,7 +50,6 @@ class FeaturizedModel(Model):
         A FeaturizedModel allows combining features. This class provides the
         necessary functionality of combining the FeatureExtractors' outputs.
         '''
-        SEPARATOR = ':'
 
         def __init__(self, name, extractors):
             self.name = name
@@ -59,20 +61,35 @@ class FeaturizedModel(Model):
                         " to conjoin %s)" % [e.name for e in extractors])
             self._extractors = extractors
 
-        def extract_subfeature_names(self, parts):
+        def extract_subfeature_names(self, instances):
             subfeature_name_components = [
-                extractor.extract_subfeature_names(parts)
+                extractor.extract_subfeature_names(instances)
                 for extractor in self._extractors]
-            return [self.SEPARATOR.join(components) for components
-                    in itertools.product(*subfeature_name_components)]
+            return [self.conjoin_feature_names(components) for components in
+                    itertools.product(*subfeature_name_components)]
 
-        def train(self, parts):
+        def train(self, instances):
             for extractor in self._extractors:
-                extractor.train(parts)
+                extractor.train(instances)
 
-        def extract(self, part):
-            return self.SEPARATOR.join([extractor.extract(part)
-                                        for extractor in self._extractors])
+        def extract(self, instance):
+            # Sub-extractors may produce entire dictionaries of feature values
+            # (e.g., for set-valued feature extractors). We need to produce one
+            # conjoined feature for every element of the Cartesian product of
+            # these dictionaries.
+            # Note that the extractor results come out in the same order as the
+            # features were initially specified, so we can safely construct the
+            # conjoined name by just joining these subfeature names.
+            extractor_results = [extractor.extract(instance).keys()
+                                 for extractor in self._extractors]
+            # Separator characters must be escaped in conjoined names.
+            escaped = [[FeatureExtractor.escape_conjoined_name(name)
+                        for name in extractor_result]
+                       for extractor_result in extractor_results]
+            cartesian_product = itertools.product(*escaped)
+            sep = FLAGS.conjoined_feature_sep
+            return {sep.join(subfeature_names): 1.0
+                    for subfeature_names in cartesian_product}
 
     def __init__(self, feature_extractors, selected_features=None,
                  model_path=None, save_featurized=False):
@@ -80,11 +97,17 @@ class FeaturizedModel(Model):
         feature_extractors is a list of
             `pipeline.feature_extractors.FeatureExtractor` objects.
         selected_features is a list of names of features to extract. Names may
-            be combinations of feature names, separated by ':'.
+            be combinations of feature names, separated by
+            FLAGS.conjoined_feature_sep. (This character should be escaped in
+            the names of any conjoined features containing it, or the conjoined
+            features may not work properly.)
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
         """
         self.feature_name_dictionary = NameDictionary()
+        self.all_feature_extractors = feature_extractors
+        self.feature_training_data = None
+        self.save_featurized = save_featurized
 
         if model_path is not None:
             selected_features = self.load(model_path)
@@ -94,15 +117,32 @@ class FeaturizedModel(Model):
             raise FeaturizationError(
                 "FeaturizedModel must be initialized with either selected"
                 " features or a model path to load")
+        else: # if not loading a model, initialize feature extractors directly.
+            self._initialize_feature_extractors(selected_features)
 
+    def load(self, filepath):
+        self.reset()
+        logging.info("Loading model from %s...", filepath)
+        selected_features = self._featurized_load(filepath)
+        logging.info("Done loading model.")
+        self._initialize_feature_extractors(selected_features)
+
+    def _initialize_feature_extractors(self, selected_features):
         self.feature_extractors = []
         for feature_name in selected_features:
-            extractor_names = feature_name.split(
-                self.ConjoinedFeatureExtractor.SEPARATOR)
+            extractor_names = FeatureExtractor.separate_conjoined_feature_names(
+                feature_name)
             if len(extractor_names) > 1:
-                extractors = [extractor for extractor in feature_extractors
-                              if extractor.name in extractor_names]
-                if len(extractors) != len(extractor_names):
+                # Grab the extractors in the order they were specified, so that
+                # upon extraction the order of their conjoined features will
+                # match.
+                extractors = []
+                try:
+                    for name in extractor_names:
+                        extractor = (e for e in self.all_feature_extractors
+                                     if e.name == name).next()
+                        extractors.append(extractor)
+                except StopIteration:
                     raise FeaturizationError("Invalid conjoined feature name: %s"
                                              % feature_name)
                 self.feature_extractors.append(
@@ -112,7 +152,7 @@ class FeaturizedModel(Model):
                     # Find the correct extractor with a generator, which will
                     # stop searching once it's found.
                     extractor_generator = (
-                        extractor for extractor in feature_extractors
+                        extractor for extractor in self.all_feature_extractors
                         if extractor.name == feature_name)
                     extractor = extractor_generator.next()
                     self.feature_extractors.append(extractor)
@@ -120,134 +160,128 @@ class FeaturizedModel(Model):
                     raise FeaturizationError("Invalid feature name: %s"
                                              % feature_name)
 
-        self.feature_training_data = None
-        self.save_featurized = save_featurized
+    def _featurized_load(self, filepath):
+        '''
+        Does the actual work of loading the model from a file. Populates
+        self.feature_name_dictionary and any model parameters. Returns the list
+        of features that were selected in the saved model. Must be overridden.
+        '''
+        raise NotImplementedError
 
-    def train(self, parts):
-        # Reset state in case we've been previously trained.
+    def reset(self):
         self.feature_name_dictionary.clear()
         self.feature_training_data = None
 
+    def train(self, instances):
+        self.reset() # Reset state in case we've been previously trained.
+        logging.info("Registering features...")
+        self._register_features(instances)
+        logging.info('Done registering features.')
+        self._featurized_train(instances)
+
+    def _register_features(self, instances):
         # Build feature name dictionary. (Unfortunately, this means we
         # featurize many things twice, but I can't think of a cleverer way to
         # discover the possible values of a feature.)
-        logging.info("Registering features...")
-
         for extractor in self.feature_extractors:
-            logging.debug('Registering feature "%s"' % extractor.name)
-            self.feature_training_data = extractor.train(parts)
-            subfeature_names = extractor.extract_subfeature_names(parts)
+            self.feature_training_data = extractor.train(instances)
+            subfeature_names = extractor.extract_subfeature_names(instances)
             for subfeature_name in subfeature_names:
                 self.feature_name_dictionary.insert(subfeature_name)
-            logging.debug("%d features registered in map for '%s'" % (
-                            len(subfeature_names), extractor.name))
 
-        logging.info('Done registering features.')
-
-        self._featurized_train(parts)
-
-    def test(self, parts):
+    def test(self, instances):
+        # TODO: eliminate the extra level of indirection here
         assert self.feature_name_dictionary, (
             "Feature name dictionary must be populated either by training or by"
             " loading a model")
-        self._featurized_test(parts)
+        return self._featurized_test(instances)
 
-    def _featurized_train(self, parts):
+    def _featurized_train(self, instances):
         '''
         The exact training procedure depends on the type of model. This method
         must be overridden by subclasses.
         '''
         raise NotImplementedError
 
-    def _featurized_test(self, parts):
+    def _featurized_test(self, instances):
         '''
         The exact testing procedure depends on the type of model. This method
         must be overridden by subclasses.
         '''
         raise NotImplementedError
 
-    def _featurize(self, parts):
+    def _featurize(self, instances):
         '''
         The process of generating a feature matrix from a bunch of instances
         is common to all models, even though they may do different things with
         the resulting matrix.
         '''
-        logging.info('Featurizing...')
+        logging.debug('Featurizing...')
         start_time = time.time()
 
-        relevant_parts = [part for part in parts if isinstance(part,
-                                                               self.part_type)]
         features = lil_matrix(
-            (len(relevant_parts), len(self.feature_name_dictionary)),
+            (len(instances), len(self.feature_name_dictionary)),
             dtype=np.float32) # TODO: Make this configurable?
 
         for extractor in self.feature_extractors:
-            feature_values_by_part = extractor.extract_all(parts)
-            for part_index, part_subfeature_values in enumerate(
-                feature_values_by_part):
+            feature_values_by_instance = extractor.extract_all(instances)
+            for instance_index, instance_subfeature_values in enumerate(
+                feature_values_by_instance):
                 for subfeature_name, subfeature_value in (
-                    part_subfeature_values.iteritems()):
+                    instance_subfeature_values.iteritems()):
+
                     if subfeature_value == 0:
                         continue # Don't bother setting 0's in a sparse matrix.
                     try:
                         feature_index = self.feature_name_dictionary[
                             subfeature_name]
-                        features[part_index, feature_index] = subfeature_value
+                        features[instance_index,
+                                 feature_index] = subfeature_value
                     except KeyError:
                         logging.debug('Ignoring unknown subfeature: %s'
                                       % subfeature_name)
 
         features = features.tocsr()
         elapsed_seconds = time.time() - start_time
-        logging.info('Done featurizing in %0.2f seconds' % elapsed_seconds)
+        logging.debug('Done featurizing in %0.2f seconds' % elapsed_seconds)
         if self.save_featurized:
             self.features = features
         return features
 
 
 class ClassifierModel(FeaturizedModel):
-    def __init__(self, part_type, feature_extractors, selected_features,
-                 classifier):
+    def __init__(self, classifier, *args, **kwargs):
         """
         Note that classifier must support the fit and predict methods in the
         style of scikit-learn.
         """
-        super(ClassifierModel, self).__init__(part_type, feature_extractors,
-                                              selected_features)
+        super(ClassifierModel, self).__init__(*args, **kwargs)
         self.classifier = classifier
 
-    def _featurize(self, parts):
-        features = super(ClassifierModel, self)._featurize(parts)
-        relevant_parts = [part for part in parts if isinstance(part,
-                                                               self.part_type)]
-        labels = np.fromiter((part.label for part in relevant_parts),
-                             int, len(relevant_parts))
+    # TODO: fix training to get labels from somewhere
+    def _featurize(self, instances):
+        features = super(ClassifierModel, self)._featurize(instances)
+        labels = np.fromiter((instance.label for instance in instances), int,
+                             len(instances))
         if self.save_featurized:
             self.labels = labels
         return features, labels
 
-    def _featurized_train(self, parts):
-        features, labels = self._featurize(parts)
+    def _featurized_train(self, instances):
+        features, labels = self._featurize(instances)
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
 
-    def _featurized_test(self, parts):
-        features, gold_labels = self._featurize(parts)
+    def _featurized_test(self, instances):
+        features, gold_labels = self._featurize(instances)
         if self.save_featurized:
             self.gold_labels = gold_labels
         labels = self.classifier.predict(features)
-        for part, label in zip(parts, labels):
-            part.label = label
         # logging.debug('%d data points' % len(gold_labels))
         # logging.debug('Raw classifier performance:')
         # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))
-
-
-class ClassifierPart(object):
-    def __init__(self, instance, label):
-        self.instance = instance
-        self.label = int(label)
+        return labels
 
 
 class ClassBalancingClassifierWrapper(object):
@@ -287,7 +321,7 @@ class ClassBalancingClassifierWrapper(object):
 
         slices = np.concatenate(([0], np.cumsum(counts_to_add)))
         for j in xrange(len(label_set)):
-            label_row_indices = np.where(label_indices==j)[0]
+            label_row_indices = np.where(label_indices == j)[0]
             if FLAGS.rebalance_stochastically:
                 indices = np.random.choice(label_row_indices,
                                            counts_to_add[j])
@@ -304,8 +338,8 @@ class ClassBalancingClassifierWrapper(object):
 
             # Only bother to actually rebalance if there are changes to be made
             if indices.shape[0]:
-                rebalanced_data[slices[j]:slices[j+1]] = data[indices]
-                rebalanced_labels[slices[j]:slices[j+1]] = labels[indices]
+                rebalanced_data[slices[j]:slices[j + 1]] = data[indices]
+                rebalanced_labels[slices[j]:slices[j + 1]] = labels[indices]
         rebalanced_data = vstack((data, rebalanced_data))
         rebalanced_labels = np.concatenate((labels, rebalanced_labels))
         return (rebalanced_data, rebalanced_labels)
@@ -319,6 +353,7 @@ class ClassBalancingClassifierWrapper(object):
         return self.classifier.predict(data)
 
 
+# TODO: redo this to match new document/instance/parts structure
 class CRFModel(Model):
     # Theoretically, this class ought to be a type of FeaturizedModel. But that
     # class assumes we're doing all the feature management in class, and in
@@ -352,7 +387,7 @@ class CRFModel(Model):
         self.save_model_info = save_model_info
         self.model_info = None
 
-    def _sequences_for_part(self, part, is_train):
+    def _sequences_for_instance(self, part, is_train):
         '''
         Returns the observation and label sequences for the part. Should return
         None for labels at test time.
@@ -382,17 +417,18 @@ class CRFModel(Model):
     def __handle_training_error(trainer, log):
         raise CRFModel.CRFTrainingError('CRF training failed: %s' % log)
 
-    def train(self, parts):
+    def train(self, instances):
         trainer = pycrfsuite.Trainer(verbose=FLAGS.pycrfsuite_verbose)
         trainer.select(self.training_algorithm)
         trainer.set_params(self.training_params)
         error_handler = MethodType(self.__handle_training_error, trainer)
         trainer.on_prepare_error = error_handler
 
-        for part in parts:
-            observation_sequence, labels = self._sequences_for_part(part, True)
+        for instances in instances:
+            observation_sequence, labels = self._sequences_for_instance(
+                instances, True)
             observation_features = self.__featurize_observation_sequence(
-                observation_sequence, part)
+                observation_sequence, instances)
             trainer.append(observation_features, labels)
 
         start_time = time.time()
@@ -407,13 +443,15 @@ class CRFModel(Model):
             self.model_info = tagger.info()
             tagger.close()
 
-    def test(self, parts):
+    def test(self, instances):
         tagger = pycrfsuite.Tagger()
         tagger.open(self.model_file_path)
-        for part in parts:
-            observation_sequence, _ = self._sequences_for_part(part, False)
+        instance_labels = []
+        for instance in instances:
+            observation_sequence, _ = self._sequences_for_instance(instance, False)
             observation_features = self.__featurize_observation_sequence(
-                observation_sequence, part)
+                observation_sequence, instance)
             crf_labels = tagger.tag(observation_features)
-            self._label_part(part, crf_labels)
+            instance_labels.append(crf_labels)
         tagger.close()
+        return instance_labels

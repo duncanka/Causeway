@@ -49,7 +49,7 @@ class Pipeline(object):
         '''
         self.stages = listify(stages)
         self.reader = reader
-        self.writer = writer # TODO: make and test writers
+        self.writer = writer
         self._evaluators_by_stage = []
         self._copy_fn = copy_fn
 
@@ -241,13 +241,19 @@ class Pipeline(object):
             logging.warn("No writer provided; pipeline results not written"
                          " anywhere")
 
+        paths_written = set()
         for path, output_path in zip(FLAGS.test_paths,
                                      FLAGS.test_output_paths):
-            print 'Testing files from %s...' % output_path
+            print 'Testing files from %s...' % path
             self.reader.open(path)
             if self.writer:
-                self.writer.open(output_path)
+                if output_path in paths_written:
+                    self.writer.open(output_path, 'a')
+                else:
+                    paths_written.add(output_path)
+                    self.writer.open(output_path, 'w')
 
+            # TODO: enable incremental output
             for document in self.reader:
                 self.__test_documents([document])
                 if self.writer:
@@ -324,8 +330,8 @@ class Stage(object):
         self.model.train(list(itertools.chain(*instances_by_document)))
 
     def test(self, document, instances):
-        for instance in instances:
-            predicted_output = self.model.test(instance)
+        predicted_outputs = self.model.test(instances)
+        for instance, predicted_output in zip(instances, predicted_outputs):
             self._label_instance(document, instance, predicted_output)
 
     def _make_evaluator(self):
