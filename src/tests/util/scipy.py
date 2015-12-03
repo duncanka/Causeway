@@ -4,41 +4,13 @@ import numpy.ma as ma
 from scipy.sparse import lil_matrix
 import unittest
 
-from util.scipy import add_rows_and_cols_to_matrix, dreyfus_wagner, longest_path_in_tree, UnconnectedNodesError, \
-    CycleError, tarjan_topological_sort, get_incoming_indices, \
-    get_outgoing_indices
+from util.scipy import add_rows_and_cols_to_matrix, CycleError, dreyfus_wagner, \
+    get_incoming_indices, get_outgoing_indices, longest_path_in_tree, tarjan_topological_sort, UnconnectedNodesError
 from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix
+from tests import NumpyAwareTestCase
 
 
-class ScipyTestCase(unittest.TestCase):
-    def assertArraysEqual(self, array1, array2):
-        self.assertEqual(
-            type(array1), np.ndarray,
-            'array1 is not an array (actual type: %s)' % type(array1))
-        self.assertEqual(
-            type(array2), np.ndarray,
-            'array2 is not an array (actual type: %s)' % type(array2))
-
-        self.assertEqual(array1.shape, array2.shape,
-                         'Array shapes do not match (%s vs %s)'
-                         % (array1.shape, array2.shape))
-
-        if not array1.dtype.isbuiltin or not array2.dtype.isbuiltin:
-            self.assertEqual(
-                array1.dtype, array2.dtype,
-                'Incompatible dtypes: %s vs %s' % (array1.dtype, array2.dtype))
-
-        comparison = (array1 == array2)
-        if comparison.all():
-            return
-        else:
-            num_differing = comparison.size - np.count_nonzero(comparison)
-            msg = ('Arrays differ at %d locations\n%s\n\nvs.\n\n%s'
-                   % (num_differing, array1, array2))
-            self.fail(msg)
-
-
-class MatrixInsertionTest(ScipyTestCase):
+class MatrixInsertionTest(NumpyAwareTestCase):
     TEST_MATRIX = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 
     def test_append_multiple(self):
@@ -59,7 +31,7 @@ class MatrixInsertionTest(ScipyTestCase):
                             [4, 0, 0, 5, 0, 6], [0] * 6, [7, 0, 0, 8, 0, 9]])
         self.assertArraysEqual(correct, result)
 
-class DreyfusWagnerTestCase(ScipyTestCase):
+class DreyfusWagnerTestCase(NumpyAwareTestCase):
     def _test_graph(self, terminals, correct_nodes, correct_graph):
         steiner_nodes, steiner_graph = dreyfus_wagner(
             self.graph, terminals, directed=False)
@@ -173,7 +145,7 @@ class DreyfusWagnerRegressionsTestCase(DreyfusWagnerTestCase):
         self._test_graph([0, 2], [1], correct_graph)
 
 
-class LongestPathTestCase(ScipyTestCase):
+class LongestPathTestCase(NumpyAwareTestCase):
     def assertArraysEqualOrReversed(self, array1, array2):
         try:
             # Try reversed first. That way, if both fail, the error message

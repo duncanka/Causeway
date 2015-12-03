@@ -36,6 +36,11 @@ class DocumentStream(object):
             self._file_stream.close()
 
 
+# TODO: rework writers to have DocumentWriters and InstanceWriters, where the
+# default DocumentWriter wraps a provided InstanceWriter, allowing for
+# incremental output. Output paths should be clarified to indicate that they're
+# directories, and the output name should be the input document name (fetched
+# from the Document object) with some flag-specified suffix.
 class DocumentWriter(DocumentStream):
     def open(self, filepath, mode='w'):
         self.close()

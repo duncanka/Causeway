@@ -14,7 +14,7 @@ class StructuredModel(FeaturizedModel):
     (Thus, it's often a good idea for the parts to store pointers to the
     original instances for use in featurization, as the feature extractors won't
     get a copy of the original instance on the side.)
-    
+
     A StructuredModel also has a StructuredDecoder, which is used to decode the scored
     parts into a coherent labeling for the instance.
     '''
@@ -76,50 +76,45 @@ class StructuredDecoder(object):
         raise NotImplementedError
 
 
-class ViterbiScores(object):
+class SequenceScores(object):
     def __init__(self, node_scores, transition_weights=None):
         self.node_scores = node_scores
         self.transition_weights = transition_weights
 
 
-class ViterbiSemiring(object):
-    def __init__(self, np_sum, np_arg_sum, np_multiply,
-                 additive_identity, multiplicative_identity):
+class Semiring(object):
+    def __init__(self, np_sum, np_multiply, additive_identity,
+                 multiplicative_identity, np_arg_sum=None):
         self.sum = np_sum
-        self.arg_sum = np_arg_sum
         self.multiply = np_multiply
         self.additive_identity = additive_identity
         self.multiplicative_identity = multiplicative_identity
+        self.arg_sum = np_arg_sum
 
 # Common semirings
-ViterbiSemiring.MAX_MULTIPLY = ViterbiSemiring(np.max, np.argmax, np.multiply,
-                                               - np.inf, 1) # TODO: FIX SPACING
-ViterbiSemiring.MAX_ADD = ViterbiSemiring(np.max, np.argmax, np.add, -np.inf,
-                                          0)
+Semiring.PLUS_MULTIPLY = Semiring(np.sum, np.multiply, 0, 1) # count/probability
+Semiring.MAX_MULTIPLY = Semiring(np.max, np.multiply, -np.inf, 1, np.argmax)
+Semiring.MAX_PLUS = Semiring(np.max, np.add, -np.inf, 0, np.argmax)
 
 
 class ViterbiDecoder(StructuredDecoder):
-    def __init__(self, possible_states, semiring=ViterbiSemiring.MAX_MULTIPLY):
+    def __init__(self, possible_states=None, semiring=Semiring.MAX_MULTIPLY):
         self.possible_states = possible_states
         self.semiring = semiring
 
-    @staticmethod
-    def run_viterbi(num_states, node_scores, transition_weights,
-                    semiring=ViterbiSemiring.MAX_MULTIPLY,
+    def run_viterbi(self, node_scores, transition_weights,
                     return_best_path=True):
         '''
-        num_states is the number of possible hidden states.
         node_scores is a numpy array of scores for individual trellis nodes.
         transition_weights is a num_states x num_states array of scores for
             transitioning between states.
-        semiring is an object of type ViterbiSemiring.
         if return_best_path is True, then instead of just returning the best
             score, the function will return (summed_score, best_state_path).
             (The semiring must have arg_sum defined for this.)
         '''
         # TODO: generalize code to higher Markov orders?
-        assert semiring.arg_sum or not return_best_path, ('Can only return'
-            ' best path for semirings with a defined arg_sum')
+        assert self.semiring.arg_sum or not return_best_path, ('Can only return'
+            ' best path for semirings with a defined arg_sum operation')
 
         # Declare arrays and initialize to base case values
         path_scores = np.empty(node_scores.shape)
@@ -132,36 +127,46 @@ class ViterbiDecoder(StructuredDecoder):
         num_columns = node_scores.shape[1]
         for column_index in range(1, num_columns):
             # Find best predecessor state for each state.
-            predecessor_scores = semiring.multiply(
-                transition_weights, path_scores[:, column_index - 1])
-            if return_best_path:
-                predecessor_indices = semiring.arg_sum(predecessor_scores,
-                                                       axis=0)
-                summed_scores = path_scores[predecessor_indices,
-                                            column_index - 1]
-            else:
-                summed_scores = semiring.sum(predecessor_scores, axis=0)
-
-            path_scores[:, column_index] = semiring.multiply(
-                node_scores[:, column_index], summed_scores)
+            # predecessor_scores will be num_states x num_states.
+            # Rows represent start states and columns represent end states for
+            # this transition.
+            prev_path_scores = path_scores[:, column_index - 1]
+            prev_path_scores.shape = ((prev_path_scores.shape[0], 1))
+            predecessor_scores = self.semiring.multiply(transition_weights,
+                                                        prev_path_scores)
 
             if return_best_path:
+                predecessor_indices = self.semiring.arg_sum(
+                    predecessor_scores, axis=0) # "sum" over start states
                 predecessors[:, column_index] = predecessor_indices
+                # This "sum" is really a max or a min -- it just selects one
+                # predecessor for each state.
+                summed_scores = predecessor_scores[
+                    predecessor_indices, range(len(predecessor_scores))]
+            else:
+                summed_scores = self.semiring.sum(predecessor_scores, axis=0)
+
+            path_scores[:, column_index] = self.semiring.multiply(
+                node_scores[:, column_index], summed_scores)
 
         if return_best_path:
             # Now reconstruct the best sequence from the predecessors matrix.
-            best_state_path = np.empty((num_columns,))
-            best_final_index = semiring.arg_sum(path_scores[:, -1])
+            best_state_path = np.empty((num_columns,), dtype=np.int32)
+            best_final_index = self.semiring.arg_sum(path_scores[:, -1])
             best_state_path[-1] = best_final_index
             summed_score = path_scores[best_final_index, -1]
             for i in reversed(range(1, num_columns)):
                 best_state_path[i - 1] = predecessors[best_state_path[i], i]
 
+            if self.possible_states:
+                best_state_path = [self.possible_states[i]
+                                   for i in best_state_path]
+
             return summed_score, best_state_path
         else:
-            summed_score = semiring.sum(path_scores[:, -1])
+            summed_score = self.semiring.sum(path_scores[:, -1])
             return summed_score
-    
+
     def decode(self, instance_parts, scores):
         # (Rows = states, columns = sequence items.)
         num_states = scores.node_scores.shape[0]
@@ -169,8 +174,7 @@ class ViterbiDecoder(StructuredDecoder):
             scores.transition_weights = np.full(
                 (num_states, num_states), self.semiring.multiplicative_identity)
         best_score, best_path = self.run_viterbi(
-            num_states, scores.node_scores, scores.transition_weights,
-            self.semiring, True)
+            scores.node_scores, scores.transition_weights, True)
 
         logging.debug("Viterbi max score: %d", best_score)
         return best_path

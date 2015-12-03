@@ -1,12 +1,12 @@
 from collections import defaultdict
-from gflags import UnrecognizedFlag
 from mock import MagicMock
 import numpy as np
 from scipy.sparse import lil_matrix, vstack
 import unittest
 
 from pipeline.feature_extractors import FeatureExtractor
-from pipeline.models import ClassBalancingClassifierWrapper, FeaturizedModel
+from pipeline.models import ClassBalancingClassifierWrapper, FeaturizedModel, FeaturizationError
+from pipeline.models.structured import ViterbiDecoder
 
 
 class SmallClassBalancingTest(unittest.TestCase):
@@ -95,7 +95,7 @@ class FeaturizedModelTest(unittest.TestCase):
         self.add1_extractor = FeatureExtractor(
             'add1', lambda x: x + 1, FeatureExtractor.FeatureTypes.Categorical)
         self.model = FeaturizedModel(
-            int, [self.identity_extractor, self.add1_extractor],
+            [self.identity_extractor, self.add1_extractor],
             ['identity', 'add1', 'identity:add1'])
         self.model._featurized_train = MagicMock(return_value=None)
 
@@ -110,11 +110,29 @@ class FeaturizedModelTest(unittest.TestCase):
 
     def test_complains_for_invalid_feature_names(self):
         def set_invalid_feature():
-            self.model = FeaturizedModel(int, [self.identity_extractor],
-                                         ['add1'])
-        self.assertRaises(UnrecognizedFlag, set_invalid_feature)
+            self.model = FeaturizedModel([self.identity_extractor], ['add1'])
+        self.assertRaises(FeaturizationError, set_invalid_feature)
 
         def set_invalid_combination():
-            self.model = FeaturizedModel(int, [self.identity_extractor],
+            self.model = FeaturizedModel([self.identity_extractor],
                                          ['identity:add1'])
-        self.assertRaises(UnrecognizedFlag, set_invalid_combination)
+        self.assertRaises(FeaturizationError, set_invalid_combination)
+
+
+class ViterbiTest(unittest.TestCase):
+    def setUp(self):
+        self.decoder = ViterbiDecoder(['S1', 'S2'])
+
+    def test_small_matrix_noop_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1], [0.2, 0.2, 0.3]])
+        transitions = np.ones((2, 2))
+        best_score, best_path = self.decoder.run_viterbi(scores, transitions)
+        self.assertEqual(0.018, best_score)
+        self.assertEqual(best_path, ['S2', 'S1', 'S2'])
+
+    def test_small_matrix_real_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1], [0.2, 0.2, 0.3]])
+        transitions = np.array([[0.1, 0.2], [0.3, 0.4]])
+        best_score, best_path = self.decoder.run_viterbi(scores, transitions)
+        self.assertEqual(0.2 * 0.4 * 0.2 * 0.4 * 0.3, best_score)
+        self.assertEqual(best_path, ['S2', 'S2', 'S2'])
