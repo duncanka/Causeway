@@ -102,10 +102,13 @@ class ViterbiDecoder(StructuredDecoder):
         self.possible_states = possible_states
         self.semiring = semiring
 
+    # TODO: allow converting to log space to deal with numerical stability
     def run_viterbi(self, node_scores, transition_weights,
                     return_best_path=True):
         '''
-        node_scores is a numpy array of scores for individual trellis nodes.
+        node_scores is a numpy array of scores for individual trellis nodes
+            (size: num_states x num_sequence_items). Any start probabilities/
+            weights are assumed to be folded into the first column of scores.
         transition_weights is a num_states x num_states array of scores for
             transitioning between states.
         if return_best_path is True, then instead of just returning the best
@@ -120,7 +123,7 @@ class ViterbiDecoder(StructuredDecoder):
         path_scores = np.empty(node_scores.shape)
         path_scores[:, 0] = node_scores[:, 0]
         if return_best_path:
-            predecessors = np.empty(node_scores.shape)
+            predecessors = np.empty(node_scores.shape, dtype=np.int32)
             predecessors[:, 0] = np.NaN
 
         # Recursive case: compute each trellis column based on previous column
@@ -130,10 +133,9 @@ class ViterbiDecoder(StructuredDecoder):
             # predecessor_scores will be num_states x num_states.
             # Rows represent start states and columns represent end states for
             # this transition.
-            prev_path_scores = path_scores[:, column_index - 1]
-            prev_path_scores.shape = ((prev_path_scores.shape[0], 1))
-            predecessor_scores = self.semiring.multiply(transition_weights,
-                                                        prev_path_scores)
+            predecessor_scores = self.semiring.multiply(
+                # Use None index to get a column vector to broadcast.
+                transition_weights, path_scores[:, column_index - 1, None])
 
             if return_best_path:
                 predecessor_indices = self.semiring.arg_sum(
