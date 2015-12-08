@@ -1,11 +1,10 @@
 from collections import defaultdict
-from mock import MagicMock
 import numpy as np
 from scipy.sparse import lil_matrix, vstack
 import unittest
 
-from pipeline.feature_extractors import FeatureExtractor
-from pipeline.models import ClassBalancingClassifierWrapper, FeaturizedModel, FeaturizationError
+from pipeline.featurization import FeatureExtractor, Featurizer
+from pipeline.models import ClassBalancingClassifierWrapper, FeaturizationError
 from pipeline.models.structured import ViterbiDecoder
 
 
@@ -88,21 +87,20 @@ class SmallClassBalancingTest(unittest.TestCase):
         self._test_for_count(data, labels, 8)
 
 
-class FeaturizedModelTest(unittest.TestCase):
+class FeaturizerTest(unittest.TestCase):
     def setUp(self):
         self.identity_extractor = FeatureExtractor(
             'identity', lambda x: x, FeatureExtractor.FeatureTypes.Categorical)
         self.add1_extractor = FeatureExtractor(
             'add1', lambda x: x + 1, FeatureExtractor.FeatureTypes.Categorical)
-        self.model = FeaturizedModel(
+        self.featurizer = Featurizer(
             [self.identity_extractor, self.add1_extractor],
             ['identity', 'add1', 'identity:add1'])
-        self.model._featurized_train = MagicMock(return_value=None)
 
     def test_subfeature_names(self):
-        self.model.train([1, 2])
+        self.featurizer.register_features_from_instances([1, 2])
         subfeature_names = set(
-            self.model.feature_name_dictionary.names_to_ids.keys())
+            self.featurizer.feature_name_dictionary.names_to_ids.keys())
         correct = set(['identity=1', 'identity=2', 'add1=2', 'add1=3',
                        'identity=1:add1=2', 'identity=2:add1=3',
                        'identity=2:add1=2', 'identity=1:add1=3'])
@@ -110,11 +108,11 @@ class FeaturizedModelTest(unittest.TestCase):
 
     def test_complains_for_invalid_feature_names(self):
         def set_invalid_feature():
-            self.model = FeaturizedModel([self.identity_extractor], ['add1'])
+            self.featurizer = Featurizer([self.identity_extractor], ['add1'])
         self.assertRaises(FeaturizationError, set_invalid_feature)
 
         def set_invalid_combination():
-            self.model = FeaturizedModel([self.identity_extractor],
+            self.featurizer = Featurizer([self.identity_extractor],
                                          ['identity:add1'])
         self.assertRaises(FeaturizationError, set_invalid_combination)
 
@@ -123,16 +121,30 @@ class ViterbiTest(unittest.TestCase):
     def setUp(self):
         self.decoder = ViterbiDecoder(['S1', 'S2'])
 
-    def test_small_matrix_noop_transitions(self):
-        scores = np.array([[0.1, 0.3, 0.1], [0.2, 0.2, 0.3]])
+    def test_noop_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1],
+                           [0.2, 0.2, 0.3]])
         transitions = np.ones((2, 2))
         best_score, best_path = self.decoder.run_viterbi(scores, transitions)
-        self.assertEqual(0.018, best_score)
         self.assertEqual(best_path, ['S2', 'S1', 'S2'])
+        self.assertEqual(0.018, best_score)
 
-    def test_small_matrix_real_transitions(self):
-        scores = np.array([[0.1, 0.3, 0.1], [0.2, 0.2, 0.3]])
-        transitions = np.array([[0.1, 0.2], [0.3, 0.4]])
+    def test_real_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1],
+                           [0.2, 0.2, 0.3]])
+        transitions = np.array([[0.1, 0.2],
+                                [0.3, 0.4]])
         best_score, best_path = self.decoder.run_viterbi(scores, transitions)
-        self.assertEqual(0.2 * 0.4 * 0.2 * 0.4 * 0.3, best_score)
         self.assertEqual(best_path, ['S2', 'S2', 'S2'])
+        self.assertEqual(0.2 * 0.4 * 0.2 * 0.4 * 0.3, best_score)
+
+    def test_sequence_specific_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1],
+                           [0.2, 0.2, 0.3]])
+        transitions = np.array([[[0.1, 0.9], # 2 matrices for the 2 transitions
+                                 [0.3, 0.4]],
+                                [[0.1, 0.2],
+                                 [0.3, 0.4]]])
+        best_score, best_path = self.decoder.run_viterbi(scores, transitions)
+        self.assertEqual(best_path, ['S1', 'S2', 'S2'])
+        self.assertEqual(0.1 * 0.9 * 0.2 * 0.4 * 0.3, best_score)

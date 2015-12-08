@@ -9,8 +9,9 @@ from scipy.sparse import lil_matrix, vstack
 import time
 from types import MethodType
 
-from pipeline.feature_extractors import FeatureExtractor, FeatureExtractionError
-from util import NameDictionary
+from pipeline.featurization import FeatureExtractor, Featurizer, \
+    FeaturizationError
+from util import NameDictionary, listify
 # from util.metrics import diff_binary_vectors
 
 try:
@@ -25,7 +26,8 @@ except DuplicateFlagError as e:
 
 class Model(object):
     def train(self, instances):
-        raise NotImplementedError
+        train_result = self._train_model(instances)
+        self._post_model_train(train_result)
 
     def test(self, instances):
         raise NotImplementedError
@@ -34,247 +36,110 @@ class Model(object):
         raise NotImplementedError
 
     def load(self, filepath):
+        logging.info("Loading model from %s...", filepath)
+        load_result = self._load_model(filepath)
+        logging.info("Done loading model.")
+        self._post_model_load(load_result)
+
+    def _load_model(self, filepath):
         raise NotImplementedError
+
+    def _train_model(self, instances):
+        raise NotImplementedError
+
+    def _post_model_load(self, load_result):
+        pass
+
+    def _post_model_train(self, train_result):
+        pass
 
     def reset(self):
         pass
 
 
-class FeaturizationError(Exception):
-    pass
-
-
 class FeaturizedModel(Model):
-    class ConjoinedFeatureExtractor(FeatureExtractor):
-        '''
-        A FeaturizedModel allows combining features. This class provides the
-        necessary functionality of combining the FeatureExtractors' outputs.
-        '''
+    '''
+    Subclasses' _load_model function should return a FeatureNameDictionary or a
+    list of them, or else the _post_model_load hook must be overridden.
+    '''
 
-        def __init__(self, name, extractors):
-            self.name = name
-            self.feature_type = self.FeatureTypes.Categorical
-            for extractor in extractors:
-                if extractor.feature_type != self.FeatureTypes.Categorical:
-                    raise FeatureExtractionError(
-                        "Only categorical features can be conjoined (attempted"
-                        " to conjoin %s)" % [e.name for e in extractors])
-            self._extractors = extractors
-
-        def extract_subfeature_names(self, instances):
-            subfeature_name_components = [
-                extractor.extract_subfeature_names(instances)
-                for extractor in self._extractors]
-            return [self.conjoin_feature_names(components) for components in
-                    itertools.product(*subfeature_name_components)]
-
-        def train(self, instances):
-            for extractor in self._extractors:
-                extractor.train(instances)
-
-        def extract(self, instance):
-            # Sub-extractors may produce entire dictionaries of feature values
-            # (e.g., for set-valued feature extractors). We need to produce one
-            # conjoined feature for every element of the Cartesian product of
-            # these dictionaries.
-            # Note that the extractor results come out in the same order as the
-            # features were initially specified, so we can safely construct the
-            # conjoined name by just joining these subfeature names.
-            extractor_results = [extractor.extract(instance).keys()
-                                 for extractor in self._extractors]
-            # Separator characters must be escaped in conjoined names.
-            escaped = [[FeatureExtractor.escape_conjoined_name(name)
-                        for name in extractor_result]
-                       for extractor_result in extractor_results]
-            cartesian_product = itertools.product(*escaped)
-            sep = FLAGS.conjoined_feature_sep
-            return {sep.join(subfeature_names): 1.0
-                    for subfeature_names in cartesian_product}
-
-    def __init__(self, feature_extractors, selected_features=None,
-                 model_path=None, save_featurized=False):
-        """
-        feature_extractors is a list of
-            `pipeline.feature_extractors.FeatureExtractor` objects.
-        selected_features is a list of names of features to extract. Names may
-            be combinations of feature names, separated by
-            FLAGS.conjoined_feature_sep. (This character should be escaped in
-            the names of any conjoined features containing it, or the conjoined
-            features may not work properly.)
-        save_featurized indicates whether to store features and labels
-            properties after featurization. Useful for debugging/development.
-        """
-        self.feature_name_dictionary = NameDictionary()
-        self.all_feature_extractors = feature_extractors
-        self.feature_training_data = None
+    def __init__(self, selected_features, model_path, save_featurized):
         self.save_featurized = save_featurized
 
-        if model_path is not None:
-            selected_features = self.load(model_path)
-            if selected_features is not None:
-                logging.warn("Selected features overridden by loaded model")
-        elif selected_features is None:
-            raise FeaturizationError(
-                "FeaturizedModel must be initialized with either selected"
-                " features or a model path to load")
-        else: # if not loading a model, initialize feature extractors directly.
-            self._initialize_feature_extractors(selected_features)
+        if model_path:
+            self.load(model_path)
+        else:
+            if selected_features is None:
+                raise FeaturizationError(
+                    'Featurized model must be initialized with either selected'
+                    ' features or a model path')
+            self.selected_features = selected_features
 
-    def load(self, filepath):
-        self.reset()
-        logging.info("Loading model from %s...", filepath)
-        selected_features = self._featurized_load(filepath)
-        logging.info("Done loading model.")
-        self._initialize_feature_extractors(selected_features)
+    def _post_model_load(self, feature_name_dictionaries):
+        self._set_selected_features(feature_name_dictionaries)
 
-    def _initialize_feature_extractors(self, selected_features):
-        self.feature_extractors = []
-        for feature_name in selected_features:
-            extractor_names = FeatureExtractor.separate_conjoined_feature_names(
-                feature_name)
-            if len(extractor_names) > 1:
-                # Grab the extractors in the order they were specified, so that
-                # upon extraction the order of their conjoined features will
-                # match.
-                extractors = []
-                try:
-                    for name in extractor_names:
-                        extractor = (e for e in self.all_feature_extractors
-                                     if e.name == name).next()
-                        extractors.append(extractor)
-                except StopIteration:
-                    raise FeaturizationError("Invalid conjoined feature name: %s"
-                                             % feature_name)
-                self.feature_extractors.append(
-                    self.ConjoinedFeatureExtractor(feature_name, extractors))
-            else:
-                try:
-                    # Find the correct extractor with a generator, which will
-                    # stop searching once it's found.
-                    extractor_generator = (
-                        extractor for extractor in self.all_feature_extractors
-                        if extractor.name == feature_name)
-                    extractor = extractor_generator.next()
-                    self.feature_extractors.append(extractor)
-                except StopIteration:
-                    raise FeaturizationError("Invalid feature name: %s"
-                                             % feature_name)
+    def _post_model_train(self, feature_name_dictionaries):
+        self._set_selected_features(feature_name_dictionaries)
 
-    def _featurized_load(self, filepath):
+    def _set_selected_features(self, feature_name_dictionaries):
         '''
-        Does the actual work of loading the model from a file. Populates
-        self.feature_name_dictionary and any model parameters. Returns the list
-        of features that were selected in the saved model. Must be overridden.
+        feature_name_dictionaries can be a single NameDictionary or an iterable
+        of them. (This allows subclasses with multiple Featurizers to work with
+        this method.)
         '''
-        raise NotImplementedError
+        feature_name_dictionaries = listify(feature_name_dictionaries)
+        self.selected_features = set()
+        for name_dict in feature_name_dictionaries:
+            assert isinstance(name_dict, NameDictionary), (
+                'Featurized model loading must return one or more'
+                ' NameDictionary objects')
+            self.selected_features.update(
+                Featurizer.get_selected_features(name_dict))
 
-    def reset(self):
-        self.feature_name_dictionary.clear()
-        self.feature_training_data = None
-
-    def train(self, instances):
-        self.reset() # Reset state in case we've been previously trained.
-        logging.info("Registering features...")
-        self._register_features(instances)
-        logging.info('Done registering features.')
-        self._featurized_train(instances)
-
-    def _register_features(self, instances):
-        # Build feature name dictionary. (Unfortunately, this means we
-        # featurize many things twice, but I can't think of a cleverer way to
-        # discover the possible values of a feature.)
-        for extractor in self.feature_extractors:
-            self.feature_training_data = extractor.train(instances)
-            subfeature_names = extractor.extract_subfeature_names(instances)
-            for subfeature_name in subfeature_names:
-                self.feature_name_dictionary.insert(subfeature_name)
-
-    def test(self, instances):
-        # TODO: eliminate the extra level of indirection here
-        assert self.feature_name_dictionary, (
-            "Feature name dictionary must be populated either by training or by"
-            " loading a model")
-        return self._featurized_test(instances)
-
-    def _featurized_train(self, instances):
-        '''
-        The exact training procedure depends on the type of model. This method
-        must be overridden by subclasses.
-        '''
-        raise NotImplementedError
-
-    def _featurized_test(self, instances):
-        '''
-        The exact testing procedure depends on the type of model. This method
-        must be overridden by subclasses.
-        '''
-        raise NotImplementedError
-
-    def _featurize(self, instances):
-        '''
-        The process of generating a feature matrix from a bunch of instances
-        is common to all models, even though they may do different things with
-        the resulting matrix.
-        '''
-        logging.debug('Featurizing...')
-        start_time = time.time()
-
-        features = lil_matrix(
-            (len(instances), len(self.feature_name_dictionary)),
-            dtype=np.float32) # TODO: Make this configurable?
-
-        for extractor in self.feature_extractors:
-            feature_values_by_instance = extractor.extract_all(instances)
-            for instance_index, instance_subfeature_values in enumerate(
-                feature_values_by_instance):
-                for subfeature_name, subfeature_value in (
-                    instance_subfeature_values.iteritems()):
-
-                    if subfeature_value == 0:
-                        continue # Don't bother setting 0's in a sparse matrix.
-                    try:
-                        feature_index = self.feature_name_dictionary[
-                            subfeature_name]
-                        features[instance_index,
-                                 feature_index] = subfeature_value
-                    except KeyError:
-                        logging.debug('Ignoring unknown subfeature: %s'
-                                      % subfeature_name)
-
-        features = features.tocsr()
-        elapsed_seconds = time.time() - start_time
-        logging.debug('Done featurizing in %0.2f seconds' % elapsed_seconds)
-        if self.save_featurized:
-            self.features = features
-        return features
+    # Subclasses should override this class-level variable to include actual
+    # feature extractor objects.
+    all_feature_extractors = []
 
 
 class ClassifierModel(FeaturizedModel):
-    def __init__(self, classifier, *args, **kwargs):
+    def __init__(self, classifier, selected_features=None,
+                 model_path=None, save_featurized=False):
         """
         Note that classifier must support the fit and predict methods in the
         style of scikit-learn.
         """
-        super(ClassifierModel, self).__init__(*args, **kwargs)
         self.classifier = classifier
+        super(ClassifierModel, self).__init__(
+            selected_features, model_path, save_featurized)
+        if not model_path:
+            self.featurizer = Featurizer(self.all_feature_extractors,
+                                         selected_features,
+                                         self.save_featurized)
 
-    # TODO: fix training to get labels from somewhere
-    def _featurize(self, instances):
-        features = super(ClassifierModel, self)._featurize(instances)
-        labels = np.fromiter((instance.label for instance in instances), int,
-                             len(instances))
-        if self.save_featurized:
-            self.labels = labels
-        return features, labels
+    def _post_model_load(self, feature_name_dictionary):
+        super(ClassifierModel, self)._post_model_load(feature_name_dictionary)
+        self.featurizer = Featurizer(
+            self.all_feature_extractors, feature_name_dictionary,
+            self.save_featurized)
 
-    def _featurized_train(self, instances):
-        features, labels = self._featurize(instances)
+    def reset(self):
+        self.featurizer.reset()
+
+    def train(self, instances):
+        self.reset() # Reset state in case we've been previously trained.
+        logging.info("Registering features...")
+        self.featurizer.register_features_from_instances(instances)
+        logging.info('Done registering features.')
+
+        features = self.featurize(instances)
+        labels = self._get_gold_labels(instances)
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
 
-    def _featurized_test(self, instances):
-        features, gold_labels = self._featurize(instances)
+    def test(self, instances):
+        features = self.featurizer.featurize(instances)
+        gold_labels = self._get_gold_labels(instances)
         if self.save_featurized:
             self.gold_labels = gold_labels
         labels = self.classifier.predict(features)
@@ -282,6 +147,9 @@ class ClassifierModel(FeaturizedModel):
         # logging.debug('Raw classifier performance:')
         # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))
         return labels
+
+    def _get_gold_labels(self, instances):
+        raise NotImplementedError
 
 
 class ClassBalancingClassifierWrapper(object):
@@ -375,13 +243,14 @@ class CRFModel(Model):
             self.index = index
             self.part = part
 
-    def __init__(self, part_type, model_file_path, feature_extractors,
+    def __init__(self, part_type, model_file_path,
                  selected_features, training_algorithm, training_params,
                  save_model_info=False):
         super(CRFModel, self).__init__(part_type)
         self.model_file_path = model_file_path
-        self.feature_extractors = [extractor for extractor in feature_extractors
-                                   if extractor.name in selected_features]
+        self.feature_extractors = [
+            extractor for extractor in self.all_feature_extractors
+            if extractor.name in selected_features]
         self.training_algorithm = training_algorithm
         self.training_params = training_params
         self.save_model_info = save_model_info
