@@ -55,7 +55,7 @@ def recursively_list_files(path):
         except StopIteration:
             break
 
-class Enum(tuple): # based on http://stackoverflow.com/a/9201329 (but faster)
+class Enum(list): # based on http://stackoverflow.com/a/9201329 (but faster)
     def __init__(self, names):
         super(Enum, self).__init__(names)
         for i, name in enumerate(names):
