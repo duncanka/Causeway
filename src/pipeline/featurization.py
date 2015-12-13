@@ -12,6 +12,8 @@ try:
                   'Separator character to use between conjoined feature names.'
                   ' This character can still be used in conjoined feature names'
                   ' by doubling it (e.g., "f1=:::f2=x").')
+    DEFINE_string('subfeature_sep', '_',
+                  'Separator character to use between trained subfeatures.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -194,6 +196,8 @@ class Featurizer(object):
             if self._instance_filter and not self._instance_filter(instance):
                 continue
 
+            # TODO: make featurization not re-run combined feature extractors.
+
             for extractor in self.feature_extractors:
                 instance_subfeature_values = extractor.extract(instance)
                 for subfeature_name, subfeature_value in (
@@ -287,6 +291,7 @@ class KnownValuesFeatureExtractor(FeatureExtractor):
                     self.name, value)
                 for value in self.feature_values]
 
+
 class TrainableFeatureExtractor(FeatureExtractor):
     def __init__(self, name, trainer, feature_extractor_creator,
                   feature_type=FeatureExtractor.FeatureTypes.Categorical):
@@ -302,8 +307,9 @@ class TrainableFeatureExtractor(FeatureExtractor):
         subfeature_extractors = self._feature_extractor_creator(
             self.training_results)
         self._subfeature_extractors = []
+        sep = FLAGS.subfeature_sep
         for subfeature_name, subfeature_extractor in subfeature_extractors:
-            full_subfeature_name = '%s:%s' % (self.name, subfeature_name)
+            full_subfeature_name = '%s%s%s' % (self.name, sep, subfeature_name)
             subfeature_extractor = FeatureExtractor(
                 full_subfeature_name, subfeature_extractor, self.feature_type)
             self._subfeature_extractors.append(subfeature_extractor)
@@ -319,6 +325,7 @@ class TrainableFeatureExtractor(FeatureExtractor):
         subfeature_values = [e.extract(part)
                              for e in self._subfeature_extractors]
         return merge_dicts(subfeature_values)
+
 
 class SetValuedFeatureExtractor(FeatureExtractor):
     '''
@@ -353,6 +360,7 @@ class SetValuedFeatureExtractor(FeatureExtractor):
         feature_names = [self._get_categorical_feature_name(self.name, value)
                          for value in feature_values]
         return {feature_name: 1.0 for feature_name in feature_names}
+
 
 class VectorValuedFeatureExtractor(FeatureExtractor):
     '''
