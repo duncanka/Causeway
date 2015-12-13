@@ -80,6 +80,9 @@ class FeatureExtractor(object):
     def _get_categorical_feature_name(base_name, value):
         return '%s=%s' % (base_name, value)
 
+    def __repr__(self):
+        return 'Feature extractor: %s' % self.name
+
 
 class Featurizer(object):
     class ConjoinedFeatureExtractor(FeatureExtractor):
@@ -130,7 +133,7 @@ class Featurizer(object):
 
 
     def __init__(self, feature_extractors, selected_features_or_name_dict,
-                 save_featurized=False):
+                 instance_filter=None, save_featurized=False):
         """
         feature_extractors is a list of
             `pipeline.featurization.FeatureExtractor` objects.
@@ -141,6 +144,9 @@ class Featurizer(object):
               containing it, or the conjoined features may not work properly.)
             - a NameDictionary that should be used for this Featurizer. This
               implicitly encodes the selected features.
+        instance_filter is a filter function that takes an instance and returns
+            True iff it should be featurized. Instances that are filtered out
+            will be featurized as all zeros.
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
         """
@@ -148,6 +154,7 @@ class Featurizer(object):
         self.feature_training_data = []
         self.save_featurized = save_featurized
         self.feature_extractors = [] # for IDE's information
+        self._instance_filter = instance_filter
 
         if isinstance(selected_features_or_name_dict, NameDictionary):
             self.feature_name_dictionary = selected_features_or_name_dict
@@ -183,10 +190,12 @@ class Featurizer(object):
             (len(instances), len(self.feature_name_dictionary)),
             dtype=np.float32) # TODO: Make this configurable?
 
-        for extractor in self.feature_extractors:
-            feature_values_by_instance = extractor.extract_all(instances)
-            for instance_index, instance_subfeature_values in enumerate(
-                feature_values_by_instance):
+        for instance_index, instance in enumerate(instances):
+            if self._instance_filter and not self._instance_filter(instance):
+                continue
+
+            for extractor in self.feature_extractors:
+                instance_subfeature_values = extractor.extract(instance)
                 for subfeature_name, subfeature_value in (
                     instance_subfeature_values.iteritems()):
 

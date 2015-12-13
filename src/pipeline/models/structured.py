@@ -59,9 +59,8 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
     separately.) self.featurizers will be populated in the order specified by
     these dictionaries.
     '''
-    def __init__(self, decoder, part_types,
-                 selected_features=None, model_path=None,
-                 save_featurized=False):
+    def __init__(self, decoder, part_types, selected_features=None,
+                 part_filters=None, model_path=None, save_featurized=False):
         """
         decoder is some StructuredDecoder object.
         part_types is a list of types of part that will need to be featurized
@@ -69,11 +68,20 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
             Python types of the parts returned by _make_parts.
         selected_features is a list of names of features to extract.
             Names may be conjoined by FLAGS.conjoined_feature_sep.
+        part_filters is a list filter functions, corresponding to part_types,
+            that take an part and return True iff it should be featurized. Parts
+            that are filtered out will be featurized as all zeros.
         model_path is a path to a model to load. Either model_path or
             selected_features must be specified.
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
         """
+        if not part_filters:
+            part_filters = [None] * len(part_types)
+        else:
+            assert len(part_filters) == len(part_types)
+        self._part_filters = part_filters
+
         StructuredModel.__init__(self, decoder)
         FeaturizedModel.__init__(self, selected_features, model_path,
                                  save_featurized)
@@ -83,9 +91,11 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
 
     def _set_up_featurizers(self, selected_features_or_name_dicts):
         self.featurizers = []
-        for featurizer_params in selected_features_or_name_dicts:
-            featurizer = Featurizer(self.all_feature_extractors,
-                                    featurizer_params, self.save_featurized)
+        for featurizer_params, part_filter in zip(
+            selected_features_or_name_dicts, self._part_filters):
+            featurizer = Featurizer(
+                self.all_feature_extractors, featurizer_params, part_filter,
+                self.save_featurized)
             self.featurizers.append(featurizer)
 
     def _post_model_load(self, feature_name_dictionaries):
@@ -153,7 +163,7 @@ class ViterbiDecoder(StructuredDecoder):
         node_scores is a numpy array of scores for individual trellis nodes
             (size: num_states x num_sequence_items). Any start probabilities/
             weights are assumed to be folded into the first column of scores.
-        transition_weights is either:
+        transition_weights is one of:
           - a num_states x num_states array of scores for transitioning between
             states.
           - a (num_sequence_items-1) x num_states x num_states array of scores for
