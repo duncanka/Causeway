@@ -35,6 +35,12 @@ class DocumentStream(object):
         if self._file_stream:
             self._file_stream.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, value, tb):
+        self.close()
+
 
 # TODO: rework writers to have DocumentWriters and InstanceWriters, where the
 # default DocumentWriter wraps a provided InstanceWriter, allowing for
