@@ -1,10 +1,11 @@
 """ Define basic pipeline functionality. """
 
 from copy import deepcopy
-from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError
+from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_string
 import itertools
 import logging
 from numpy import random
+from os import path
 import sys
 
 from data import SentencesDocument
@@ -21,10 +22,13 @@ try:
     DEFINE_list('test_paths', [],
                 "Paths to the files containing the test data")
     DEFINE_list('test_output_paths', [],
-                "Paths at which to place the test results."
-                " Defaults to test_paths. If this is a single path, it is used"
-                " for all test paths. If multiple paths are provided, they"
-                " must correspond one-to-one with the test paths provided.")
+                "Directories in which to place the test results (filenames will"
+                " be based on the input filenames). Defaults to the directories"
+                " from  test_paths. If this is a single path, it is used for"
+                " all test paths. If multiple paths are provided, they must"
+                " correspond one-to-one with the test paths provided.")
+    DEFINE_string('test_output_extension', 'predicted',
+                  'Extension to add to the output filenames.')
     DEFINE_integer('cv_folds', 10,
                    'How many folds to split data into for cross-validation. A'
                    ' negative value indicates leave-one-out CV.')
@@ -53,11 +57,11 @@ class Pipeline(object):
         self._evaluators_by_stage = []
         self._copy_fn = copy_fn
 
-    def _read_documents(self, paths=None):
+    def _read_documents(self, doc_paths=None):
         documents = []
-        for path in paths:
-            logging.info('Reading documents from %s' % path)
-            self.reader.open(path)
+        for doc_path in doc_paths:
+            logging.info('Reading documents from %s' % doc_path)
+            self.reader.open(doc_path)
             documents.extend(self.reader.get_all())
         self.reader.close()
         return documents
@@ -213,12 +217,19 @@ class Pipeline(object):
         original_documents = documents
         if self._evaluators_by_stage: # we're evaluating, so avoid overwriting
             documents = [self._copy_fn(document) for document in documents]
+
         for i, stage in enumerate(self.stages):
             logging.info('Testing stage "%s"...' % stage.name)
             for document, original_document in zip(documents,
                                                    original_documents):
                 instances = stage._extract_instances(document, False)
-                stage.test(document, instances)
+                # On the final stage, the instance is now complete, so provide a
+                # writer (if we have one).
+                if i == len(self.stages) - 1:
+                    stage.test(document, instances, self.writer)
+                else:
+                    stage.test(document, instances)
+
                 if self._evaluators_by_stage and self._evaluators_by_stage[i]:
                     original_instances = stage._extract_instances(
                         original_document, False)
@@ -227,7 +238,8 @@ class Pipeline(object):
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
-            FLAGS.test_output_paths = FLAGS.test_paths
+            FLAGS.test_output_paths = [path.dirname(test_path)
+                                       for test_path in FLAGS.test_paths]
         else:
             if len(FLAGS.test_output_paths) == 1:
                 FLAGS.test_output_paths = [FLAGS.test_output_paths[0] for _
@@ -242,18 +254,22 @@ class Pipeline(object):
                          " anywhere")
 
         paths_written = set()
-        for path, output_path in zip(FLAGS.test_paths,
-                                     FLAGS.test_output_paths):
-            print 'Testing files from %s...' % path
-            self.reader.open(path)
+        for input_path, output_path in zip(FLAGS.test_paths,
+                                           FLAGS.test_output_paths):
+            print 'Testing files from %s...' % input_path
+            self.reader.open(input_path)
             if self.writer:
-                if output_path in paths_written:
-                    self.writer.open(output_path, 'a')
-                else:
-                    paths_written.add(output_path)
-                    self.writer.open(output_path, 'w')
+                base_file_name = path.splitext(path.basename(input_path))[0]
+                output_file_name = '.'.join([base_file_name,
+                                             FLAGS.test_output_extension])
+                output_file_path = path.join(output_path, output_file_name)
 
-            # TODO: enable incremental output
+                if output_file_path in paths_written:
+                    self.writer.open(output_file_path, 'a')
+                else:
+                    paths_written.add(output_file_path)
+                    self.writer.open(output_file_path, 'w')
+
             for document in self.reader:
                 self.__test_documents([document])
                 if self.writer:
@@ -329,10 +345,13 @@ class Stage(object):
         '''
         self.model.train(list(itertools.chain(*instances_by_document)))
 
-    def test(self, document, instances):
+    def test(self, document, instances, writer=None):
         predicted_outputs = self.model.test(instances)
-        for instance, predicted_output in zip(instances, predicted_outputs):
+        for instance, predicted_output in itertools.izip_longest(
+            instances, predicted_outputs):
             self._label_instance(document, instance, predicted_output)
+            if writer:
+                writer.instance_complete(document, instance)
 
     def _make_evaluator(self):
         '''

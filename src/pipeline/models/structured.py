@@ -35,14 +35,12 @@ class StructuredModel(Model):
         raise NotImplementedError
 
     def test(self, instances):
-        parts_by_instance = [self._make_parts(instance)
-                             for instance in instances]
-        outputs_by_instance = []
-        for instance, instance_parts in zip(instances, parts_by_instance):
+        # In structured models, we often want to incrementally write out results
+        # one instance at a time, so yield results rather than creating a list.
+        for instance in instances:
+            instance_parts = self._make_parts(instance)
             part_scores = self._score_parts(instance, instance_parts)
-            outputs_by_instance.append(
-                self.decoder.decode(instance, instance_parts, part_scores))
-        return outputs_by_instance
+            yield self.decoder.decode(instance, instance_parts, part_scores)
 
     def _make_parts(self, instance):
         raise NotImplementedError

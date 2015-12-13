@@ -30,6 +30,10 @@ class Model(object):
         self._post_model_train(train_result)
 
     def test(self, instances):
+        '''
+        Returns an iterable of predicted outputs for the provided instances. If
+        incremental output is desired, this should return a generator.
+        '''
         raise NotImplementedError
 
     def save(self, filepath):

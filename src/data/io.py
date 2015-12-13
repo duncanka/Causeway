@@ -42,21 +42,35 @@ class DocumentStream(object):
         self.close()
 
 
-# TODO: rework writers to have DocumentWriters and InstanceWriters, where the
-# default DocumentWriter wraps a provided InstanceWriter, allowing for
-# incremental output. Output paths should be clarified to indicate that they're
-# directories, and the output name should be the input document name (fetched
-# from the Document object) with some flag-specified suffix.
 class DocumentWriter(DocumentStream):
     def open(self, filepath, mode='w'):
         self.close()
         self._file_stream = io.open(filepath, mode)
 
+    def instance_complete(self, document, instance):
+        pass
+
     def write(self, document):
         raise NotImplementedError
 
-    def write_all(self, documents):
-        return [self.write(document) for document in documents]
+
+class InstancesDocumentWriter(DocumentWriter):
+    '''
+    Writer for documents where instances can be written one at a time. Such a
+    writer must be used for sub-document incremental output.
+    '''
+    def write(self, document):
+        pass # all the work happens in instance_complete
+
+    def instance_complete(self, document, instance):
+        self._write_instance(document, instance)
+        self._file_stream.flush()
+
+    def _write_instance(self, document, instance):
+        '''
+        Writes a single instance to the current file. Must be overridden.
+        '''
+        raise NotImplementedError
 
 
 class DocumentReader(DocumentStream):
