@@ -1,19 +1,18 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
+from copy import copy
 import itertools
 import logging
 import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, merge_dicts, NameDictionary
+from util import Enum, NameDictionary
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
                   'Separator character to use between conjoined feature names.'
                   ' This character can still be used in conjoined feature names'
                   ' by doubling it (e.g., "f1=:::f2=x").')
-    DEFINE_string('subfeature_sep', '_',
-                  'Separator character to use between trained subfeatures.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -25,31 +24,12 @@ class FeaturizationError(Exception):
 class FeatureExtractor(object):
     FeatureTypes = Enum(['Categorical', 'Numerical']) # Numerical includes bool
 
-    @staticmethod
-    def escape_conjoined_name(feature_name, sep):
-        return feature_name.replace(sep, sep * 2)
-
-    @staticmethod
-    def separate_conjoined_feature_names(conjoined_names, sep):
-        ''' Returns unescaped split feature names. '''
-        double_sep = sep * 2
-        conjoined_names = conjoined_names.replace(double_sep, '\0')
-        return [name.replace('\0', sep)
-                for name in conjoined_names.split(sep)]
-
-    @staticmethod
-    def conjoin_feature_names(feature_names, sep):
-        return sep.join(feature_names)
-
     def __init__(self, name, extractor_fn, feature_type=None):
         if feature_type is None:
             feature_type = self.FeatureTypes.Categorical
         self.name = name
         self.feature_type = feature_type
         self._extractor_fn = extractor_fn
-
-    def train(self, instances):
-        pass
 
     def extract_subfeature_names(self, instances):
         if self.feature_type == self.FeatureTypes.Categorical:
@@ -85,6 +65,26 @@ class FeatureExtractor(object):
 
 
 class Featurizer(object):
+    '''
+    Encapsulates and manages a set of FeatureExtractors, stores the feature name
+    dictionary, and actually runs extractors to produce a feature matrix.
+    '''
+    @staticmethod
+    def escape_conjoined_name(feature_name, sep):
+        return feature_name.replace(sep, sep * 2)
+
+    @staticmethod
+    def separate_conjoined_feature_names(conjoined_names, sep):
+        ''' Returns unescaped split feature names. '''
+        double_sep = sep * 2
+        conjoined_names = conjoined_names.replace(double_sep, '\0')
+        return [name.replace('\0', sep)
+                for name in conjoined_names.split(sep)]
+
+    @staticmethod
+    def conjoin_feature_names(feature_names, sep):
+        return sep.join(feature_names)
+
     class ConjoinedFeatureExtractor(FeatureExtractor):
         '''
         A Featurizer allows combining features. This class provides the
@@ -102,18 +102,17 @@ class Featurizer(object):
             self._extractors = extractors
             self.sep = FLAGS.conjoined_feature_sep
 
-        def extract_subfeature_names(self, instances):
+        # NOTE: this overrides the normal extract_subfeature_names with a
+        # DIFFERENT SIGNATURE. That's OK, because we only ever use this class
+        # internally.
+        def extract_subfeature_names(self, instances, names_by_extractor):
             subfeature_name_components = [
-                extractor.extract_subfeature_names(instances)
-                for extractor in self._extractors]
-            return [self.conjoin_feature_names(names, self.sep) for
-                    names in itertools.product(*subfeature_name_components)]
+                names_by_extractor[extractor] for extractor in self._extractors]
+            return [Featurizer.conjoin_feature_names(cmpts, self.sep) for
+                    cmpts in itertools.product(*subfeature_name_components)]
 
-        def train(self, instances):
-            for extractor in self._extractors:
-                extractor.train(instances)
-
-        def extract(self, instance):
+        # NOTE: likewise for this one -- it overrides the default signature.
+        def extract(self, instance, featurized_cache):
             # Sub-extractors may produce entire dictionaries of feature values
             # (e.g., for set-valued feature extractors). We need to produce one
             # conjoined feature for every element of the Cartesian product of
@@ -121,13 +120,10 @@ class Featurizer(object):
             # Note that the extractor results come out in the same order as the
             # features were initially specified, so we can safely construct the
             # conjoined name by just joining these subfeature names.
-            extractor_results = [extractor.extract(instance).keys()
-                                 for extractor in self._extractors]
-            # Separator characters must be escaped in conjoined names.
-            escaped = [[FeatureExtractor.escape_conjoined_name(name, self.sep)
-                        for name in extractor_result]
-                       for extractor_result in extractor_results]
-            cartesian_product = itertools.product(*escaped)
+            extractor_results = [
+                featurized_cache[extractor] for extractor in self._extractors]
+            # Separactor chars are already escaped.
+            cartesian_product = itertools.product(*extractor_results)
             return {self.sep.join(subfeature_names): 1.0
                     for subfeature_names in cartesian_product}
 
@@ -151,9 +147,7 @@ class Featurizer(object):
             properties after featurization. Useful for debugging/development.
         """
         self.all_feature_extractors = feature_extractors
-        self.feature_training_data = []
         self.save_featurized = save_featurized
-        self.feature_extractors = [] # for IDE's information
         self._instance_filter = instance_filter
 
         if isinstance(selected_features_or_name_dict, NameDictionary):
@@ -167,7 +161,6 @@ class Featurizer(object):
 
     def reset(self):
         self.feature_name_dictionary.clear()
-        self.feature_training_data = []
 
     def register_feature_names(self, feature_names):
         for feature_name in feature_names:
@@ -177,10 +170,34 @@ class Featurizer(object):
         # Build feature name dictionary. (Unfortunately, this means we
         # featurize many things twice, but I can't think of a cleverer way to
         # discover the possible values of a feature.)
-        for extractor in self.feature_extractors:
-            self.feature_training_data.append(extractor.train(instances))
+        names_by_extractor = {}
+        for extractor in self._selected_base_extractors:
             subfeature_names = extractor.extract_subfeature_names(instances)
             self.register_feature_names(subfeature_names)
+            names_by_extractor[extractor] = subfeature_names
+
+        for extractor in self._unselected_base_extractors:
+            subfeature_names = extractor.extract_subfeature_names(instances)
+            names_by_extractor[extractor] = subfeature_names
+
+        for extractor in self._conjoined_extractors:
+            subfeature_names = extractor.extract_subfeature_names(
+                instances, names_by_extractor)
+            self.register_feature_names(subfeature_names)
+
+    def __record_subfeatures(self, instance_subfeature_values, instance_index,
+                             features):
+        for subfeature_name, subfeature_value in (
+            instance_subfeature_values.items()):
+            if subfeature_value == 0:
+                continue # Don't bother setting 0's in a sparse matrix.
+            try:
+                feature_index = self.feature_name_dictionary[subfeature_name]
+                features[instance_index, feature_index] = subfeature_value
+            except KeyError:
+                pass
+                # logging.debug('Ignoring unknown subfeature: %s'
+                #              % subfeature_name)
 
     def featurize(self, instances):
         logging.debug('Featurizing...')
@@ -190,27 +207,37 @@ class Featurizer(object):
             (len(instances), len(self.feature_name_dictionary)),
             dtype=np.float32) # TODO: Make this configurable?
 
+        fresh_featurized_cache = dict.fromkeys(
+            self._unselected_base_extractors + self._selected_base_extractors,
+            None)
+        sep = FLAGS.conjoined_feature_sep
+
         for instance_index, instance in enumerate(instances):
             if self._instance_filter and not self._instance_filter(instance):
                 continue
 
-            # TODO: make featurization not re-run combined feature extractors.
+            # Optimization: just copy the cache fresh each time
+            featurized_cache = copy(fresh_featurized_cache)
 
-            for extractor in self.feature_extractors:
+            for extractor in self._unselected_base_extractors:
                 instance_subfeature_values = extractor.extract(instance)
-                for subfeature_name, subfeature_value in (
-                    instance_subfeature_values.iteritems()):
+                escaped = [self.escape_conjoined_name(name, sep)
+                           for name in instance_subfeature_values.keys()]
+                featurized_cache[extractor] = escaped
 
-                    if subfeature_value == 0:
-                        continue # Don't bother setting 0's in a sparse matrix.
-                    try:
-                        feature_index = self.feature_name_dictionary[
-                            subfeature_name]
-                        features[instance_index,
-                                 feature_index] = subfeature_value
-                    except KeyError:
-                        logging.debug('Ignoring unknown subfeature: %s'
-                                      % subfeature_name)
+            for extractor in self._selected_base_extractors:
+                instance_subfeature_values = extractor.extract(instance)
+                escaped = [self.escape_conjoined_name(name, sep)
+                           for name in instance_subfeature_values.keys()]
+                featurized_cache[extractor] = escaped
+                self.__record_subfeatures(instance_subfeature_values,
+                                          instance_index, features)
+
+            for extractor in self._conjoined_extractors:
+                instance_subfeature_values = extractor.extract(instance,
+                                                               featurized_cache)
+                self.__record_subfeatures(instance_subfeature_values,
+                                          instance_index, features)
 
         features = features.tocsr()
         elapsed_seconds = time.time() - start_time
@@ -225,49 +252,59 @@ class Featurizer(object):
         sep = FLAGS.conjoined_feature_sep
         for feature_string in feature_name_dictionary.ids_to_names:
             feature_names = (
-                FeatureExtractor.separate_conjoined_feature_names(
+                Featurizer.separate_conjoined_feature_names(
                     feature_string, sep))
             # Split by conjoined features, and take all names as the
             # selected features. (Each feature name is of the form
             # name=value.)
             # print feature_string, 'Names:', feature_names
             feature_names = [name.split('=')[0] for name in feature_names]
-            conjoined_feature_name = FeatureExtractor.conjoin_feature_names(
+            conjoined_feature_name = Featurizer.conjoin_feature_names(
                 feature_names, sep)
             selected_features.add(conjoined_feature_name)
         return selected_features
 
+    def __get_extractor_by_name(self, name):
+        for extractor in self.all_feature_extractors:
+            if extractor.name == name:
+                return extractor
+        raise KeyError
+
     def _initialize_feature_extractors(self, selected_features):
-        self.feature_extractors = []
+        self._unselected_base_extractors = []
+        self._selected_base_extractors = []
+        # TODO: should we make things slightly more efficient by not caching
+        # base features that aren't part of some conjoined feature?
+        self._conjoined_extractors = []
         sep = FLAGS.conjoined_feature_sep
+
         for feature_name in selected_features:
-            extractor_names = FeatureExtractor.separate_conjoined_feature_names(
+            extractor_names = self.separate_conjoined_feature_names(
                 feature_name, sep)
             if len(extractor_names) > 1:
                 # Grab the extractors in the order they were specified, so that
                 # upon extraction the order of their conjoined features will
                 # match.
-                extractors = []
                 try:
-                    for name in extractor_names:
-                        extractor = (e for e in self.all_feature_extractors
-                                     if e.name == name).next()
-                        extractors.append(extractor)
-                except StopIteration:
+                    extractors = [self.__get_extractor_by_name(name)
+                                  for name in extractor_names]
+                except KeyError:
                     raise FeaturizationError(
                         "Invalid conjoined feature name: %s" % feature_name)
-                self.feature_extractors.append(
-                    self.ConjoinedFeatureExtractor(feature_name, extractors))
+
+                conjoined = self.ConjoinedFeatureExtractor(feature_name,
+                                                           extractors)
+                self._conjoined_extractors.append(conjoined)
+
+                for extractor in extractors:
+                    if extractor.name not in selected_features:
+                        self._unselected_base_extractors.append(extractor)
+
             else:
                 try:
-                    # Find the correct extractor with a generator, which will
-                    # stop searching once it's found.
-                    extractor_generator = (
-                        extractor for extractor in self.all_feature_extractors
-                        if extractor.name == feature_name)
-                    extractor = extractor_generator.next()
-                    self.feature_extractors.append(extractor)
-                except StopIteration:
+                    extractor = self.__get_extractor_by_name(feature_name)
+                    self._selected_base_extractors.append(extractor)
+                except KeyError:
                     raise FeaturizationError("Invalid feature name: %s"
                                              % feature_name)
 
@@ -286,45 +323,10 @@ class KnownValuesFeatureExtractor(FeatureExtractor):
         self.feature_values = feature_values
 
     def extract_subfeature_names(self, instances):
-        ''' Ignore `instances` and just use known values from initialization. '''
+        ''' Ignore `instances` and just use known values. '''
         return [FeatureExtractor._get_categorical_feature_name(
                     self.name, value)
                 for value in self.feature_values]
-
-
-class TrainableFeatureExtractor(FeatureExtractor):
-    def __init__(self, name, trainer, feature_extractor_creator,
-                  feature_type=FeatureExtractor.FeatureTypes.Categorical):
-        self.name = name
-        self.feature_type = feature_type
-        self.training_results = None
-        self._trainer = trainer
-        self._feature_extractor_creator = feature_extractor_creator
-        self._subfeature_extractors = None
-
-    def train(self, instances):
-        self.training_results = self._trainer(instances)
-        subfeature_extractors = self._feature_extractor_creator(
-            self.training_results)
-        self._subfeature_extractors = []
-        sep = FLAGS.subfeature_sep
-        for subfeature_name, subfeature_extractor in subfeature_extractors:
-            full_subfeature_name = '%s%s%s' % (self.name, sep, subfeature_name)
-            subfeature_extractor = FeatureExtractor(
-                full_subfeature_name, subfeature_extractor, self.feature_type)
-            self._subfeature_extractors.append(subfeature_extractor)
-
-    def extract_subfeature_names(self, instances):
-        assert self._subfeature_extractors is not None, (
-            "Cannot retrieve subfeature names before training")
-        subfeature_names = [e.extract_subfeature_names(instances)
-                            for e in self._subfeature_extractors]
-        return list(itertools.chain.from_iterable(subfeature_names))
-
-    def extract(self, part):
-        subfeature_values = [e.extract(part)
-                             for e in self._subfeature_extractors]
-        return merge_dicts(subfeature_values)
 
 
 class SetValuedFeatureExtractor(FeatureExtractor):
