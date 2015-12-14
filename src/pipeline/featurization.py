@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, NameDictionary
+from util import Enum, NameDictionary, merge_dicts
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
@@ -255,6 +255,16 @@ class Featurizer(object):
         if self.save_featurized:
             self.features = features
         return features
+
+    def get_feature_values(self, instance):
+        '''
+        Return raw dictionary of feature names and values for an instance.
+        Useful for debugging.
+        '''
+        all_selected_extractors = (self._selected_base_extractors
+                                   + self._conjoined_extractors)
+        return merge_dicts([e.extract(instance)
+                            for e in all_selected_extractors])
 
     @staticmethod
     def get_selected_features(feature_name_dictionary):
