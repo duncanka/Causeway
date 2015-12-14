@@ -26,22 +26,20 @@ class FeatureExtractor(object):
     FeatureTypes = Enum(['Categorical', 'Numerical']) # Numerical includes bool
 
     @staticmethod
-    def escape_conjoined_name(feature_name):
-        sep = FLAGS.conjoined_feature_sep
+    def escape_conjoined_name(feature_name, sep):
         return feature_name.replace(sep, sep * 2)
 
     @staticmethod
-    def separate_conjoined_feature_names(conjoined_names):
+    def separate_conjoined_feature_names(conjoined_names, sep):
         ''' Returns unescaped split feature names. '''
-        sep = FLAGS.conjoined_feature_sep
         double_sep = sep * 2
         conjoined_names = conjoined_names.replace(double_sep, '\0')
         return [name.replace('\0', sep)
                 for name in conjoined_names.split(sep)]
 
     @staticmethod
-    def conjoin_feature_names(feature_names):
-        return FLAGS.conjoined_feature_sep.join(feature_names)
+    def conjoin_feature_names(feature_names, sep):
+        return sep.join(feature_names)
 
     def __init__(self, name, extractor_fn, feature_type=None):
         if feature_type is None:
@@ -102,13 +100,14 @@ class Featurizer(object):
                         "Only categorical features can be conjoined (attempted"
                         " to conjoin %s)" % [e.name for e in extractors])
             self._extractors = extractors
+            self.sep = FLAGS.conjoined_feature_sep
 
         def extract_subfeature_names(self, instances):
             subfeature_name_components = [
                 extractor.extract_subfeature_names(instances)
                 for extractor in self._extractors]
-            return [self.conjoin_feature_names(components) for components in
-                    itertools.product(*subfeature_name_components)]
+            return [self.conjoin_feature_names(names, self.sep) for
+                    names in itertools.product(*subfeature_name_components)]
 
         def train(self, instances):
             for extractor in self._extractors:
@@ -125,12 +124,11 @@ class Featurizer(object):
             extractor_results = [extractor.extract(instance).keys()
                                  for extractor in self._extractors]
             # Separator characters must be escaped in conjoined names.
-            escaped = [[FeatureExtractor.escape_conjoined_name(name)
+            escaped = [[FeatureExtractor.escape_conjoined_name(name, self.sep)
                         for name in extractor_result]
                        for extractor_result in extractor_results]
             cartesian_product = itertools.product(*escaped)
-            sep = FLAGS.conjoined_feature_sep
-            return {sep.join(subfeature_names): 1.0
+            return {self.sep.join(subfeature_names): 1.0
                     for subfeature_names in cartesian_product}
 
 
@@ -224,25 +222,27 @@ class Featurizer(object):
     @staticmethod
     def get_selected_features(feature_name_dictionary):
         selected_features = set()
+        sep = FLAGS.conjoined_feature_sep
         for feature_string in feature_name_dictionary.ids_to_names:
             feature_names = (
                 FeatureExtractor.separate_conjoined_feature_names(
-                    feature_string))
+                    feature_string, sep))
             # Split by conjoined features, and take all names as the
             # selected features. (Each feature name is of the form
             # name=value.)
             # print feature_string, 'Names:', feature_names
             feature_names = [name.split('=')[0] for name in feature_names]
             conjoined_feature_name = FeatureExtractor.conjoin_feature_names(
-                feature_names)
+                feature_names, sep)
             selected_features.add(conjoined_feature_name)
         return selected_features
 
     def _initialize_feature_extractors(self, selected_features):
         self.feature_extractors = []
+        sep = FLAGS.conjoined_feature_sep
         for feature_name in selected_features:
             extractor_names = FeatureExtractor.separate_conjoined_feature_names(
-                feature_name)
+                feature_name, sep)
             if len(extractor_names) > 1:
                 # Grab the extractors in the order they were specified, so that
                 # upon extraction the order of their conjoined features will
@@ -254,8 +254,8 @@ class Featurizer(object):
                                      if e.name == name).next()
                         extractors.append(extractor)
                 except StopIteration:
-                    raise FeaturizationError("Invalid conjoined feature name: %s"
-                                             % feature_name)
+                    raise FeaturizationError(
+                        "Invalid conjoined feature name: %s" % feature_name)
                 self.feature_extractors.append(
                     self.ConjoinedFeatureExtractor(feature_name, extractors))
             else:
