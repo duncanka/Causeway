@@ -112,7 +112,7 @@ class Featurizer(object):
                     cmpts in itertools.product(*subfeature_name_components)]
 
         # NOTE: likewise for this one -- it overrides the default signature.
-        def extract(self, instance, featurized_cache):
+        def extract(self, instance, featurized_cache=None):
             # Sub-extractors may produce entire dictionaries of feature values
             # (e.g., for set-valued feature extractors). We need to produce one
             # conjoined feature for every element of the Cartesian product of
@@ -120,9 +120,19 @@ class Featurizer(object):
             # Note that the extractor results come out in the same order as the
             # features were initially specified, so we can safely construct the
             # conjoined name by just joining these subfeature names.
-            extractor_results = [
-                featurized_cache[extractor] for extractor in self._extractors]
-            # Separactor chars are already escaped.
+            if featurized_cache:
+                extractor_results = [
+                    featurized_cache[extractor]
+                    for extractor in self._extractors]
+                # Separactor chars are already escaped.
+            else:
+                extractor_results = [extractor.extract(instance).keys()
+                                     for extractor in self._extractors]
+                # Separator characters must be escaped for conjoined names.
+                extractor_results = [
+                    [Featurizer.escape_conjoined_name(name, self.sep)
+                     for name in extractor_result]
+                    for extractor_result in extractor_results]
             cartesian_product = itertools.product(*extractor_results)
             return {self.sep.join(subfeature_names): 1.0
                     for subfeature_names in cartesian_product}
@@ -248,6 +258,7 @@ class Featurizer(object):
 
     @staticmethod
     def get_selected_features(feature_name_dictionary):
+        logging.info("Finding selected features...")
         selected_features = set()
         sep = FLAGS.conjoined_feature_sep
         for feature_string in feature_name_dictionary.ids_to_names:
@@ -262,6 +273,7 @@ class Featurizer(object):
             conjoined_feature_name = Featurizer.conjoin_feature_names(
                 feature_names, sep)
             selected_features.add(conjoined_feature_name)
+        logging.info("Done finding selected features.")
         return selected_features
 
     def __get_extractor_by_name(self, name):

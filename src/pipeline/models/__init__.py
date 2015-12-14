@@ -77,28 +77,6 @@ class FeaturizedModel(Model):
                 raise FeaturizationError(
                     'Featurized model must be initialized with either selected'
                     ' features or a model path')
-            self.selected_features = selected_features
-
-    def _post_model_load(self, feature_name_dictionaries):
-        self._set_selected_features(feature_name_dictionaries)
-
-    def _post_model_train(self, feature_name_dictionaries):
-        self._set_selected_features(feature_name_dictionaries)
-
-    def _set_selected_features(self, feature_name_dictionaries):
-        '''
-        feature_name_dictionaries can be a single NameDictionary or an iterable
-        of them. (This allows subclasses with multiple Featurizers to work with
-        this method.)
-        '''
-        feature_name_dictionaries = listify(feature_name_dictionaries)
-        self.selected_features = set()
-        for name_dict in feature_name_dictionaries:
-            assert isinstance(name_dict, NameDictionary), (
-                'Featurized model loading must return one or more'
-                ' NameDictionary objects')
-            self.selected_features.update(
-                Featurizer.get_selected_features(name_dict))
 
     # Subclasses should override this class-level variable to include actual
     # feature extractor objects.
