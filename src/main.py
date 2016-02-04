@@ -16,7 +16,7 @@ from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
 from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import StanfordParsedSentence
-from data.readers import DirectoryReader, CausalityStandoffReader
+from data.io import DirectoryReader, CausalityStandoffReader
 from pipeline import Pipeline
 from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
@@ -123,7 +123,8 @@ if __name__ == '__main__':
     stages = get_stages(candidate_classifier)
 
     causality_pipeline = Pipeline(
-        stages, DirectoryReader((r'.*\.ann$',), CausalityStandoffReader()),
+        stages, DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
+                                CausalityStandoffReader()),
         copy_fn=StanfordParsedSentence.shallow_copy_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:

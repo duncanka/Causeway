@@ -264,6 +264,8 @@ class CausalityStandoffReader(DocumentReader):
     Returns a Stanford-parsed SentencesDocument, with CausationInstances added
     to each sentence.
     '''
+    FILE_PATTERN = r'.*\.ann$'
+
     def __init__(self):
         super(CausalityStandoffReader, self).__init__()
         self.sentence_reader = StanfordParsedSentenceReader()
