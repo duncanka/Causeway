@@ -5,7 +5,7 @@ import unittest
 
 from pipeline.featurization import FeatureExtractor, Featurizer
 from pipeline.models import ClassBalancingClassifierWrapper, FeaturizationError
-from pipeline.models.structured import ViterbiDecoder
+from pipeline.models.structured import Semiring, ViterbiDecoder
 
 
 class SmallClassBalancingTest(unittest.TestCase):
@@ -148,3 +148,25 @@ class ViterbiTest(unittest.TestCase):
         best_score, best_path = self.decoder.run_viterbi(scores, transitions)
         self.assertEqual(best_path, ['S1', 'S2', 'S2'])
         self.assertEqual(0.1 * 0.9 * 0.2 * 0.4 * 0.3, best_score)
+
+
+class ViterbiMaxPlusTest(unittest.TestCase):
+    def setUp(self):
+        self.decoder = ViterbiDecoder(['S1', 'S2'], Semiring.MAX_PLUS)
+
+    def test_noop_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1],
+                           [0.2, 0.2, 0.3]])
+        transitions = np.zeros((2, 2))
+        best_score, best_path = self.decoder.run_viterbi(scores, transitions)
+        self.assertEqual(best_path, ['S2', 'S1', 'S2'])
+        self.assertEqual(0.8, best_score)
+
+    def test_real_transitions(self):
+        scores = np.array([[0.1, 0.3, 0.1],
+                           [0.2, 0.2, 0.3]])
+        transitions = np.array([[0.1, 0.2],
+                                [0.3, 0.5]])
+        best_score, best_path = self.decoder.run_viterbi(scores, transitions)
+        self.assertEqual(best_path, ['S2', 'S2', 'S2'])
+        self.assertEqual(1.7, best_score)

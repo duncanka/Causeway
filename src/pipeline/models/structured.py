@@ -155,6 +155,7 @@ class ViterbiDecoder(StructuredDecoder):
         self.semiring = semiring
 
     # TODO: allow converting to log space to deal with numerical stability
+    # (maybe by just offering a log-based semiring?)
     def run_viterbi(self, node_scores, transition_weights,
                     return_best_path=True):
         '''
@@ -164,8 +165,8 @@ class ViterbiDecoder(StructuredDecoder):
         transition_weights is one of:
           - a num_states x num_states array of scores for transitioning between
             states.
-          - a (num_sequence_items-1) x num_states x num_states array of scores for
-            transitioning between states for particular sequence items.
+          - a (num_sequence_items-1) x num_states x num_states array of scores
+            for transitioning between states for particular sequence items.
         if return_best_path is True, then instead of just returning the best
             score, the function will return (summed_score, best_state_path).
             (The semiring must have arg_sum defined for this.)
