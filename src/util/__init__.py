@@ -163,3 +163,7 @@ def floats_same_or_nearly_equal(f1, f2):
         return np.isnan(f2)
     else:
         return np.allclose(f1, f2)
+
+class Object(object):
+    ''' Dummy container class for storing attributes in. '''
+    pass
