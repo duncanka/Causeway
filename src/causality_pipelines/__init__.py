@@ -1,7 +1,7 @@
 from copy import copy
 from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
 import logging
-from nltk.tag.stanford import NERTagger
+from nltk.tag.stanford import StanfordNERTagger
 from os import path
 
 from data import StanfordParsedSentence, CausationInstance
@@ -137,7 +137,7 @@ class StanfordNERStage(Stage):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
-        st = NERTagger(model_path, jar_path)
+        st = StanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
             for sentence in documents]
