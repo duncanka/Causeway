@@ -108,6 +108,7 @@ class StanfordParsedSentenceReader(DocumentReader):
     def __init__(self):
         super(StanfordParsedSentenceReader, self).__init__()
         self._parse_file = None
+        self._next_sentence_num = None;
 
     def open(self, filepath):
         super(StanfordParsedSentenceReader, self).open(filepath)
@@ -125,11 +126,14 @@ class StanfordParsedSentenceReader(DocumentReader):
 
     def get_next(self):
         sentences = []
+        self._next_sentence_num = 0;
         while True:
             next_sentence = self._get_next_sentence()
+            self._next_sentence_num += 1;
             if next_sentence is None: # end of file
                 break
             sentences.append(next_sentence)
+        self._next_sentence_num = None;
 
         if sentences: # There were some sentences in the file
             return SentencesDocument(self._file_stream.name, sentences)
@@ -188,7 +192,7 @@ class StanfordParsedSentenceReader(DocumentReader):
         # Now create the sentence from the read data + the text file.
         sentence = StanfordParsedSentence(
             tokenized, lemmas, constituency_parse, parse_lines,
-            self._file_stream)
+            self._file_stream, self._next_sentence_num)
         assert (len(sentence.original_text) ==
                 self._file_stream.character_position
                   - sentence.document_char_offset), \

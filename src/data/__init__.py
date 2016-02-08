@@ -39,6 +39,9 @@ class SentencesDocument(Document):
         super(SentencesDocument, self).__init__(filename)
         self.sentences = sentences
 
+    def __iter__(self):
+        return iter(self.sentences)
+
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
@@ -166,7 +169,7 @@ class StanfordParsedSentence(object):
             return ''
 
     def __init__(self, tokenized_text, tagged_lemmas, penn_tree, edges,
-                 document_text):
+                 document_text, sentence_num=None):
         '''
         `tokenized_text` and `tagged_lemmas` are the token and lemma strings
          from the parser.
@@ -175,6 +178,7 @@ class StanfordParsedSentence(object):
          `util.streams.CharacterTrackingStreamWrapper`. (Built-in stream types
          will *not* work.)
         '''
+        self.sentence_num = sentence_num
         self.tokens = []
         self.causation_instances = []
         self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
@@ -536,6 +540,12 @@ class StanfordParsedSentence(object):
         else:
             raise ValueError("Somehow you passed a node whose leaf isn't under"
                              " its root. Wow.")
+
+    @staticmethod
+    def shallow_copy_doc_with_sentences_fixed(document):
+        copied = [StanfordParsedSentence.shallow_copy_with_sentences_fixed(s)
+                  for s in document.sentences]
+        return SentencesDocument(document, copied)
 
     @staticmethod
     def shallow_copy_with_sentences_fixed(sentence):
