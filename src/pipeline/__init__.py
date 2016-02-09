@@ -1,7 +1,7 @@
 """ Define basic pipeline functionality. """
 
 from copy import deepcopy
-from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_string
+from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_string, FlagsError
 import itertools
 import logging
 from numpy import random
@@ -31,11 +31,16 @@ try:
                   'Extension to add to the output filenames.')
     DEFINE_integer('cv_folds', 10,
                    'How many folds to split data into for cross-validation. A'
-                   ' negative value indicates leave-one-out CV.')
+                   ' 0 or negative value indicates leave-one-out CV.')
     DEFINE_integer('cv_debug_stop_after', None,
                    'Number of CV rounds to stop after (for debugging)')
     DEFINE_boolean('cv_print_fold_results', True,
                    "Whether to print each fold's results as they are computed")
+    DEFINE_boolean('cv_by_sentences', True,
+                   "Whether CV folds are split by sentences, rather than by"
+                   " documents. Only valid if documents are SentencesDocuments."
+                   " If True, folds are split by creating new pseudo-documents"
+                   " with randomly partitioned instances.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -70,19 +75,14 @@ class Pipeline(object):
     def weight_doc_by_sentences(document): # a common document weight function
         return len(document.sentences)
 
-    def cross_validate(self, document_weight_fn=None, num_folds=None):
+    def cross_validate(self):
         '''
-        By default, divides documents up into num_folds folds of equal number.
-        If document_weight_fn is provided, it is used to weight documents in each
-        fold (e.g., by counting the number of sentences or words).
-
         Returns a list of results, organized by stage. Results are also saved in
         self.eval_results. Results are aggregated across all folds using the
         aggregator functions provided by the stage's evaluators (see
         Evaluator.aggregate_results).
         '''
-        if num_folds is None:
-            num_folds = FLAGS.cv_folds
+        num_folds = FLAGS.cv_folds
 
         logging.info("Evaluating with %d-fold cross-validation" % num_folds)
         if FLAGS.cv_debug_stop_after:
@@ -91,14 +91,24 @@ class Pipeline(object):
                             '' if FLAGS.cv_debug_stop_after == 1 else 's'))
 
         documents = self._read_documents(FLAGS.train_paths + FLAGS.test_paths)
-        # TODO: if we're dealing with sentence documents, create a bunch of new,
-        # sentence-shuffled pseudo-documents that get passed to the stages.
-        random.shuffle(documents)
-        if num_folds < 0:
-            num_folds = len(documents)
-        document_weights = ([document_weight_fn(d) for d in documents]
-                            if document_weight_fn else None)
-        folds = partition(documents, num_folds, document_weights)
+        if FLAGS.cv_by_sentences:
+            # TODO: does this need to allow CV by any other kind of instance?
+            if not isinstance(documents[0], SentencesDocument):
+                raise FlagsError("Can't use cv_by_sentences when documents are"
+                                 " not SentencesDocuments")
+            all_instances = list(itertools.chain(*[d.sentences
+                                                   for d in documents]))
+            random.shuffle(all_instances)
+            if num_folds <= 0:
+                num_folds = len(all_instances)
+            sentence_folds = partition(all_instances, num_folds)
+            folds = [[SentencesDocument('fold%d' % i, sentences)]
+                     for i, sentences in enumerate(sentence_folds)]
+        else:
+            random.shuffle(documents)
+            if num_folds <= 0:
+                num_folds = len(documents)
+            folds = partition(documents, num_folds)
 
         results = [[] for _ in self.stages] # each list holds results by fold
 

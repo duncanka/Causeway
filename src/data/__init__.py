@@ -169,7 +169,7 @@ class StanfordParsedSentence(object):
             return ''
 
     def __init__(self, tokenized_text, tagged_lemmas, penn_tree, edges,
-                 document_text, sentence_num=None):
+                 document_text):
         '''
         `tokenized_text` and `tagged_lemmas` are the token and lemma strings
          from the parser.
@@ -178,7 +178,6 @@ class StanfordParsedSentence(object):
          `util.streams.CharacterTrackingStreamWrapper`. (Built-in stream types
          will *not* work.)
         '''
-        self.sentence_num = sentence_num
         self.tokens = []
         self.causation_instances = []
         self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
