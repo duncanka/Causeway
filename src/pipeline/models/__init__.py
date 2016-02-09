@@ -113,7 +113,7 @@ class ClassifierModel(FeaturizedModel):
         self.featurizer.register_features_from_instances(instances)
         logging.info('Done registering features.')
 
-        features = self.featurize(instances)
+        features = self.featurizer.featurize(instances)
         labels = self._get_gold_labels(instances)
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
