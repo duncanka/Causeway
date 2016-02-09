@@ -91,7 +91,8 @@ class Pipeline(object):
                             '' if FLAGS.cv_debug_stop_after == 1 else 's'))
 
         documents = self._read_documents(FLAGS.train_paths + FLAGS.test_paths)
-        # TODO: investigate if there's a way to do CV at the sub-document level.
+        # TODO: if we're dealing with sentence documents, create a bunch of new,
+        # sentence-shuffled pseudo-documents that get passed to the stages.
         random.shuffle(documents)
         if num_folds < 0:
             num_folds = len(documents)
@@ -99,8 +100,6 @@ class Pipeline(object):
                             if document_weight_fn else None)
         folds = partition(documents, num_folds, document_weights)
 
-        # TODO: delete me
-        print [sum([document_weight_fn(d) for d in fold]) for fold in folds]
         results = [[] for _ in self.stages] # each list holds results by fold
 
         for i, fold in enumerate(folds):
@@ -214,11 +213,11 @@ class Pipeline(object):
         return eval_results
 
     def __test_documents(self, documents):
-        original_documents = documents
-        if self._evaluators_by_stage: # we're evaluating, so avoid overwriting
-            documents = [self._copy_fn(document) for document in documents]
-
         for i, stage in enumerate(self.stages):
+            original_documents = documents
+            if self._evaluators_by_stage: # we're evaluating, so avoid overwriting
+                original_documents = [self._copy_fn(doc) for doc in documents]
+
             logging.info('Testing stage "%s"...' % stage.name)
             for document, original_document in zip(documents,
                                                    original_documents):
