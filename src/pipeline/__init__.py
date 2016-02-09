@@ -54,7 +54,7 @@ class Pipeline(object):
         not all elements need to be copied to protect originals from
         modification. Clients should make certain that the copy function
         provided duplicates all document properties that may be modified by
-        testing at *any point* in the pipeline. 
+        testing at *any point* in the pipeline.
         '''
         self.stages = listify(stages)
         self.reader = reader
@@ -196,8 +196,7 @@ class Pipeline(object):
             if stage is not self.stages[-1]:
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
-                for document, instances in zip(documents, instances_by_document):
-                    stage.test(document, instances)
+                stage._test_documents(documents, instances_by_document, None)
                 logging.info('Done testing stage "%s"' % stage.name)
 
             # TODO: Fix attribute consumption
@@ -225,23 +224,25 @@ class Pipeline(object):
     def __test_documents(self, documents):
         for i, stage in enumerate(self.stages):
             original_documents = documents
-            if self._evaluators_by_stage: # we're evaluating, so avoid overwriting
+            if self._evaluators_by_stage: # we're evaluating; avoid overwriting
                 original_documents = [self._copy_fn(doc) for doc in documents]
+                original_instances_by_doc = [
+                    stage._extract_instances(original_document, False)
+                    for original_document in original_documents]
+
+            instances_by_doc = [stage._extract_instances(document, False)
+                                for document in documents]
 
             logging.info('Testing stage "%s"...' % stage.name)
-            for document, original_document in zip(documents,
-                                                   original_documents):
-                instances = stage._extract_instances(document, False)
-                # On the final stage, the instance is now complete, so provide a
-                # writer (if we have one).
-                if i == len(self.stages) - 1:
-                    stage.test(document, instances, self.writer)
-                else:
-                    stage.test(document, instances)
 
+            # On the final stage, the instance is now complete, so provide a
+            # writer (if we have one).
+            writer = self.writer if i == len(self.stages) - 1 else None
+            stage._test_documents(documents, instances_by_doc, writer)
+
+            for instances, original_instances in zip(instances_by_doc,
+                                                    original_instances_by_doc):
                 if self._evaluators_by_stage and self._evaluators_by_stage[i]:
-                    original_instances = stage._extract_instances(
-                        original_document, False)
                     self._evaluators_by_stage[i].evaluate(instances,
                                                           original_instances)
 
@@ -294,7 +295,7 @@ class Pipeline(object):
         (Note that the original documents are NOT modified during evaluation.)
         Otherwise, documents are read from the files specified in the test_path
         flags, and the results are written by the pipeline's Writer (if it has
-        one). 
+        one).
         """
 
         if documents is not None:
@@ -375,6 +376,18 @@ class Stage(object):
         for attribute_name in self.consumed_attributes:
             for instance in instances:
                 delattr(instance, attribute_name)
+
+    def _test_documents(self, documents, instances_by_doc, writer):
+        '''
+        In the vast majority of cases, stages should process document by
+        document, using the test() function above. However, it may occasionally
+        be necessary to override this functionality to batch-process documents
+        (e.g., for efficiency reasons). In such cases, the overridden method
+        should be certain to call _label_instance and writer.instance_complete
+        as appropriate.
+        '''
+        for document, instances in zip(documents, instances_by_doc):
+            self.test(document, instances, writer)
 
     '''
     Default list of attributes the stage adds to instances. Add a class-wide
