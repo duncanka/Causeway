@@ -19,9 +19,10 @@ class StructuredModel(Model):
     scored parts into a coherent labeling for the instance.
     '''
 
-    def __init__(self, decoder):
+    def __init__(self, decoder, *args, **kwargs):
         ''' decoder is some StructuredDecoder object. '''
         self.decoder = decoder
+        super(StructuredModel, self).__init__(*args, **kwargs)
 
     def train(self, instances):
         self.reset() # Reset state in case we've been previously trained.
@@ -45,7 +46,7 @@ class StructuredModel(Model):
     def _make_parts(self, instance):
         raise NotImplementedError
 
-    def _score_parts(self, instance_parts):
+    def _score_parts(self, instance, instance_parts):
         raise NotImplementedError
 
 
@@ -80,6 +81,7 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
             assert len(part_filters) == len(part_types)
         self._part_filters = part_filters
 
+        # TODO: fix to use the proper super mechanism.
         StructuredModel.__init__(self, decoder)
         FeaturizedModel.__init__(self, selected_features, model_path,
                                  save_featurized)
