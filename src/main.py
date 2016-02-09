@@ -13,7 +13,7 @@ from causality_pipelines.regex_based.candidate_classifier import RegexClassifier
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
-from causality_pipelines.tregex_based.candidate_classifier import TRegexClassifierStage
+from causality_pipelines.tregex_based.candidate_classifier import TRegexFilterStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import StanfordParsedSentence
 from data.io import DirectoryReader, CausalityStandoffReader
@@ -53,7 +53,7 @@ def get_stages(candidate_classifier):
     if FLAGS.pipeline_type == 'tregex':
         stages = [TRegexConnectiveStage('TRegex connectives'),
                   ArgSpanStage('Argument span expander'),
-                  TRegexClassifierStage(candidate_classifier,
+                  TRegexFilterStage(candidate_classifier,
                                         'Candidate classifier')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
@@ -64,7 +64,7 @@ def get_stages(candidate_classifier):
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   TRegexConnectiveStage('TRegex connectives'),
                   ArgSpanStage('Argument span expander'),
-                  TRegexClassifierStage(candidate_classifier,
+                  TRegexFilterStage(candidate_classifier,
                                         'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
     elif FLAGS.pipeline_type == 'baseline+regex':
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     causality_pipeline = Pipeline(
         stages, DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
                                 CausalityStandoffReader()),
-        copy_fn=StanfordParsedSentence.shallow_copy_with_sentences_fixed)
+        copy_fn=StanfordParsedSentence.shallow_copy_doc_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate(

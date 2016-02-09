@@ -1,8 +1,8 @@
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
-from itertools import permutations
+from itertools import permutations, chain
 import logging
 
-from causality_pipelines import PossibleCausation, IAAEvaluator
+from causality_pipelines import IAAEvaluator
 from pipeline import Stage
 from pipeline.models import Model
 
@@ -18,35 +18,40 @@ class ArgSpanModel(Model):
         super(ArgSpanModel, self).__init__(*args, **kwargs)
         self.connectives_allowed_in_arg = set()
 
-    def train(self, possible_causations):
-        for pc in possible_causations:
-            if pc.true_causation_instance:
-                for token in pc.connective:
-                    if (token in pc.true_causation_instance.cause or
-                        token in pc.true_causation_instance.effect):
-                        for pattern in pc.matching_patterns:
-                            self.connectives_allowed_in_arg.add((pattern,
-                                                                 token.lemma))
+    def train(self, sentences):
+        for sentence in sentences:
+            for pc in sentence.possible_causations:
+                if pc.true_causation_instance:
+                    for token in pc.connective:
+                        if (token in pc.true_causation_instance.cause or
+                            token in pc.true_causation_instance.effect):
+                            for pattern in pc.matching_patterns:
+                                self.connectives_allowed_in_arg.add(
+                                    (pattern, token.lemma))
 
-    def test(self, possible_causations):
-        for pc in possible_causations:
-            expanded_args = []
-            for arg, other_arg in permutations([pc.cause, pc.effect]):
-                if arg is None:
-                    expanded_args.append(None)
-                else:
-                    # Args only contain one token at this point.
-                    expanded_arg = self.expand_argument(
-                        pc, arg[0], other_arg[0])
-                    if pc.sentence.get_head(expanded_arg) is not arg[0]:
-                        logging.warn(
-                            'Head changed after expanding args: "%s" became'
-                            ' "%s" in sentence: "%s"' %
-                            (' '.join([t.original_text for t in arg]),
-                             ' '.join([t.original_text for t in expanded_arg]),
-                             pc.sentence.original_text))
-                    expanded_args.append(expanded_arg)
-            pc.cause, pc.effect = expanded_args
+    def test(self, sentences):
+        all_expanded_args = [[] for _ in sentences]
+        for sentence, sentence_expanded_args in zip(sentences,
+                                                    all_expanded_args):
+            for pc in sentence.possible_causations:
+                expanded_args = []
+                for arg, other_arg in permutations([pc.cause, pc.effect]):
+                    if arg is None:
+                        expanded_args.append(None)
+                    else:
+                        # Args only contain one token at this point.
+                        expanded_arg = self.expand_argument(
+                            pc, arg[0], other_arg[0])
+                        if pc.sentence.get_head(expanded_arg) is not arg[0]:
+                            logging.warn(
+                                'Head changed after expanding args: "%s" became'
+                                ' "%s" in sentence: "%s"' %
+                                (' '.join([t.original_text for t in arg]),
+                                 ' '.join([t.original_text for t in expanded_arg]),
+                                 pc.sentence.original_text))
+                        expanded_args.append(expanded_arg)
+                sentence_expanded_args.append(expanded_args)
+        return all_expanded_args
 
     def expand_argument(self, pc, argument_head,
                         other_argument_head):
@@ -124,12 +129,12 @@ class ArgSpanModel(Model):
 
 class ArgSpanStage(Stage):
     def __init__(self, name):
-        super(ArgSpanStage, self).__init__(
-            name=name,
-            models=ArgSpanModel(part_type=PossibleCausation))
+        super(ArgSpanStage, self).__init__(name=name, model=ArgSpanModel())
 
-    def _extract_instances(self, sentence, is_train):
-        return sentence.possible_causations
+    def _label_instance(self, document, sentence, predicted_args):
+        assert len(sentence.possible_causations) == len(predicted_args)
+        for pc, args in zip(sentence.possible_causations, predicted_args):
+            pc.cause, pc.effect = args
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats

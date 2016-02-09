@@ -10,7 +10,7 @@ import tempfile
 import time
 from threading import Lock
 
-from data import StanfordParsedSentence, Token
+from data import Token
 from pipeline import Stage
 from pipeline.models import Model
 from causality_pipelines import PossibleCausation, IAAEvaluator
@@ -83,12 +83,13 @@ class TRegexConnectiveModel(Model):
                 1.85 * (int(log10(i + 1)) + 3)
                 for i in range(len(possible_sentence_indices)))
 
+        predicted_outputs = [[] for _ in range(len(sentences))]
         logging.info("%d patterns in queue", queue.qsize())
         # Start the threads
         threads = []
         for _ in range(FLAGS.tregex_max_threads):
             new_thread = self.TregexProcessorThread(
-                sentences, ptb_strings, queue)
+                sentences, ptb_strings, queue, predicted_outputs)
             threads.append(new_thread)
             new_thread.start()
 
@@ -106,6 +107,9 @@ class TRegexConnectiveModel(Model):
         elapsed_seconds = time.time() - start_time
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
+
+        # predicted_outputs has now been modified by the threads.
+        return predicted_outputs
 
     #####################################
     # Sentence preprocessing
@@ -538,12 +542,14 @@ class TRegexConnectiveModel(Model):
     #####################################
 
     class TregexProcessorThread(threading.Thread):
-        def __init__(self, sentences, ptb_strings, queue, *args, **kwargs):
+        def __init__(self, sentences, ptb_strings, queue, predicted_outputs,
+                     *args, **kwargs):
             super(TRegexConnectiveModel.TregexProcessorThread, self).__init__(
                 *args, **kwargs)
             self.sentences = sentences
             self.ptb_strings = ptb_strings
             self.queue = queue
+            self.predicted_outputs = predicted_outputs
             self.output_file = None
             self.total_bytes_output = 0
             # We associate a lock with the output file to prevent concurrency
@@ -608,8 +614,14 @@ class TRegexConnectiveModel(Model):
                 self.output_file.seek(0)
 
                 for sentence in possible_sentences:
-                    self._process_tregex_for_sentence(
+                    possible_causations = self._process_tregex_for_sentence(
                         pattern, connective_labels, sentence)
+                    # NOTE: This is the ONLY PLACE where we modify shared data.
+                    # It is thread-safe because self.predicted_outputs itself is
+                    # never modified; its individual elements -- themselves
+                    # lists -- are never replaced; and list.extend() is atomic.
+                    self.predicted_outputs[sentence.sentence_num].extend(
+                        possible_causations)
 
                 # Tell the progress reporter how far we've gotten, so that it
                 # will know progress for patterns that have already finished.
@@ -661,6 +673,7 @@ class TRegexConnectiveModel(Model):
             # The first two printed will be cause/effect; the remainder are
             # connectives.
             batch_size = 2 + len(connective_labels)
+            possible_causations = []
             for match_lines in igroup(lines, batch_size):
                 # TODO: If the argument heads overlap, we can't match the
                 # pattern. This is extremely rare, but it's not clear how to
@@ -698,10 +711,9 @@ class TRegexConnectiveModel(Model):
                     sentence, [pattern], connective,
                     true_connectives.get(tuple(connective), None),
                     [cause], [effect])
-                # THIS IS THE ONLY LINE THAT MUTATES SHARED DATA.
-                # It is thread-safe, because lists are thread-safe, and
-                # we never reassign sentence.possible_causations.
-                sentence.possible_causations.append(possible)
+                possible_causations.append(possible)
+
+            return possible_causations
 
         def get_progress(self):
             try:
@@ -746,16 +758,15 @@ class TRegexConnectiveModel(Model):
 class TRegexConnectiveStage(Stage):
     def __init__(self, name):
         super(TRegexConnectiveStage, self).__init__(
-            name=name,
-            models=TRegexConnectiveModel(part_type=StanfordParsedSentence))
+            name=name, model=TRegexConnectiveModel())
         self.pairwise_only_metrics = None # used during evaluation
 
     produced_attributes = ['possible_causations']
-
-    def _extract_instances(self, sentence, is_train):
-        return [sentence]
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
         return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
                             True, True, 'possible_causations')
+
+    def _label_instance(self, document, sentence, predicted_causations):
+        sentence.possible_causations = predicted_causations

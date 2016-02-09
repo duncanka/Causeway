@@ -3,16 +3,17 @@ from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFla
 import itertools
 import logging
 from nltk.corpus import wordnet
-import numpy as np
 from scipy.spatial import distance
 
 from causality_pipelines import IAAEvaluator
-from data import Token, StanfordParsedSentence
-from pipeline import Stage
-from pipeline.models import ClassifierModel, ClassifierPart
-from pipeline.feature_extractors import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, \
-    VectorValuedFeatureExtractor
+from data import Token, StanfordParsedSentence, CausationInstance
 from nlp.senna import SennaEmbeddings
+import numpy as np
+from pipeline import Stage
+from pipeline.featurization import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, VectorValuedFeatureExtractor
+from pipeline.models import ClassifierModel
+from pipeline.models.structured import StructuredDecoder, StructuredModel
+
 
 try:
     DEFINE_list(
@@ -37,8 +38,9 @@ except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class TRegexClassifierPart(ClassifierPart):
+class TRegexClassifierPart(object):
     def __init__(self, possible_causation):
+        self.possible_causation = possible_causation
         self.sentence = possible_causation.sentence
         self.cause = possible_causation.cause
         self.effect = possible_causation.effect
@@ -49,37 +51,47 @@ class TRegexClassifierPart(ClassifierPart):
         # TODO: Update this once we have multiple pattern matches sorted out.
         self.connective_pattern = possible_causation.matching_patterns[0]
 
-        if possible_causation.true_causation_instance:
-            if FLAGS.tregex_cc_tuple_correctness:
-                true_cause_head = self.sentence.get_head(
-                    possible_causation.true_causation_instance.cause)
-                true_effect_head = self.sentence.get_head(
-                    possible_causation.true_causation_instance.effect)
-                label = (true_cause_head is self.cause_head and
-                         true_effect_head is self.effect_head)
-            else:
-                label = True
-        else:
-            label = False
-        super(TRegexClassifierPart, self).__init__(self.sentence, label)
 
+# In principle, the TRegexCausationFilter is both a featurized classifier and a
+# structured model. (It is structured in that we get a list of predicted
+# instances for each sentence, and then we want to choose the best list for the
+# entire sentence.) In practice, it is easier to describe the classifier through
+# composition rather than inheritance.
 
 class TRegexClassifierModel(ClassifierModel):
-    def __init__(self, classifier):
-        super(TRegexClassifierModel, self).__init__(
-            TRegexClassifierPart,
-            TRegexClassifierModel.FEATURE_EXTRACTORS,
-            FLAGS.tregex_cc_features, classifier)
+    def _get_gold_labels(self, classifier_parts):
+        labels = []
+        for classifier_part in classifier_parts:
+            true_instance = (classifier_part.possible_causation
+                             ).true_causation_instance
+            if true_instance:
+                if FLAGS.tregex_cc_tuple_correctness:
+                    true_cause_head = self.sentence.get_head(
+                        true_instance.cause)
+                    true_effect_head = self.sentence.get_head(
+                        true_instance.effect)
+                    labels.append(
+                        (true_cause_head is classifier_part.cause_head and
+                         true_effect_head is classifier_part.effect_head))
+                else:
+                    labels.append(True)
+            else:
+                labels.append(False)
+        return labels
+
+    #############################
+    # Feature extraction methods
+    #############################
 
     @staticmethod
     def words_btw_heads(part):
-        words_btw = part.instance.count_words_between(
+        words_btw = part.sentence.count_words_between(
             part.cause_head, part.effect_head)
         return min(words_btw, FLAGS.tregex_cc_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
-        deps = part.instance.extract_dependency_path(
+        deps = part.sentence.extract_dependency_path(
             part.cause_head, part.effect_head, False)
         if len(deps) > FLAGS.tregex_cc_max_dep_path_len:
             return 'LONG-RANGE'
@@ -204,12 +216,10 @@ class TRegexClassifierModel(ClassifierModel):
         v2 = TRegexClassifierModel.extract_vector(head2)
         return distance.cosine(v1, v2)
 
-    # We can't initialize this properly yet because we don't have access to the
-    # class' static methods to define the list.
-    FEATURE_EXTRACTORS = []
+    all_feature_extractors = []
 
 
-TRegexClassifierModel.FEATURE_EXTRACTORS = [
+TRegexClassifierModel.all_feature_extractors = [
     KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
@@ -219,14 +229,14 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                                 TRegexClassifierModel._ALL_POS_PAIRS),
     KnownValuesFeatureExtractor(
         'cause_pos_bigram',
-        lambda part: TRegexClassifierModel.extract_pos_bigram(part,
-                                                              part.cause_head),
-                                TRegexClassifierModel._ALL_POS_PAIRS),
+        lambda part: TRegexClassifierModel.extract_pos_bigram(
+                             part, part.cause_head),
+                         TRegexClassifierModel._ALL_POS_PAIRS),
     KnownValuesFeatureExtractor(
         'effect_pos_bigram',
-        lambda part: TRegexClassifierModel.extract_pos_bigram(part,
-                                                              part.effect_head),
-                                TRegexClassifierModel._ALL_POS_PAIRS),
+        lambda part: TRegexClassifierModel.extract_pos_bigram(
+                             part, part.effect_head),
+                         TRegexClassifierModel._ALL_POS_PAIRS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
         'cause_pos_gen', lambda part: part.cause_head.get_gen_pos(),
@@ -238,7 +248,7 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                      FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor('deppath', TRegexClassifierModel.extract_dep_path),
     FeatureExtractor('deplen',
-                     lambda part: len(part.instance.extract_dependency_path(
+                     lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)),
                      FeatureExtractor.FeatureTypes.Numerical),
     # TODO: Update this once we have multiple pattern matches sorted out.
@@ -253,7 +263,8 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                      TRegexClassifierModel.extract_incoming_dep),
     FeatureExtractor('verb_children_deps',
                      TRegexClassifierModel.get_verb_children_deps),
-    FeatureExtractor('cn_parent_pos', TRegexClassifierModel.extract_parent_pos),
+    FeatureExtractor('cn_parent_pos',
+                     TRegexClassifierModel.extract_parent_pos),
     FeatureExtractor('cn_words',
                      lambda part: ' '.join([t.lowered_text
                                             for t in part.connective])),
@@ -268,12 +279,13 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
         'effect_hypernyms',
         lambda part: TRegexClassifierModel.extract_wn_hypernyms(
             part.effect_head)),
-    FeatureExtractor('cause_case_children',
-                     lambda part: TRegexClassifierModel.extract_case_children(
-                         part.cause_head)),
+    FeatureExtractor(
+        'cause_case_children',
+        lambda part: TRegexClassifierModel.extract_case_children(
+                        part.cause_head)),
     FeatureExtractor('effect_case_children',
-                     lambda part: TRegexClassifierModel.extract_case_children(
-                         part.effect_head)),
+        lambda part: TRegexClassifierModel.extract_case_children(
+                        part.effect_head)),
     KnownValuesFeatureExtractor('domination',
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
@@ -288,34 +300,46 @@ TRegexClassifierModel.FEATURE_EXTRACTORS = [
                      lambda part: TRegexClassifierModel.extract_vector_dist(
                         part.cause_head, part.effect_head),
                      FeatureExtractor.FeatureTypes.Numerical),
-    FeatureExtractor('vector_cos_dist',
-                     lambda part: TRegexClassifierModel.extract_vector_cos_dist(
+    FeatureExtractor(
+        'vector_cos_dist',
+        lambda part: TRegexClassifierModel.extract_vector_cos_dist(
                         part.cause_head, part.effect_head),
-                     FeatureExtractor.FeatureTypes.Numerical),
+        FeatureExtractor.FeatureTypes.Numerical),
 ]
 
+class TRegexCausationFilter(StructuredModel):
+    def __init__(self, classifier):
+        super(TRegexCausationFilter, self).__init__(TRegexFilterDecoder())
+        self.classifier = TRegexClassifierModel(classifier,
+                                                    FLAGS.tregex_cc_features)
 
-class TRegexClassifierStage(Stage):
-    def __init__(self, classifier, name):
-        super(TRegexClassifierStage, self).__init__(
-            name=name, models=TRegexClassifierModel(classifier))
+    def _make_parts(self, sentence):
+        return [TRegexClassifierPart(pc) for pc in sentence.possible_causations]
 
-    consumed_attributes = ['possible_causations']
+    def _train_structured(self, instances, parts_by_instance):
+        self.classifier.train(list(itertools.chain(*parts_by_instance)))
 
-    def _extract_instances(self, sentence, is_train):
-        return [TRegexClassifierPart(p) for p in sentence.possible_causations]
+    def _score_parts(self, instance, instance_parts):
+        if instance_parts:
+            # Return array of classification results by part.
+            return self.classifier.test(instance_parts)
+        else:
+            return []
 
-    def _label_instance(self, sentence, labeled_parts):
+
+class TRegexFilterDecoder(StructuredDecoder):
+    def decode(self, sentence, classifier_parts, labels):
         # Deduplicate the results.
 
         tokens_to_parts = defaultdict(int)
-        positive_parts = [p for p in labeled_parts if p.label]
+        positive_parts = [part for part, label in zip(classifier_parts, labels)
+                          if label]
         for part in positive_parts:
             # Count every instance each connective word is part of.
             for connective_token in part.connective:
                 tokens_to_parts[connective_token] += 1
 
-        sentence.causation_instances = []
+        causation_instances = []
         for part in positive_parts:
             keep_part = True
             for token in part.connective:
@@ -328,9 +352,22 @@ class TRegexClassifierStage(Stage):
                         keep_part = False
                         break
             if keep_part:
-                sentence.add_causation_instance(
-                    connective=part.connective,
-                    cause=part.cause, effect=part.effect)
+                causation_instances.append(CausationInstance(
+                    sentence, connective=part.connective,
+                    cause=part.cause, effect=part.effect))
+
+        return causation_instances
+
+
+class TRegexFilterStage(Stage):
+    def __init__(self, classifier, name):
+        super(TRegexFilterStage, self).__init__(
+            name=name, model=TRegexCausationFilter(classifier))
+
+    consumed_attributes = ['possible_causations']
+
+    def _label_instance(self, document, sentence, predicted_causations):
+        sentence.causation_instances = predicted_causations
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
