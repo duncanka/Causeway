@@ -1,4 +1,5 @@
 from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer, DEFINE_enum
+import itertools
 import threading
 import logging
 from math import log10
@@ -570,7 +571,7 @@ class TRegexConnectiveModel(Model):
 
                     possible_trees = [self.ptb_strings[i]
                                       for i in possible_sentence_indices]
-                    possible_sentences = [self.sentences[i]
+                    possible_sentences = [(i, self.sentences[i])
                                           for i in possible_sentence_indices]
 
                     with tempfile.NamedTemporaryFile(
@@ -613,14 +614,14 @@ class TRegexConnectiveModel(Model):
                                 stderr=self.dev_null)
                 self.output_file.seek(0)
 
-                for sentence in possible_sentences:
+                for sentence_index, sentence in possible_sentences:
                     possible_causations = self._process_tregex_for_sentence(
                         pattern, connective_labels, sentence)
                     # NOTE: This is the ONLY PLACE where we modify shared data.
                     # It is thread-safe because self.predicted_outputs itself is
                     # never modified; its individual elements -- themselves
                     # lists -- are never replaced; and list.extend() is atomic.
-                    self.predicted_outputs[sentence.sentence_num].extend(
+                    self.predicted_outputs[sentence_index].extend(
                         possible_causations)
 
                 # Tell the progress reporter how far we've gotten, so that it
@@ -679,7 +680,9 @@ class TRegexConnectiveModel(Model):
                 # pattern. This is extremely rare, but it's not clear how to
                 # deal with it when it does happen.
                 if None in match_lines:
-                    logging.warn("Skipping invalid TRegex match: %s (pattern: %s)", lines, pattern)
+                    logging.warn(
+                        "Skipping invalid TRegex match: %s (pattern: %s)",
+                        lines, pattern)
                     continue
                 arg_lines = match_lines[:2]
                 connective_lines = match_lines[2:]
@@ -768,5 +771,20 @@ class TRegexConnectiveStage(Stage):
         return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
                             True, True, 'possible_causations')
 
-    def _label_instance(self, document, sentence, predicted_causations):
-        sentence.possible_causations = predicted_causations
+    # No need for _label_instance, as we take care of that in _test_documents.
+
+    def _test_documents(self, documents, sentences_by_doc, writer):
+        all_sentences = list(itertools.chain(*sentences_by_doc))
+        all_possible_causations = self.model.test(all_sentences)
+
+        causations_iter = iter(all_possible_causations)
+        for document, doc_sentences in zip(documents, sentences_by_doc):
+            for sentence in doc_sentences:
+                sentence.possible_causations = causations_iter.next()
+                if writer:
+                    writer.instance_complete(document, sentence)
+        try:
+            causations_iter.next()
+            assert False, "Should have as many causation lists as sentences!"
+        except StopIteration:
+            pass
