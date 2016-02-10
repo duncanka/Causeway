@@ -26,7 +26,7 @@ class StructuredModel(Model):
 
     def train(self, instances):
         self.reset() # Reset state in case we've been previously trained.
-        parts_by_instance = [self._make_parts(instance)
+        parts_by_instance = [self._make_parts(instance, True)
                              for instance in instances]
         self._train_structured(instances, parts_by_instance)
 
@@ -39,11 +39,11 @@ class StructuredModel(Model):
         # In structured models, we often want to incrementally write out results
         # one instance at a time, so yield results rather than creating a list.
         for instance in instances:
-            instance_parts = self._make_parts(instance)
+            instance_parts = self._make_parts(instance, False)
             part_scores = self._score_parts(instance, instance_parts)
             yield self.decoder.decode(instance, instance_parts, part_scores)
 
-    def _make_parts(self, instance):
+    def _make_parts(self, instance, is_train):
         raise NotImplementedError
 
     def _score_parts(self, instance, instance_parts):

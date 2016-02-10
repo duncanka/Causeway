@@ -7,13 +7,13 @@ import os
 from sklearn import tree, neighbors, linear_model, svm, ensemble
 import sys
 
+from causality_pipelines.candidate_filter import CausationPatternFilterStage
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
-from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
+# from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
-from causality_pipelines.tregex_based.candidate_classifier import TRegexFilterStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import StanfordParsedSentence
 from data.io import DirectoryReader, CausalityStandoffReader
@@ -53,26 +53,26 @@ def get_stages(candidate_classifier):
     if FLAGS.pipeline_type == 'tregex':
         stages = [TRegexConnectiveStage('TRegex connectives'),
                   ArgSpanStage('Argument span expander'),
-                  TRegexFilterStage(candidate_classifier,
-                                        'Candidate classifier')]
+                  CausationPatternFilterStage(candidate_classifier,
+                                              'Candidate classifier')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler'),
-                  RegexClassifierStage(candidate_classifier,
-                                       'Candidate classifier')]
+                  CausationPatternFilterStage(candidate_classifier,
+                                              'Candidate classifier')]
     elif FLAGS.pipeline_type == 'baseline+tregex':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   TRegexConnectiveStage('TRegex connectives'),
                   ArgSpanStage('Argument span expander'),
-                  TRegexFilterStage(candidate_classifier,
-                                        'Candidate classifier'),
+                  CausationPatternFilterStage(candidate_classifier,
+                                              'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
     elif FLAGS.pipeline_type == 'baseline+regex':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler'),
-                  RegexClassifierStage(candidate_classifier,
-                                       'Candidate classifier'),
+                  CausationPatternFilterStage(candidate_classifier,
+                                              'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
     else:
         stages = [BaselineStage('Baseline')] # baseline

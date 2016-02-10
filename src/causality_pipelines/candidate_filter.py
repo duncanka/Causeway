@@ -5,41 +5,46 @@ import logging
 from nltk.corpus import wordnet
 from scipy.spatial import distance
 
-from causality_pipelines import IAAEvaluator
+from causality_pipelines import IAAEvaluator, StanfordNERStage
 from data import Token, StanfordParsedSentence, CausationInstance
+from iaa import make_annotation_comparator
 from nlp.senna import SennaEmbeddings
 import numpy as np
 from pipeline import Stage
 from pipeline.featurization import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, VectorValuedFeatureExtractor
 from pipeline.models import ClassifierModel
 from pipeline.models.structured import StructuredDecoder, StructuredModel
+from util.diff import SequenceDiff
 
 
 try:
     DEFINE_list(
-        'tregex_cc_features',
+        'causality_cc_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination,'
         'vector_dist,vector_cos_dist'.split(','),
-        'Features to use for TRegex-based classifier model')
-    DEFINE_integer('tregex_cc_max_wordsbtw', 10,
+        'Features to use for pattern-based candidate classifier model')
+    DEFINE_integer('causality_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max")
-    DEFINE_integer('tregex_cc_max_dep_path_len', 3,
+    DEFINE_integer('causality_cc_max_dep_path_len', 3,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")
-    DEFINE_bool('tregex_cc_print_test_instances', False,
+    DEFINE_bool('causality_cc_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation')
-    DEFINE_bool('tregex_cc_tuple_correctness', False,
+    DEFINE_bool('causality_cc_tuple_correctness', False,
                 'Whether a candidate instance should be considered correct in'
                 ' training based on (connective, cause, effect), as opposed to'
                 ' just connectives.')
+    DEFINE_bool('causality_cc_train_with_partials', False,
+                'Whether to train the candidate classifier model counting'
+                ' partial overlap as correct')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class TRegexClassifierPart(object):
-    def __init__(self, possible_causation):
+class PatternFilterPart(object):
+    def __init__(self, possible_causation, correct_connective=None):
         self.possible_causation = possible_causation
         self.sentence = possible_causation.sentence
         self.cause = possible_causation.cause
@@ -50,34 +55,39 @@ class TRegexClassifierPart(object):
         self.connective_head = self.sentence.get_head(self.connective)
         # TODO: Update this once we have multiple pattern matches sorted out.
         self.connective_pattern = possible_causation.matching_patterns[0]
+        self.connective_correct = correct_connective
 
 
-# In principle, the TRegexCausationFilter is both a featurized classifier and a
+# In principle, the causation filter is both a featurized classifier and a
 # structured model. (It is structured in that we get a list of predicted
 # instances for each sentence, and then we want to choose the best list for the
 # entire sentence.) In practice, it is easier to describe the classifier through
 # composition rather than inheritance.
 
-class TRegexClassifierModel(ClassifierModel):
+class CausalPatternClassifierModel(ClassifierModel):
     def _get_gold_labels(self, classifier_parts):
-        labels = []
-        for classifier_part in classifier_parts:
-            true_instance = (classifier_part.possible_causation
-                             ).true_causation_instance
-            if true_instance:
-                if FLAGS.tregex_cc_tuple_correctness:
-                    true_cause_head = self.sentence.get_head(
-                        true_instance.cause)
-                    true_effect_head = self.sentence.get_head(
-                        true_instance.effect)
-                    labels.append(
-                        (true_cause_head is classifier_part.cause_head and
-                         true_effect_head is classifier_part.effect_head))
+        if FLAGS.causality_cc_tuple_correctness:
+            # TODO: does this code actually make sense?
+            labels = []
+            for classifier_part in classifier_parts:
+                if not classifier_part.connective_correct:
+                    labels.append(False)
                 else:
-                    labels.append(True)
-            else:
-                labels.append(False)
-        return labels
+                    true_instance = (classifier_part.possible_causation
+                                     ).true_causation_instance
+                    if true_instance:
+                        true_cause_head = self.sentence.get_head(
+                            true_instance.cause)
+                        true_effect_head = self.sentence.get_head(
+                            true_instance.effect)
+                        labels.append(
+                            (true_cause_head is classifier_part.cause_head and
+                             true_effect_head is classifier_part.effect_head))
+                    else:
+                        labels.append(False)
+            return labels
+        else:
+            return [part.connective_correct for part in classifier_parts]
 
     #############################
     # Feature extraction methods
@@ -87,13 +97,13 @@ class TRegexClassifierModel(ClassifierModel):
     def words_btw_heads(part):
         words_btw = part.sentence.count_words_between(
             part.cause_head, part.effect_head)
-        return min(words_btw, FLAGS.tregex_cc_max_wordsbtw)
+        return min(words_btw, FLAGS.causality_cc_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
         deps = part.sentence.extract_dependency_path(
             part.cause_head, part.effect_head, False)
-        if len(deps) > FLAGS.tregex_cc_max_dep_path_len:
+        if len(deps) > FLAGS.causality_cc_max_dep_path_len:
             return 'LONG-RANGE'
         else:
             return str(deps)
@@ -108,18 +118,18 @@ class TRegexClassifierModel(ClassifierModel):
     @staticmethod
     def extract_tense(head):
         if head.parent_sentence is (
-            TRegexClassifierModel.__cached_tenses_sentence):
+            CausalPatternClassifierModel.__cached_tenses_sentence):
             try:
-                return TRegexClassifierModel.__cached_tenses[head]
+                return CausalPatternClassifierModel.__cached_tenses[head]
             except KeyError:
                 pass
         else:
-            TRegexClassifierModel.__cached_tenses_sentence = (
+            CausalPatternClassifierModel.__cached_tenses_sentence = (
                 head.parent_sentence)
-            TRegexClassifierModel.__cached_tenses = {}
+            CausalPatternClassifierModel.__cached_tenses = {}
 
         tense = head.parent_sentence.get_auxiliaries_string(head)
-        TRegexClassifierModel.__cached_tenses[head] = tense
+        CausalPatternClassifierModel.__cached_tenses[head] = tense
         return tense
 
     @staticmethod
@@ -197,46 +207,46 @@ class TRegexClassifierModel(ClassifierModel):
     _embeddings = None # only initialize if being used
     @staticmethod
     def extract_vector(arg_head):
-        if not TRegexClassifierModel._embeddings:
-            TRegexClassifierModel._embeddings = SennaEmbeddings()
+        if not CausalPatternClassifierModel._embeddings:
+            CausalPatternClassifierModel._embeddings = SennaEmbeddings()
         try:
-            return TRegexClassifierModel._embeddings[arg_head.lowered_text]
+            return CausalPatternClassifierModel._embeddings[arg_head.lowered_text]
         except KeyError: # Unknown word; return special vector
-            return TRegexClassifierModel._embeddings['UNKNOWN']
+            return CausalPatternClassifierModel._embeddings['UNKNOWN']
 
     @staticmethod
     def extract_vector_dist(head1, head2):
-        v1 = TRegexClassifierModel.extract_vector(head1)
-        v2 = TRegexClassifierModel.extract_vector(head2)
+        v1 = CausalPatternClassifierModel.extract_vector(head1)
+        v2 = CausalPatternClassifierModel.extract_vector(head2)
         return np.linalg.norm(v1 - v2)
 
     @staticmethod
     def extract_vector_cos_dist(head1, head2):
-        v1 = TRegexClassifierModel.extract_vector(head1)
-        v2 = TRegexClassifierModel.extract_vector(head2)
+        v1 = CausalPatternClassifierModel.extract_vector(head1)
+        v2 = CausalPatternClassifierModel.extract_vector(head2)
         return distance.cosine(v1, v2)
 
     all_feature_extractors = []
 
 
-TRegexClassifierModel.all_feature_extractors = [
+CausalPatternClassifierModel.all_feature_extractors = [
     KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('pos_pair', lambda part: '/'.join([
                                     part.cause_head.pos, part.effect_head.pos]),
-                                TRegexClassifierModel._ALL_POS_PAIRS),
+                                CausalPatternClassifierModel._ALL_POS_PAIRS),
     KnownValuesFeatureExtractor(
         'cause_pos_bigram',
-        lambda part: TRegexClassifierModel.extract_pos_bigram(
+        lambda part: CausalPatternClassifierModel.extract_pos_bigram(
                              part, part.cause_head),
-                         TRegexClassifierModel._ALL_POS_PAIRS),
+                         CausalPatternClassifierModel._ALL_POS_PAIRS),
     KnownValuesFeatureExtractor(
         'effect_pos_bigram',
-        lambda part: TRegexClassifierModel.extract_pos_bigram(
+        lambda part: CausalPatternClassifierModel.extract_pos_bigram(
                              part, part.effect_head),
-                         TRegexClassifierModel._ALL_POS_PAIRS),
+                         CausalPatternClassifierModel._ALL_POS_PAIRS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
         'cause_pos_gen', lambda part: part.cause_head.get_gen_pos(),
@@ -244,27 +254,29 @@ TRegexClassifierModel.all_feature_extractors = [
     KnownValuesFeatureExtractor(
         'effect_pos_gen', lambda part: part.effect_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
-    FeatureExtractor('wordsbtw', TRegexClassifierModel.words_btw_heads,
+    FeatureExtractor('wordsbtw', CausalPatternClassifierModel.words_btw_heads,
                      FeatureExtractor.FeatureTypes.Numerical),
-    FeatureExtractor('deppath', TRegexClassifierModel.extract_dep_path),
+    FeatureExtractor('deppath', CausalPatternClassifierModel.extract_dep_path),
     FeatureExtractor('deplen',
                      lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)),
                      FeatureExtractor.FeatureTypes.Numerical),
     # TODO: Update this once we have multiple pattern matches sorted out.
+    # SetValuedFeatureExtractor(# TODO: fix me
+    #     'connective', lambda observation: part.connective_patterns),
     FeatureExtractor('connective', lambda part: part.connective_pattern),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
-                        [TRegexClassifierModel.extract_tense(head)
+                        [CausalPatternClassifierModel.extract_tense(head)
                          for head in part.cause_head, part.effect_head])),
     FeatureExtractor('cn_daughter_deps',
-                     TRegexClassifierModel.extract_daughter_deps),
+                     CausalPatternClassifierModel.extract_daughter_deps),
     FeatureExtractor('cn_incoming_dep',
-                     TRegexClassifierModel.extract_incoming_dep),
+                     CausalPatternClassifierModel.extract_incoming_dep),
     FeatureExtractor('verb_children_deps',
-                     TRegexClassifierModel.get_verb_children_deps),
+                     CausalPatternClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
-                     TRegexClassifierModel.extract_parent_pos),
+                     CausalPatternClassifierModel.extract_parent_pos),
     FeatureExtractor('cn_words',
                      lambda part: ' '.join([t.lowered_text
                                             for t in part.connective])),
@@ -273,18 +285,18 @@ TRegexClassifierModel.all_feature_extractors = [
                                             for t in part.connective])),
     SetValuedFeatureExtractor(
         'cause_hypernyms',
-        lambda part: TRegexClassifierModel.extract_wn_hypernyms(
+        lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
             part.cause_head)),
     SetValuedFeatureExtractor(
         'effect_hypernyms',
-        lambda part: TRegexClassifierModel.extract_wn_hypernyms(
+        lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
             part.effect_head)),
     FeatureExtractor(
         'cause_case_children',
-        lambda part: TRegexClassifierModel.extract_case_children(
+        lambda part: CausalPatternClassifierModel.extract_case_children(
                         part.cause_head)),
     FeatureExtractor('effect_case_children',
-        lambda part: TRegexClassifierModel.extract_case_children(
+        lambda part: CausalPatternClassifierModel.extract_case_children(
                         part.effect_head)),
     KnownValuesFeatureExtractor('domination',
         lambda part: part.sentence.get_domination_relation(
@@ -292,29 +304,65 @@ TRegexClassifierModel.all_feature_extractors = [
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
     VectorValuedFeatureExtractor(
         'cause_vector',
-        lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),
+        lambda part: CausalPatternClassifierModel.extract_vector(
+                        part.cause_head)),
     VectorValuedFeatureExtractor(
         'effect_vector',
-        lambda part: TRegexClassifierModel.extract_vector(part.cause_head)),
-    FeatureExtractor('vector_dist',
-                     lambda part: TRegexClassifierModel.extract_vector_dist(
-                        part.cause_head, part.effect_head),
-                     FeatureExtractor.FeatureTypes.Numerical),
+        lambda part: CausalPatternClassifierModel.extract_vector(
+                        part.cause_head)),
+    FeatureExtractor(
+        'vector_dist',
+        lambda part: CausalPatternClassifierModel.extract_vector_dist(
+                         part.cause_head, part.effect_head),
+        FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor(
         'vector_cos_dist',
-        lambda part: TRegexClassifierModel.extract_vector_cos_dist(
+        lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
                         part.cause_head, part.effect_head),
         FeatureExtractor.FeatureTypes.Numerical),
+    KnownValuesFeatureExtractor(
+        'ners', lambda part: '/'.join(
+                    StanfordNERStage.NER_TYPES[arg_head.ner_tag]
+                    for arg_head in [part.cause_head, part.effect_head]),
+        StanfordNERStage.NER_TYPES)
 ]
 
-class TRegexCausationFilter(StructuredModel):
+class PatternBasedCausationFilter(StructuredModel):
     def __init__(self, classifier):
-        super(TRegexCausationFilter, self).__init__(TRegexFilterDecoder())
-        self.classifier = TRegexClassifierModel(classifier,
-                                                    FLAGS.tregex_cc_features)
+        super(PatternBasedCausationFilter, self).__init__(
+            PatternBasedFilterDecoder())
+        self.classifier = CausalPatternClassifierModel(
+            classifier, FLAGS.causality_cc_features)
+        comparator = make_annotation_comparator(
+            FLAGS.causality_cc_train_with_partials)
+        # Comparator for matching CausationInstances against PossibleCausations
+        self.connective_comparator = lambda inst1, inst2: comparator(
+                                        inst1.connective, inst2.connective)
 
-    def _make_parts(self, sentence):
-        return [TRegexClassifierPart(pc) for pc in sentence.possible_causations]
+    def _make_parts(self, sentence, is_train):
+        # In training, we need to match the causation instances the pipeline has
+        # thus far detected against the original causation instances (provided
+        # by previous pipeline stages). We do this the same way that the IAA
+        # code does it internally: by running a diff on the connectives. Except
+        # we cheat a bit, and compare PossibleCausations against real
+        # CausationInstances.
+        # TODO: try limiting to pairwise only for training.
+        if is_train:
+            parts = []
+            # We want the diff to sort by connective position in the sentence.
+            sort_by_key = lambda inst: inst.connective[0].start_offset
+            connectives_diff = SequenceDiff(
+                sentence.possible_causations, sentence.causation_instances,
+                self.connective_comparator, sort_by_key)
+            for correct_pc, _ in connectives_diff.get_matching_pairs():
+                parts.append(PatternFilterPart(correct_pc, True))
+            for incorrect_pc in connectives_diff.get_a_only_elements():
+                parts.append(PatternFilterPart(incorrect_pc, False))
+            return parts
+        else:
+            # If we're not in training, the initial label doesn't really matter.
+            return [PatternFilterPart(pc, False)
+                    for pc in sentence.possible_causations]
 
     def _train_structured(self, instances, parts_by_instance):
         self.classifier.train(list(itertools.chain(*parts_by_instance)))
@@ -327,7 +375,7 @@ class TRegexCausationFilter(StructuredModel):
             return []
 
 
-class TRegexFilterDecoder(StructuredDecoder):
+class PatternBasedFilterDecoder(StructuredDecoder):
     def decode(self, sentence, classifier_parts, labels):
         # Deduplicate the results.
 
@@ -359,10 +407,10 @@ class TRegexFilterDecoder(StructuredDecoder):
         return causation_instances
 
 
-class TRegexFilterStage(Stage):
+class CausationPatternFilterStage(Stage):
     def __init__(self, classifier, name):
-        super(TRegexFilterStage, self).__init__(
-            name=name, model=TRegexCausationFilter(classifier))
+        super(CausationPatternFilterStage, self).__init__(
+            name=name, model=PatternBasedCausationFilter(classifier))
 
     consumed_attributes = ['possible_causations']
 
@@ -371,5 +419,5 @@ class TRegexFilterStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
-        return IAAEvaluator(False, False, FLAGS.tregex_cc_print_test_instances,
-                            True, True)
+        return IAAEvaluator(False, False,
+                            FLAGS.causality_cc_print_test_instances, True, True)
