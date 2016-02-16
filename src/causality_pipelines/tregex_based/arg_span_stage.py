@@ -18,7 +18,7 @@ class ArgSpanModel(Model):
         super(ArgSpanModel, self).__init__(*args, **kwargs)
         self.connectives_allowed_in_arg = set()
 
-    def train(self, sentences):
+    def _train_model(self, sentences):
         for sentence in sentences:
             for pc in sentence.possible_causations:
                 if pc.true_causation_instance:
