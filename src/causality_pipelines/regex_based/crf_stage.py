@@ -1,10 +1,11 @@
 from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_enum
+from itertools import chain
 import logging
 import numpy as np
 
-from causality_pipelines import PossibleCausation, IAAEvaluator
-from pipeline.models import CRFModel
-from pipeline.feature_extractors import FeatureExtractor, SetValuedFeatureExtractor
+from causality_pipelines import IAAEvaluator
+from pipeline.models.structured import CRFModel
+from pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
 from pipeline import Stage
 from util import Enum
 
@@ -35,56 +36,43 @@ except DuplicateFlagError as e:
 class ArgumentLabelerModel(CRFModel):
     CAUSE_LABEL = 'Cause'
     EFFECT_LABEL = 'Effect'
+    NONE_LABEL = ''
 
     def __init__(self, training_algorithm, training_params):
         super(ArgumentLabelerModel, self).__init__(
-            PossibleCausation, FLAGS.arg_label_model_path,
-            self.FEATURE_EXTRACTORS, FLAGS.arg_label_features,
-            training_algorithm, training_params, FLAGS.arg_label_save_crf_info)
+            FLAGS.arg_label_features, FLAGS.arg_label_model_path,
+            training_algorithm, training_params)
 
-    def _sequences_for_part(self, part, is_train):
-        # part for this model is a PossibleCausation.
-        observations = part.sentence.tokens[1:] # Exclude ROOT (hence -1s below)
-        if is_train:
-            labels = ['None'] * len(observations)
-            if part.true_causation_instance.cause:
-                for cause_token in part.true_causation_instance.cause:
-                    labels[cause_token.index - 1] = self.CAUSE_LABEL
-            if part.true_causation_instance.effect:
-                for effect_token in part.true_causation_instance.effect:
-                    labels[effect_token.index - 1] = self.EFFECT_LABEL
-        else: # testing time
-            labels = None
-        return observations, labels
+    def _sequence_for_instance(self, possible_causation, is_train):
+        return possible_causation.sentence.tokens[1:] # all tokens but ROOT
+
+    def _get_gold_labels(self, crf_part_type, crf_parts):
+        labels = []
+        for crf_part in crf_parts:
+            pc = crf_part.instance
+            true_instance = pc.true_causation_instance
+            token = crf_part.observation
+            if true_instance.cause and token in true_instance.cause:
+                labels.append(self.CAUSE_LABEL)
+            elif true_instance.effect and token in true_instance.effect:
+                labels.append(self.EFFECT_LABEL)
+            else:
+                labels.append(self.NONE_LABEL)
+        return labels
     
-    def _label_part(self, part, crf_labels):
-        part.cause = []
-        part.effect = []
-        # Labels exclude ROOT token.
-        for token, label in zip(part.sentence.tokens[1:], crf_labels):
-            if label == self.CAUSE_LABEL:
-                part.cause.append(token)
-            elif label == self.EFFECT_LABEL:
-                part.effect.append(token)
-
-        if not part.cause:
-            part.cause = None
-        if not part.effect:
-            part.effect = None
-
     @staticmethod
     def get_connective_parse_distance(observation):
-        sentence = observation.part.sentence
+        sentence = observation.instance.sentence
         _, closest_connective_distance = sentence.get_closest_of_tokens(
-            observation.observation, observation.part.connective)
+            observation.observation, observation.instance.connective)
         return closest_connective_distance
 
     @staticmethod
     def get_connective_parse_path(observation):
         word = observation.observation
-        sentence = observation.part.sentence
+        sentence = observation.instance.sentence
         closest_connective_token, _ = sentence.get_closest_of_tokens(
-            word, observation.part.connective)
+            word, observation.instance.connective)
         if closest_connective_token is None:
             return 'NO_PATH'
 
@@ -99,9 +87,9 @@ class ArgumentLabelerModel(CRFModel):
     @staticmethod
     def get_connective_relative_position(observation):
         word = observation.observation
-        sentence = observation.part.sentence
+        sentence = observation.instance.sentence
         closest_connective_token, _ = sentence.get_closest_of_tokens(
-            word, observation.part.connective, False) # lexically closest
+            word, observation.instance.connective, False) # lexically closest
         if word.index < closest_connective_token.index:
             return ArgumentLabelerModel.RELATIVE_POSITIONS.Before
         elif word.index > closest_connective_token.index:
@@ -117,14 +105,14 @@ class ArgumentLabelerModel(CRFModel):
             self.name = name
             self.feature_type = self.FeatureTypes.Numerical
 
-        def extract_subfeature_names(self, parts):
+        def extract_subfeature_names(self, instances):
             return [self.ABS_DIST_NAME, self.DIRECTED_DIST_NAME]
 
         def extract(self, observation):
             word = observation.observation
             min_distance = np.inf
             min_abs_distance = np.inf
-            for connective_token in observation.part.connective:
+            for connective_token in observation.instance.connective:
                 new_distance = connective_token.index - word.index
                 new_abs_distance = abs(new_distance)
                 if new_abs_distance < min_abs_distance:
@@ -133,15 +121,11 @@ class ArgumentLabelerModel(CRFModel):
             return {self.ABS_DIST_NAME: min_abs_distance,
                     self.DIRECTED_DIST_NAME: min_distance}
 
-    # We can't initialize this properly yet because we don't have access to the
-    # class' static methods to define the list.
-    FEATURE_EXTRACTORS = []
-
 # Because this is a CRF model operating on sequences of tokens, the input to
 # each feature extractor will be a CRFModel.ObservationWithContext.
 # observation.observation will be a Token object, and observation.sequence will
-# be a sequence of Tokens. observation.part will be a PossibleCausation.
-ArgumentLabelerModel.FEATURE_EXTRACTORS = [
+# be a sequence of Tokens. observation.instance will be a PossibleCausation.
+ArgumentLabelerModel.all_feature_extractors = [
     FeatureExtractor(
         'lemma', lambda observation: observation.observation.lemma),
     FeatureExtractor(
@@ -149,7 +133,7 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
     FeatureExtractor(
         'is_connective',
         lambda observation: (observation.observation in
-                             observation.part.connective),
+                             observation.instance.connective),
         FeatureExtractor.FeatureTypes.Numerical),
     FeatureExtractor(
         'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
@@ -157,27 +141,41 @@ ArgumentLabelerModel.FEATURE_EXTRACTORS = [
         'conn_parse_dist', ArgumentLabelerModel.get_connective_parse_distance,
         FeatureExtractor.FeatureTypes.Numerical),
     ArgumentLabelerModel.LexicalDistanceFeatureExtractor('lexical_conn_dist'),
-    FeatureExtractor('in_parse_tree',
-                     lambda observation: (observation.part.sentence.get_depth(
-                                            observation.observation) < np.inf),
+    FeatureExtractor(
+        'in_parse_tree',
+        lambda observation: (observation.instance.sentence.get_depth(
+                                observation.observation) < np.inf),
                      FeatureExtractor.FeatureTypes.Numerical),
     # Use repr to get around issues with ws at the end of feature names (breaks
     # CRFSuite dump parser)
     SetValuedFeatureExtractor(
-        'pattern', lambda observation: [repr(pattern) for pattern in
-                                         observation.part.matching_patterns]),
+        'pattern',
+        lambda observation: [repr(pattern) for pattern in
+                             observation.instance.matching_patterns]),
     SetValuedFeatureExtractor(
         'pattern+conn_parse_path',
         lambda observation: [ # Use quotes to work around stupid ws issue
-            '%s / "%s"' % (pattern, ArgumentLabelerModel.get_connective_parse_path(
-                           observation))
-            for pattern in observation.part.matching_patterns]),
+            '%s / "%s"' % (
+                pattern, ArgumentLabelerModel.get_connective_parse_path(
+                            observation))
+            for pattern in observation.instance.matching_patterns]),
     FeatureExtractor('conn_rel_pos',
                      ArgumentLabelerModel.get_connective_relative_position),
     FeatureExtractor('is_alnum', lambda observation: (
                                     observation.observation.lemma.isalnum()),
                      FeatureExtractor.FeatureTypes.Numerical)
 ]
+
+
+class ArgumentLabelerEvaluator(IAAEvaluator):
+    def evaluate(self, document, original_document, possible_causations,
+                 original_pcs):
+        # The causations are attached to the sentences in the documents, so we
+        # don't even have to care about them -- we can just grab the sentences
+        # straight from the documents.
+        return super(ArgumentLabelerEvaluator, self).evaluate(
+            document, original_document, document.sentences,
+            original_document.sentences)
 
 
 class ArgumentLabelerStage(Stage):
@@ -187,22 +185,33 @@ class ArgumentLabelerStage(Stage):
         super(ArgumentLabelerStage, self).__init__(
             name, ArgumentLabelerModel(training_algorithm, training_params))
 
-    def _extract_instances(self, sentence, is_train):
+    def _extract_instances(self, document, is_train):
         if is_train:
             # Filter to possible causations for which we can actually
             # extract the correct labels, i.e., gold-standard causations.
-            return [possible_causation for possible_causation
+            pcs = [[possible_causation for possible_causation
                     in sentence.possible_causations
                     if possible_causation.true_causation_instance]
+                   for sentence in document]
         else:
-            return sentence.possible_causations
+            pcs = [sentence.possible_causations for sentence in document]
+        return list(chain.from_iterable(pcs))
 
-    def _label_instance(self, sentence, pcs, labels):
-        # Eliminate instances that were not given two arguments.
-        # TODO: change this when we start caring about single-arg instances.
-        sentence.possible_causations = [pc for pc in labeled_pcs
-                                        if pc.cause and pc.effect]
+    def _label_instance(self, document, possible_causation, predicted_labels):
+        sentence = possible_causation.sentence
+        possible_causation.cause = []
+        possible_causation.effect = []
+        # Labels exclude ROOT token.
+        for token, label in zip(sentence.tokens[1:], predicted_labels):
+            if label == ArgumentLabelerModel.CAUSE_LABEL:
+                possible_causation.cause.append(token)
+            elif label == ArgumentLabelerModel.EFFECT_LABEL:
+                possible_causation.effect.append(token)
+
+        if not possible_causation.cause: possible_causation.cause = None
+        if not possible_causation.effect: possible_causation.effect = None
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.arg_label_log_differences,
-                            True, True, 'possible_causations')
+        return ArgumentLabelerEvaluator(
+            False, False, FLAGS.arg_label_log_differences, True, True,
+            'possible_causations')

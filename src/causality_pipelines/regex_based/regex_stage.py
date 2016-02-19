@@ -24,11 +24,10 @@ except DuplicateFlagError as e:
 
 class RegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):
-        super(RegexConnectiveModel, self).__init__(part_type=StanfordParsedSentence,
-                                                   *args, **kwargs)
+        super(RegexConnectiveModel, self).__init__(*args, **kwargs)
         self.regexes = []
 
-    def train(self, sentences):
+    def _train_model(self, sentences):
         self.regexes = [
             (re.compile(pattern), matching_groups)
             for pattern, matching_groups in self._extract_patterns(sentences)]
@@ -37,9 +36,9 @@ class RegexConnectiveModel(Model):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        for sentence in sentences:
-            sentence.possible_causations = []
-
+        all_possible_causations = [[] for _ in sentences]
+        for sentence, possible_causations in zip(sentences,
+                                                 all_possible_causations):
             tokens = sentence.tokens[1:] # skip ROOT
             if FLAGS.regex_include_pos:
                 lemmas_to_match = ['%s/%s' % (token.lemma, token.get_gen_pos())
@@ -83,11 +82,12 @@ class RegexConnectiveModel(Model):
                 possible_causation = PossibleCausation(
                     sentence, matching_patterns, connective_tokens,
                     true_causation_instance)
-                sentence.possible_causations.append(possible_causation)
+                possible_causations.append(possible_causation)
 
         elapsed_seconds = time.time() - start_time
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
+        return all_possible_causations
 
     #####################################
     # Sentence preprocessing
@@ -198,7 +198,7 @@ class RegexConnectiveModel(Model):
 class RegexConnectiveStage(Stage):
     def __init__(self, name):
         super(RegexConnectiveStage, self).__init__(
-            name=name, models=RegexConnectiveModel())
+            name=name, model=RegexConnectiveModel())
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, FLAGS.regex_print_test_instances,
@@ -206,5 +206,5 @@ class RegexConnectiveStage(Stage):
 
     produced_attributes = ['possible_causations']
 
-    def _extract_instances(self, sentence, is_train):
-        return [sentence]
+    def _label_instance(self, document, sentence, possible_causations):
+        sentence.possible_causations = possible_causations
