@@ -29,6 +29,9 @@ class ArgSpanModel(Model):
                                 self.connectives_allowed_in_arg.add(
                                     (pattern, token.lemma))
 
+    def reset(self):
+        self.connectives_allowed_in_arg = set()
+
     def test(self, sentences):
         all_expanded_args = [[] for _ in sentences]
         for sentence, sentence_expanded_args in zip(sentences,

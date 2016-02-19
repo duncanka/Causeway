@@ -47,6 +47,9 @@ class TRegexConnectiveModel(Model):
         # Internal hackery properties, used for training.
         self._ptb_strings = None
 
+    def reset(self):
+        self.tregex_patterns = []
+
     def _train_model(self, sentences):
         ptb_strings = self._extract_patterns(sentences)
         # Dirty hack to avoid redoing all the preprocessing when test() is
