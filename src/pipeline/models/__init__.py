@@ -1,16 +1,12 @@
 """ Define standard machine-learned model framework for pipelines. """
 
-from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
-import pycrfsuite
 from scipy.sparse import lil_matrix, vstack
-import time
-from types import MethodType
 
-from pipeline.featurization import FeatureExtractor, Featurizer, \
-    FeaturizationError
+from pipeline.featurization import FeatureExtractor, Featurizer, FeaturizationError
 from util import NameDictionary, listify
 # from util.metrics import diff_binary_vectors
 
@@ -18,14 +14,13 @@ try:
     DEFINE_bool(
         'rebalance_stochastically', False,
         'Rebalance classes by stochastically choosing samples to replicate')
-    DEFINE_bool('pycrfsuite_verbose', False,
-                'Verbose logging output from python-crfsuite trainer')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
 class Model(object):
     def train(self, instances):
+        self.reset() # Reset state in case we've been previously trained.
         train_result = self._train_model(instances)
         self._post_model_train(train_result)
 
@@ -67,7 +62,9 @@ class FeaturizedModel(Model):
     list of them, or else the _post_model_load hook must be overridden.
     '''
 
-    def __init__(self, selected_features, model_path, save_featurized):
+    def __init__(self, selected_features, model_path, save_featurized, *args,
+                 **kwargs):
+        super(FeaturizedModel, self).__init__(*args, **kwargs)
         self.save_featurized = save_featurized
 
         if model_path:
@@ -93,7 +90,7 @@ class ClassifierModel(FeaturizedModel):
         self.classifier = classifier
         super(ClassifierModel, self).__init__(
             selected_features, model_path, save_featurized)
-        if not model_path:
+        if not model_path: # Won't be taken care of by _post_model_load
             self.featurizer = Featurizer(self.all_feature_extractors,
                                          selected_features,
                                          self.save_featurized)
@@ -102,13 +99,12 @@ class ClassifierModel(FeaturizedModel):
         super(ClassifierModel, self)._post_model_load(feature_name_dictionary)
         self.featurizer = Featurizer(
             self.all_feature_extractors, feature_name_dictionary,
-            self.save_featurized)
+            save_featurized=self.save_featurized)
 
     def reset(self):
         self.featurizer.reset()
 
-    def train(self, instances):
-        self.reset() # Reset state in case we've been previously trained.
+    def _train_model(self, instances):
         logging.info("Registering features...")
         self.featurizer.register_features_from_instances(instances)
         logging.info('Done registering features.')
@@ -118,6 +114,7 @@ class ClassifierModel(FeaturizedModel):
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
+        return self.featurizer.feature_name_dictionary
 
     def test(self, instances):
         features = self.featurizer.featurize(instances)
@@ -203,106 +200,3 @@ class ClassBalancingClassifierWrapper(object):
         return self.classifier.predict(data)
 
 
-# TODO: redo this to match new document/instance/parts structure
-class CRFModel(Model):
-    # Theoretically, this class ought to be a type of FeaturizedModel. But that
-    # class assumes we're doing all the feature management in class, and in
-    # practice we're offloading CRF feature management to CRFSuite.
-
-    class CRFTrainingError(Exception):
-        pass
-
-    class ObservationWithContext(object):
-        '''
-        In a CRF model, the feature extractors will have to operate not just on
-        a single part (which may have many observations), but on each
-        observation, *with* the context of the surrounding observations. This
-        class encapsulates the data a CRF feature extractor may need.
-        '''
-        def __init__(self, observation, sequence, index, part):
-            self.observation = observation
-            self.sequence = sequence
-            self.index = index
-            self.part = part
-
-    def __init__(self, part_type, model_file_path,
-                 selected_features, training_algorithm, training_params,
-                 save_model_info=False):
-        super(CRFModel, self).__init__(part_type)
-        self.model_file_path = model_file_path
-        self.feature_extractors = [
-            extractor for extractor in self.all_feature_extractors
-            if extractor.name in selected_features]
-        self.training_algorithm = training_algorithm
-        self.training_params = training_params
-        self.save_model_info = save_model_info
-        self.model_info = None
-
-    def _sequences_for_instance(self, part, is_train):
-        '''
-        Returns the observation and label sequences for the part. Should return
-        None for labels at test time.
-        '''
-        raise NotImplementedError
-
-    def _label_part(self, part, crf_labels):
-        '''
-        Applies the labels to the part as appropriate. Must be overridden.
-        (In many cases with CRFs, this will involve interpreting the labels
-        as spans.)
-        '''
-        raise NotImplementedError
-
-    def __featurize_observation_sequence(self, observation_sequence, part):
-        observation_features = []
-        for i, observation in enumerate(observation_sequence):
-            feature_values = {}
-            for feature_extractor in self.feature_extractors:
-                extractor_arg = self.ObservationWithContext(
-                    observation, observation_sequence, i, part)
-                feature_values.update(feature_extractor.extract(extractor_arg))
-            observation_features.append(feature_values)
-        return observation_features
-
-    @staticmethod
-    def __handle_training_error(trainer, log):
-        raise CRFModel.CRFTrainingError('CRF training failed: %s' % log)
-
-    def train(self, instances):
-        trainer = pycrfsuite.Trainer(verbose=FLAGS.pycrfsuite_verbose)
-        trainer.select(self.training_algorithm)
-        trainer.set_params(self.training_params)
-        error_handler = MethodType(self.__handle_training_error, trainer)
-        trainer.on_prepare_error = error_handler
-
-        for instances in instances:
-            observation_sequence, labels = self._sequences_for_instance(
-                instances, True)
-            observation_features = self.__featurize_observation_sequence(
-                observation_sequence, instances)
-            trainer.append(observation_features, labels)
-
-        start_time = time.time()
-        logging.info("Training CRF model...")
-        trainer.train(self.model_file_path)
-        elapsed_seconds = time.time() - start_time
-        logging.info('CRF model saved to %s (training took %0.2f seconds)'
-                     % (self.model_file_path, elapsed_seconds))
-        if self.save_model_info:
-            tagger = pycrfsuite.Tagger()
-            tagger.open(self.model_file_path)
-            self.model_info = tagger.info()
-            tagger.close()
-
-    def test(self, instances):
-        tagger = pycrfsuite.Tagger()
-        tagger.open(self.model_file_path)
-        instance_labels = []
-        for instance in instances:
-            observation_sequence, _ = self._sequences_for_instance(instance, False)
-            observation_features = self.__featurize_observation_sequence(
-                observation_sequence, instance)
-            crf_labels = tagger.tag(observation_features)
-            instance_labels.append(crf_labels)
-        tagger.close()
-        return instance_labels

@@ -1,8 +1,19 @@
+from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
+from itertools import chain
 import logging
 import numpy as np
+import pycrfsuite
+import time
+from types import MethodType
 
 from pipeline.models import Model, FeaturizedModel
 from pipeline.featurization import Featurizer
+
+try:
+    DEFINE_bool('pycrfsuite_verbose', False,
+                'Verbose logging output from python-crfsuite trainer')
+except DuplicateFlagError as e:
+    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
 class StructuredModel(Model):
@@ -24,7 +35,7 @@ class StructuredModel(Model):
         self.decoder = decoder
         super(StructuredModel, self).__init__(*args, **kwargs)
 
-    def train(self, instances):
+    def _train_model(self, instances):
         self.reset() # Reset state in case we've been previously trained.
         parts_by_instance = [self._make_parts(instance, True)
                              for instance in instances]
@@ -64,9 +75,12 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
         decoder is some StructuredDecoder object.
         part_types is a list of types of part that will need to be featurized
             separately (e.g., node and edge parts). These should be the actual
-            Python types of the parts returned by _make_parts.
+            Python types of the parts returned by _make_parts (or supertypes
+            thereof).
         selected_features is a list of names of features to extract.
-            Names may be conjoined by FLAGS.conjoined_feature_sep.
+            Names may be conjoined by FLAGS.conjoined_feature_sep. If there is
+            more than one part type, then selected_features should be a list of
+            lists of feature names, one list per part type.
         part_filters is a list filter functions, corresponding to part_types,
             that take an part and return True iff it should be featurized. Parts
             that are filtered out will be featurized as all zeros.
@@ -80,22 +94,27 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
         else:
             assert len(part_filters) == len(part_types)
         self._part_filters = part_filters
+        self.part_types = part_types
 
-        # TODO: fix to use the proper super mechanism.
-        StructuredModel.__init__(self, decoder)
-        FeaturizedModel.__init__(self, selected_features, model_path,
-                                 save_featurized)
+        super(FeaturizedStructuredModel, self).__init__(
+            decoder=decoder, selected_features=selected_features,
+            model_path=model_path, save_featurized=save_featurized)
         if not model_path: # load() won't be called by FeaturizedModel
             self._set_up_featurizers(selected_features)
-        self.part_types = part_types
+
+    def _make_featurizer(self, featurizer_params, part_filter):
+        return Featurizer(self.all_feature_extractors, featurizer_params,
+                          part_filter, self.save_featurized)
 
     def _set_up_featurizers(self, selected_features_or_name_dicts):
         self.featurizers = []
+        if not hasattr(selected_features_or_name_dicts[0], '__iter__'):
+            # Only one list of selected features, because only one part type.
+            selected_features_or_name_dicts = [selected_features_or_name_dicts]
+        assert len(self.part_types) == len(selected_features_or_name_dicts)
         for featurizer_params, part_filter in zip(
             selected_features_or_name_dicts, self._part_filters):
-            featurizer = Featurizer(
-                self.all_feature_extractors, featurizer_params, part_filter,
-                self.save_featurized)
+            featurizer = self._make_featurizer(featurizer_params, part_filter)
             self.featurizers.append(featurizer)
 
     def _post_model_load(self, feature_name_dictionaries):
@@ -111,16 +130,38 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
     def _score_parts(self, instance, instance_parts):
         featurized_parts_by_type = []
         for part_type, featurizer in zip(self.part_types, self.featurizers):
-            relevant_parts = self._get_parts_of_type(part_type, instance_parts)
+            relevant_parts = [part for part in instance_parts
+                              if isinstance(part, part_type)]
             featurized = featurizer.featurize(relevant_parts)
             featurized_parts_by_type.append(featurized)
+
         return self._score_featurized_parts(instance, featurized_parts_by_type)
 
-    # Support function
-    def _get_parts_of_type(self, part_type, parts):
-        return [part for part in parts if isinstance(part, part_type)]
+    def _train_structured(self, instances, parts_by_instance):
+        # TODO: Does this need to be broken up by instance?
+        all_parts = list(chain.from_iterable(parts_by_instance))
+        featurized_with_labels_by_type = []
+
+        for part_type, featurizer in zip(self.part_types, self.featurizers):
+            relevant_parts = [part for part in all_parts
+                              if isinstance(part, part_type)]
+            logging.info("Registering features for %ss..." % part_type.__name__)
+            featurizer.register_features_from_instances(relevant_parts)
+            logging.info('Done registering features.')
+
+            featurized = featurizer.featurize(relevant_parts)
+            part_labels = self._get_gold_labels(part_type, relevant_parts)
+            featurized_with_labels_by_type.append((featurized, part_labels))
+
+        self._train_featurized_structured(featurized_with_labels_by_type)
 
     def _score_featurized_parts(self, instance, featurized_parts_by_type):
+        raise NotImplementedError
+
+    def _train_featurized_structured(self, featurized_with_labels_by_type):
+        raise NotImplementedError
+
+    def _get_gold_labels(self, part_type, parts):
         raise NotImplementedError
 
 
@@ -240,3 +281,98 @@ class ViterbiDecoder(StructuredDecoder):
 
         logging.debug("Viterbi max score: %d", best_score)
         return best_path
+
+
+class CRFDecoder(StructuredDecoder):
+    def decode(self, instance, instance_parts, part_labels):
+        return part_labels[0]
+
+
+class CRFModel(FeaturizedStructuredModel):
+    class CRFFeaturizer(Featurizer):
+        def register_features_from_instances(self, instances):
+            pass
+
+    class CRFTrainingError(Exception):
+        pass
+
+    class CRFPart(object):
+        '''
+        In a CRF model, the feature extractors will have to operate on a single
+        observation from a sequence, with the context of the sequence of
+        surrounding observations. This class encapsulates the data a CRF feature
+        extractor may need.
+        '''
+        def __init__(self, observation, sequence, index, instance):
+            self.observation = observation
+            self.sequence = sequence
+            self.index = index
+            self.instance = instance
+
+    def __init__(self, selected_features, model_file_path, training_algorithm,
+                 training_params, decoder=CRFDecoder(), part_filters=None,
+                 load_from_file=False, save_featurized=False):
+        self.model_file_path = model_file_path
+        if not load_from_file:
+            model_file_path = None # to tell the super constructor not to load
+        super(CRFModel, self).__init__(
+            decoder, [CRFModel.CRFPart], selected_features, part_filters,
+            model_file_path, save_featurized)
+        self.training_algorithm = training_algorithm
+        self.training_params = training_params
+        self.tagger = None
+
+    # Override featurizer creation to make default featurization produce a dict
+    # of feature values rather than a matrix.
+    def _make_featurizer(self, featurizer_params, part_filter):
+        return self.CRFFeaturizer(self.all_feature_extractors,
+                                  featurizer_params, part_filter,
+                                  self.save_featurized, False)
+
+    @staticmethod
+    def __handle_training_error(trainer, log):
+        raise CRFModel.CRFTrainingError('CRF training failed: %s' % log)
+
+    def _train_featurized_structured(self, featurized_with_labels_by_type):
+        # TODO: do something about the fact that superclass training will
+        # register features, even though we don't need a NameDictionary for
+        # a CRF featurizer? (Waste of time.)
+        trainer = pycrfsuite.Trainer(verbose=FLAGS.pycrfsuite_verbose)
+        trainer.select(self.training_algorithm)
+        trainer.set_params(self.training_params)
+        error_handler = MethodType(self.__handle_training_error, trainer)
+        trainer.on_prepare_error = error_handler
+
+        # There's only one part type for a CRF.
+        featurized_with_labels = featurized_with_labels_by_type[0]
+        observation_features, labels = featurized_with_labels
+        trainer.append(observation_features, labels)
+
+        start_time = time.time()
+        logging.info("Training CRF model...")
+        trainer.train(self.model_file_path)
+        elapsed_seconds = time.time() - start_time
+        logging.info('CRF model saved to %s (training took %0.2f seconds)'
+                     % (self.model_file_path, elapsed_seconds))
+
+    def _make_parts(self, instance, is_train):
+        sequence = self._sequence_for_instance(instance, is_train)
+        return [self.CRFPart(observation, sequence, i, instance)
+                for i, observation in enumerate(sequence)]
+
+    def _load_model(self, filepath):
+        self.tagger = pycrfsuite.Tagger()
+        self.tagger.open(self.model_file_path)
+
+    def _post_model_train(self, feature_name_dictionaries):
+        super(CRFModel, self)._post_model_train(feature_name_dictionaries)
+        # Initialize tagger from on-disk file
+        self._load_model(self.model_file_path)
+
+    def _score_featurized_parts(self, instance, featurized_parts_by_type):
+        featurized_parts = featurized_parts_by_type[0]
+        crf_labels = self.tagger.tag(featurized_parts)
+        return [crf_labels]
+
+    def _sequence_for_instance(self, instance, is_train):
+        raise NotImplementedError
