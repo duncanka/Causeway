@@ -49,8 +49,9 @@ class PatternFilterPart(object):
         self.sentence = possible_causation.sentence
         self.cause = possible_causation.cause
         self.effect = possible_causation.effect
-        self.cause_head = self.sentence.get_head(possible_causation.cause)
-        self.effect_head = self.sentence.get_head(possible_causation.effect)
+        self.cause_head, self.effect_head = [
+            self.sentence.get_head(arg)
+            for arg in [possible_causation.cause, possible_causation.effect]]
         self.connective = possible_causation.connective
         self.connective_head = self.sentence.get_head(self.connective)
         # TODO: Update this once we have multiple pattern matches sorted out.
@@ -355,14 +356,16 @@ class PatternBasedCausationFilter(StructuredModel):
                 sentence.possible_causations, sentence.causation_instances,
                 self.connective_comparator, sort_by_key)
             for correct_pc, _ in connectives_diff.get_matching_pairs():
-                parts.append(PatternFilterPart(correct_pc, True))
+                if correct_pc.cause and correct_pc.effect:
+                    parts.append(PatternFilterPart(correct_pc, True))
             for incorrect_pc in connectives_diff.get_a_only_elements():
-                parts.append(PatternFilterPart(incorrect_pc, False))
+                if incorrect_pc.cause and incorrect_pc.effect:
+                    parts.append(PatternFilterPart(incorrect_pc, False))
             return parts
         else:
             # If we're not in training, the initial label doesn't really matter.
-            return [PatternFilterPart(pc, False)
-                    for pc in sentence.possible_causations]
+            return [PatternFilterPart(pc, False) for pc in
+                    sentence.possible_causations if pc.cause and pc.effect]
 
     def _train_structured(self, instances, parts_by_instance):
         self.classifier.train(list(itertools.chain(*parts_by_instance)))
