@@ -63,7 +63,8 @@ class IAAEvaluator(Evaluator):
         self.compare_args = compare_args
         self.pairwise_only = pairwise_only
 
-    def evaluate(self, sentences, original_sentences):
+    def evaluate(self, document, original_document, sentences,
+                 original_sentences):
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
                 original_sentences, sentences, True, self.log_test_instances,

@@ -240,11 +240,13 @@ class Pipeline(object):
             writer = self.writer if i == len(self.stages) - 1 else None
             stage._test_documents(documents, instances_by_doc, writer)
 
-            for instances, original_instances in zip(instances_by_doc,
-                                                    original_instances_by_doc):
+            for document, original_document, instances, original_instances in (
+                zip(documents, original_documents, instances_by_doc,
+                    original_instances_by_doc)):
                 if self._evaluators_by_stage and self._evaluators_by_stage[i]:
-                    self._evaluators_by_stage[i].evaluate(instances,
-                                                          original_instances)
+                    self._evaluators_by_stage[i].evaluate(
+                        document, original_document, instances,
+                        original_instances)
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
@@ -312,7 +314,8 @@ class Evaluator(object):
     each stage for its model are all that's of interest for evaluation.
     '''
 
-    def evaluate(self, instances, original_instances):
+    def evaluate(self, document, original_document, instances,
+                 original_instances):
         '''
         Evaluates a batch of instances. original_instances is the list of
         instances unmodified by testing, and from which instances were copied
