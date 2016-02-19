@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, NameDictionary, merge_dicts
+from util import Enum, NameDictionary
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
@@ -34,8 +34,7 @@ class FeatureExtractor(object):
     def extract_subfeature_names(self, instances):
         if self.feature_type == self.FeatureTypes.Categorical:
             values_set = set(self._extractor_fn(part) for part in instances)
-            return [FeatureExtractor._get_categorical_feature_name(
-                        self.name, value)
+            return [self._get_categorical_feature_name(self.name, value)
                     for value in values_set]
         else: # feature_type == Numerical
             return [self.name]
@@ -47,7 +46,7 @@ class FeatureExtractor(object):
         '''
         feature_value = self._extractor_fn(part)
         if self.feature_type == self.FeatureTypes.Categorical:
-            feature_name = FeatureExtractor._get_categorical_feature_name(
+            feature_name = self._get_categorical_feature_name(
                 self.name, feature_value)
             return {feature_name: 1.0}
         else: # feature_type == Numerical
@@ -61,7 +60,7 @@ class FeatureExtractor(object):
         return '%s=%s' % (base_name, value)
 
     def __repr__(self):
-        return 'Feature extractor: %s' % self.name
+        return '<Feature extractor: %s>' % self.name
 
 
 class Featurizer(object):
@@ -139,7 +138,8 @@ class Featurizer(object):
 
 
     def __init__(self, feature_extractors, selected_features_or_name_dict,
-                 instance_filter=None, save_featurized=False):
+                 instance_filter=None, save_featurized=False,
+                 default_to_matrix=True):
         """
         feature_extractors is a list of
             `pipeline.featurization.FeatureExtractor` objects.
@@ -155,9 +155,13 @@ class Featurizer(object):
             will be featurized as all zeros.
         save_featurized indicates whether to store features and labels
             properties after featurization. Useful for debugging/development.
+        default_to_matrix indicates whether featurize() should by default return
+            a matrix, rather than a raw dictionary of feature names and values.
         """
         self.all_feature_extractors = feature_extractors
         self.save_featurized = save_featurized
+        self.default_to_matrix = default_to_matrix
+
         self._instance_filter = instance_filter
 
         if isinstance(selected_features_or_name_dict, NameDictionary):
@@ -209,13 +213,19 @@ class Featurizer(object):
                 # logging.debug('Ignoring unknown subfeature: %s'
                 #              % subfeature_name)
 
-    def featurize(self, instances):
+    def featurize(self, instances, to_matrix=None):
+        if to_matrix is None:
+            to_matrix = self.default_to_matrix
+
         logging.debug('Featurizing...')
         start_time = time.time()
 
-        features = lil_matrix(
-            (len(instances), len(self.feature_name_dictionary)),
-            dtype=np.float32) # TODO: Make this configurable?
+        if to_matrix:
+            features = lil_matrix(
+                (len(instances), len(self.feature_name_dictionary)),
+                dtype=np.float32) # TODO: Make this configurable?
+        else:
+            features = [{} for _ in instances]
 
         fresh_featurized_cache = dict.fromkeys(
             self._unselected_base_extractors + self._selected_base_extractors,
@@ -240,31 +250,28 @@ class Featurizer(object):
                 escaped = [self.escape_conjoined_name(name, sep)
                            for name in instance_subfeature_values.keys()]
                 featurized_cache[extractor] = escaped
-                self.__record_subfeatures(instance_subfeature_values,
-                                          instance_index, features)
+                if to_matrix:
+                    self.__record_subfeatures(instance_subfeature_values,
+                                              instance_index, features)
+                else:
+                    features[instance_index].update(instance_subfeature_values)
 
             for extractor in self._conjoined_extractors:
                 instance_subfeature_values = extractor.extract(instance,
                                                                featurized_cache)
-                self.__record_subfeatures(instance_subfeature_values,
-                                          instance_index, features)
+                if to_matrix:
+                    self.__record_subfeatures(instance_subfeature_values,
+                                              instance_index, features)
+                else:
+                    features[instance_index].update(instance_subfeature_values)
 
-        features = features.tocsr()
+        if to_matrix:
+            features = features.tocsr()
         elapsed_seconds = time.time() - start_time
         logging.debug('Done featurizing in %0.2f seconds' % elapsed_seconds)
         if self.save_featurized:
             self.features = features
         return features
-
-    def get_feature_values(self, instance):
-        '''
-        Return raw dictionary of feature names and values for an instance.
-        Useful for debugging.
-        '''
-        all_selected_extractors = (self._selected_base_extractors
-                                   + self._conjoined_extractors)
-        return merge_dicts([e.extract(instance)
-                            for e in all_selected_extractors])
 
     @staticmethod
     def get_selected_features(feature_name_dictionary):
@@ -341,13 +348,12 @@ class KnownValuesFeatureExtractor(FeatureExtractor):
     '''
     def __init__(self, name, extractor_fn, feature_values):
         super(KnownValuesFeatureExtractor, self).__init__(
-              name, extractor_fn, self.FeatureTypes.Categorical)
+            name, extractor_fn, self.FeatureTypes.Categorical)
         self.feature_values = feature_values
 
     def extract_subfeature_names(self, instances):
         ''' Ignore `instances` and just use known values. '''
-        return [FeatureExtractor._get_categorical_feature_name(
-                    self.name, value)
+        return [self._get_categorical_feature_name(self.name, value)
                 for value in self.feature_values]
 
 
@@ -372,7 +378,7 @@ class SetValuedFeatureExtractor(FeatureExtractor):
         values_set = set()
         for part in instances:
             values_set.update(self._extractor_fn(part))
-        return [FeatureExtractor._get_categorical_feature_name(self.name, value)
+        return [self._get_categorical_feature_name(self.name, value)
                 for value in values_set]
 
     def extract(self, part):
