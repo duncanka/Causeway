@@ -7,7 +7,7 @@ import time
 from types import MethodType
 
 from pipeline.models import Model, FeaturizedModel
-from pipeline.featurization import Featurizer
+from pipeline.featurization import Featurizer, DictOnlyFeaturizer
 
 try:
     DEFINE_bool('pycrfsuite_verbose', False,
@@ -289,10 +289,6 @@ class CRFDecoder(StructuredDecoder):
 
 
 class CRFModel(FeaturizedStructuredModel):
-    class CRFFeaturizer(Featurizer):
-        def register_features_from_instances(self, instances):
-            pass
-
     class CRFTrainingError(Exception):
         pass
 
@@ -325,18 +321,15 @@ class CRFModel(FeaturizedStructuredModel):
     # Override featurizer creation to make default featurization produce a dict
     # of feature values rather than a matrix.
     def _make_featurizer(self, featurizer_params, part_filter):
-        return self.CRFFeaturizer(self.all_feature_extractors,
+        return DictOnlyFeaturizer(self.all_feature_extractors,
                                   featurizer_params, part_filter,
-                                  self.save_featurized, False)
+                                  self.save_featurized)
 
     @staticmethod
     def __handle_training_error(trainer, log):
         raise CRFModel.CRFTrainingError('CRF training failed: %s' % log)
 
     def _train_featurized_structured(self, featurized_with_labels_by_type):
-        # TODO: do something about the fact that superclass training will
-        # register features, even though we don't need a NameDictionary for
-        # a CRF featurizer? (Waste of time.)
         trainer = pycrfsuite.Trainer(verbose=FLAGS.pycrfsuite_verbose)
         trainer.select(self.training_algorithm)
         trainer.set_params(self.training_params)

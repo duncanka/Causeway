@@ -338,6 +338,27 @@ class Featurizer(object):
                                              % feature_name)
 
 
+class DictOnlyFeaturizer(Featurizer):
+    def __init__(self, feature_extractors, selected_features,
+                 instance_filter=None, save_featurized=False):
+        self.all_feature_extractors = feature_extractors
+        self.save_featurized = save_featurized
+        self._instance_filter = instance_filter
+        self._initialize_feature_extractors(selected_features)
+
+    def register_features_from_instances(self, instances):
+        pass
+
+    def reset(self):
+        pass
+
+    def featurize(self, instances, to_matrix=None):
+        if to_matrix:
+            raise FeaturizationError("Cannot featurize to matrix with %s" %
+                                     self.__class__.__name__)
+        return Featurizer.featurize(self, instances, False)
+
+
 class KnownValuesFeatureExtractor(FeatureExtractor):
     '''
     This class makes model training more efficient by pre-registering known

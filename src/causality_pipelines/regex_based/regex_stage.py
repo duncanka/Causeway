@@ -5,7 +5,6 @@ import re
 import time
 
 from causality_pipelines import PossibleCausation, IAAEvaluator
-from data import StanfordParsedSentence
 from pipeline import Stage
 from pipeline.models import Model
 from util import Enum

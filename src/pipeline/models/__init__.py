@@ -93,7 +93,7 @@ class ClassifierModel(FeaturizedModel):
         if not model_path: # Won't be taken care of by _post_model_load
             self.featurizer = Featurizer(self.all_feature_extractors,
                                          selected_features,
-                                         self.save_featurized)
+                                         save_featurized=self.save_featurized)
 
     def _post_model_load(self, feature_name_dictionary):
         super(ClassifierModel, self)._post_model_load(feature_name_dictionary)
