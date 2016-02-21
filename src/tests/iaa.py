@@ -2,10 +2,9 @@ from __future__ import absolute_import
 
 from copy import deepcopy, copy
 import gflags
-import os
 import unittest
 
-from data.readers import CausalityStandoffReader
+from data.io import CausalityStandoffReader
 from iaa import CausalityMetrics
 from tests import get_sentences_from_file
 from util.metrics import ClassificationMetrics, AccuracyMetrics
