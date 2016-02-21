@@ -173,6 +173,8 @@ class Featurizer(object):
             selected_features = selected_features_or_name_dict
         self._initialize_feature_extractors(selected_features)
 
+        self.features = None
+
     def reset(self):
         self.feature_name_dictionary.clear()
 
@@ -336,6 +338,12 @@ class Featurizer(object):
                 except KeyError:
                     raise FeaturizationError("Invalid feature name: %s"
                                              % feature_name)
+
+    # Support function, useful for debugging featurized results.
+    def matrow2dict(self, features, row_index):
+        row = features[row_index, :]
+        return {self.feature_name_dictionary[int(i)]: row[0, i]
+                for i in row.nonzero()[1]}
 
 
 class DictOnlyFeaturizer(Featurizer):
