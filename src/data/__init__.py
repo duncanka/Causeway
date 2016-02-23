@@ -91,10 +91,13 @@ class Token(object):
     def get_gen_pos(self):
         return Token.POS_GENERAL.get(self.pos, self.pos)
 
-    def __repr__(self):
-        return "Token(%s_%d/%s [%s:%s])" % (
+    def __unicode__(self):
+        return u"Token(%s_%d/%s [%s:%s])" % (
             self.original_text, self.index, self.pos, self.start_offset,
             self.end_offset)
+
+    def __repr__(self, *args, **kwargs):
+        return self.__unicode__().encode('utf-8')
 
 
 Token.POS_GENERAL = merge_dicts(
@@ -249,7 +252,7 @@ class StanfordParsedSentence(object):
                 logging.debug(
                     "Preferring %s over %s as head of '%s' in '%s'" %
                     (token, head,
-                     ' '.join([t.original_text for t in tokens]),
+                     u' '.join([t.original_text for t in tokens]),
                      tokens[0].parent_sentence.original_text))
                 head = token
                 min_depth = depth
