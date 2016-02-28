@@ -250,7 +250,7 @@ class StanfordParsedSentence(object):
                   head is not None and
                   self._token_is_preferred_for_head_to(token, head)):
                 logging.debug(
-                    "Preferring %s over %s as head of '%s' in '%s'" %
+                    u"Preferring %s over %s as head of '%s' in '%s'" %
                     (token, head,
                      u' '.join([t.original_text for t in tokens]),
                      tokens[0].parent_sentence.original_text))
