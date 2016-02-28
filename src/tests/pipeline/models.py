@@ -1,10 +1,12 @@
 from collections import defaultdict
+from mock import call, MagicMock
 import numpy as np
+from sklearn.utils.mocking import CheckingClassifier
 from scipy.sparse import lil_matrix, vstack
 import unittest
 
 from pipeline.featurization import FeatureExtractor, Featurizer
-from pipeline.models import ClassBalancingClassifierWrapper, FeaturizationError
+from pipeline.models import ClassBalancingClassifierWrapper, FeaturizationError, ClassifierModel
 from pipeline.models.structured import Semiring, ViterbiDecoder
 
 
@@ -170,3 +172,47 @@ class ViterbiMaxPlusTest(unittest.TestCase):
         best_score, best_path = self.decoder.run_viterbi(scores, transitions)
         self.assertEqual(best_path, ['S2', 'S2', 'S2'])
         self.assertEqual(1.7, best_score)
+
+
+class ClassifierTest(unittest.TestCase):
+    def testClassifierModelCalls(self):
+        I1, I2, I3, I4 = 100, 200, 300, 400
+        LABELS = [3, 3]
+
+        test1 = MagicMock(side_effect=lambda i: i)
+        test2 = MagicMock(side_effect=lambda i: i)
+        Num = FeatureExtractor.FeatureTypes.Numerical
+        class TestClassifierModel(ClassifierModel):
+            all_feature_extractors = [FeatureExtractor("test1", test1, Num),
+                                      FeatureExtractor("test2", test2, Num)]
+
+        c = CheckingClassifier()
+        m = TestClassifierModel(c, ["test1", "test2"])
+        c.fit = MagicMock()
+        c.predict = MagicMock(return_value=np.array([1, 0]))
+        m._get_gold_labels = MagicMock(return_value=LABELS)
+
+        m.train([I1, I2])
+
+        test1.assert_has_calls([call(I1), call(I2)])
+        test2.assert_has_calls([call(I1), call(I2)])
+ 
+        self.assertEqual(1, len(c.fit.call_args_list))
+        self.assertEqual(2, len(c.fit.call_args[0]))
+        np.testing.assert_array_equal(np.array(([[I1, I1], [I2, I2]])),
+                                      c.fit.call_args[0][0].toarray())
+        self.assertEqual(LABELS, c.fit.call_args[0][1])
+        m._get_gold_labels.assert_called_once_with([I1, I2])
+
+        test1.reset_mock()
+        test2.reset_mock()
+
+        m.test([I3, I4])
+
+        test1.assert_has_calls([call(I3), call(I4)])
+        test2.assert_has_calls([call(I3), call(I4)])
+
+        self.assertEqual(1, len(c.predict.call_args_list))
+        self.assertEqual(1, len(c.predict.call_args[0]))
+        np.testing.assert_array_equal(np.array(([[I3, I3], [I4, I4]])),
+                                      c.predict.call_args[0][0].toarray())
