@@ -365,6 +365,10 @@ class Stage(object):
             self._label_instance(document, instance, predicted_output)
             if writer:
                 writer.instance_complete(document, instance)
+        self._document_complete(document)
+
+    def _document_complete(self, document):
+        pass
 
     def _make_evaluator(self):
         '''
@@ -418,7 +422,7 @@ class Stage(object):
         else:
             raise NotImplementedError
 
-    def _label_instance(self, document, instance, predicted_labels):
+    def _label_instance(self, document, instance, predicted_output):
         pass
 
 
