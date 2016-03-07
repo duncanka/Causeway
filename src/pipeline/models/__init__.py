@@ -119,9 +119,13 @@ class ClassifierModel(FeaturizedModel):
     def test(self, instances):
         features = self.featurizer.featurize(instances)
         gold_labels = self._get_gold_labels(instances)
+        labels = self.classifier.predict(features)
+
         if self.save_featurized:
             self.gold_labels = gold_labels
-        labels = self.classifier.predict(features)
+            self.labels = labels
+            self.raw_instances = instances
+
         # logging.debug('%d data points' % len(gold_labels))
         # logging.debug('Raw classifier performance:')
         # logging.debug('\n' + str(diff_binary_vectors(labels, gold_labels)))

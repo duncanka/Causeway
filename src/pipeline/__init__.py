@@ -98,6 +98,7 @@ class Pipeline(object):
                                  " not SentencesDocuments")
             all_instances = list(itertools.chain(*[d.sentences
                                                    for d in documents]))
+            print len(all_instances), "instances"
             random.shuffle(all_instances)
             if num_folds <= 0:
                 num_folds = len(all_instances)

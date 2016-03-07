@@ -173,7 +173,7 @@ class Featurizer(object):
             selected_features = selected_features_or_name_dict
         self._initialize_feature_extractors(selected_features)
 
-        self.features = None
+        self.featurized = None
 
     def reset(self):
         self.feature_name_dictionary.clear()
@@ -272,7 +272,7 @@ class Featurizer(object):
         elapsed_seconds = time.time() - start_time
         logging.debug('Done featurizing in %0.2f seconds' % elapsed_seconds)
         if self.save_featurized:
-            self.features = features
+            self.featurized = features
         return features
 
     @staticmethod
