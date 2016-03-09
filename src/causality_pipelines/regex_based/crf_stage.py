@@ -215,3 +215,9 @@ class ArgumentLabelerStage(Stage):
         return ArgumentLabelerEvaluator(
             False, False, FLAGS.arg_label_log_differences, True, True,
             'possible_causations')
+
+    def _document_complete(self, document):
+        for sentence in document:
+            sentence.possible_causations = [
+                pc for pc in sentence.possible_causations
+                if pc.cause and pc.effect]
