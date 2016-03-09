@@ -312,8 +312,9 @@ class CRFModel(FeaturizedStructuredModel):
         if not load_from_file:
             model_file_path = None # to tell the super constructor not to load
         super(CRFModel, self).__init__(
-            decoder, [CRFModel.CRFPart], selected_features, part_filters,
-            model_file_path, save_featurized)
+            decoder=decoder, part_types=[CRFModel.CRFPart],
+            selected_features=selected_features, part_filters=part_filters,
+            model_path=model_file_path, save_featurized=save_featurized)
         self.training_algorithm = training_algorithm
         self.training_params = training_params
         self.tagger = None
