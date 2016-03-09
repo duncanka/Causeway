@@ -24,6 +24,8 @@ class Model(object):
         train_result = self._train_model(instances)
         self._post_model_train(train_result)
 
+    # TODO: refactor so that overriding behavior is similar between train and
+    # test (i.e., _test_model should be the thing to override)
     def test(self, instances):
         '''
         Returns an iterable of predicted outputs for the provided instances. If
@@ -105,12 +107,26 @@ class ClassifierModel(FeaturizedModel):
         self.featurizer.reset()
 
     def _train_model(self, instances):
+        # print "Featurizing", len(instances), "instances"
         logging.info("Registering features...")
         self.featurizer.register_features_from_instances(instances)
         logging.info('Done registering features.')
 
         features = self.featurizer.featurize(instances)
         labels = self._get_gold_labels(instances)
+
+        '''
+        print("Featurized:")
+        strings = []
+        for i in range(len(instances)):
+            d = self.featurizer.matrow2dict(features, i)
+            label = bool(labels[i])
+            strings.append('{%s} -> %s' % (', '.join(
+                ['%s: %s' % (key, d[key]) for key in sorted(d.keys())]), label))
+        strings.sort()
+        print '\n'.join(strings)
+        # '''
+
         logging.info('Fitting classifier...')
         self.classifier.fit(features, labels)
         logging.info('Done fitting classifier.')
@@ -125,6 +141,19 @@ class ClassifierModel(FeaturizedModel):
             self.gold_labels = gold_labels
             self.labels = labels
             self.raw_instances = instances
+
+        '''
+        print("Featurized:")
+        strings = []
+        for i in range(len(instances)):
+            d = self.featurizer.matrow2dict(features, i)
+            label = bool(labels[i])
+            gold_label = bool(gold_labels[i])
+            strings.append('{%s} -> %s / %s' % (', '.join(
+                ['%s: %s' % (key, d[key]) for key in sorted(d.keys())]), label, gold_label))
+        strings.sort()
+        print '\n'.join(strings)
+        # '''
 
         # logging.debug('%d data points' % len(gold_labels))
         # logging.debug('Raw classifier performance:')

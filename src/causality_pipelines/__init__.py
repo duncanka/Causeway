@@ -67,14 +67,14 @@ class IAAEvaluator(Evaluator):
                  original_sentences):
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
-                original_sentences, sentences, True, self.log_test_instances,
+                original_document.sentences, document.sentences, True, self.log_test_instances,
                 compare_types=self.compare_types, compare_args=self.compare_args,
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
                 save_agreements=self.log_test_instances,
                 causations_property_name=self.causations_property_name)
         without_partial = CausalityMetrics(
-            original_sentences, sentences, False, self.log_test_instances,
+            original_document.sentences, document.sentences, False, self.log_test_instances,
             compare_types=self.compare_types, compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,

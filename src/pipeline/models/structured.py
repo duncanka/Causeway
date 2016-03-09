@@ -39,7 +39,7 @@ class StructuredModel(Model):
         self.reset() # Reset state in case we've been previously trained.
         parts_by_instance = [self._make_parts(instance, True)
                              for instance in instances]
-        self._train_structured(instances, parts_by_instance)
+        return self._train_structured(instances, parts_by_instance)
 
     # TODO: should structured models have Trainers, like in scikit-learn?
     # That would allow, e.g., training the same model with 2 different methods.
