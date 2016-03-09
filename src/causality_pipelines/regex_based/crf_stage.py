@@ -40,8 +40,10 @@ class ArgumentLabelerModel(CRFModel):
 
     def __init__(self, training_algorithm, training_params):
         super(ArgumentLabelerModel, self).__init__(
-            FLAGS.arg_label_features, FLAGS.arg_label_model_path,
-            training_algorithm, training_params)
+            selected_features=FLAGS.arg_label_features,
+            model_file_path=FLAGS.arg_label_model_path,
+            training_algorithm=training_algorithm,
+            training_params=training_params)
 
     def _sequence_for_instance(self, possible_causation, is_train):
         return possible_causation.sentence.tokens[1:] # all tokens but ROOT
