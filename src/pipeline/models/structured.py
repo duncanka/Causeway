@@ -284,8 +284,8 @@ class ViterbiDecoder(StructuredDecoder):
 
 
 class CRFDecoder(StructuredDecoder):
-    def decode(self, instance, instance_parts, part_labels):
-        return part_labels[0]
+    def decode(self, instance, instance_parts, part_labels_by_type):
+        return part_labels_by_type[0]
 
 
 class CRFModel(FeaturizedStructuredModel):
