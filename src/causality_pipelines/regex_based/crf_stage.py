@@ -49,17 +49,16 @@ class ArgumentLabelerModel(CRFModel):
         return possible_causation.sentence.tokens[1:] # all tokens but ROOT
 
     def _get_gold_labels(self, crf_part_type, crf_parts):
-        labels = []
-        for crf_part in crf_parts:
+        labels = [self.NONE_LABEL] * len(crf_parts)
+        for i, crf_part in enumerate(crf_parts):
             pc = crf_part.instance
             true_instance = pc.true_causation_instance
             token = crf_part.observation
-            if true_instance.cause and token in true_instance.cause:
-                labels.append(self.CAUSE_LABEL)
-            elif true_instance.effect and token in true_instance.effect:
-                labels.append(self.EFFECT_LABEL)
-            else:
-                labels.append(self.NONE_LABEL)
+            if true_instance.effect and token in true_instance.effect:
+                labels[i] = self.CAUSE_LABEL
+            elif true_instance.cause and token in true_instance.cause:
+                labels[i] = self.EFFECT_LABEL
+
         return labels
     
     @staticmethod
@@ -213,13 +212,15 @@ class ArgumentLabelerStage(Stage):
         if not possible_causation.cause: possible_causation.cause = None
         if not possible_causation.effect: possible_causation.effect = None
 
+    def _document_complete(self, document):
+        for sentence in document:
+            # print "Unfiltered:", sentence.possible_causations
+            sentence.possible_causations = [
+                pc for pc in sentence.possible_causations
+                if pc.cause and pc.effect]
+            # print "Filtered:", sentence.possible_causations
+
     def _make_evaluator(self):
         return ArgumentLabelerEvaluator(
             False, False, FLAGS.arg_label_log_differences, True, True,
             'possible_causations')
-
-    def _document_complete(self, document):
-        for sentence in document:
-            sentence.possible_causations = [
-                pc for pc in sentence.possible_causations
-                if pc.cause and pc.effect]
