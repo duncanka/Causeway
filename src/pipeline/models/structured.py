@@ -1,5 +1,5 @@
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
-# from itertools import chain, izip_longest
+from itertools import chain # , izip_longest
 import logging
 import numpy as np
 import pycrfsuite
