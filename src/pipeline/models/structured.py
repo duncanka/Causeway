@@ -1,5 +1,5 @@
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
-from itertools import chain
+# from itertools import chain, izip_longest
 import logging
 import numpy as np
 import pycrfsuite
@@ -341,6 +341,11 @@ class CRFModel(FeaturizedStructuredModel):
         featurized_with_labels = featurized_with_labels_by_type[0]
         observation_features, labels = featurized_with_labels
         trainer.append(observation_features, labels)
+        '''
+        print "Featurized train:"
+        for o, l in izip_longest(observation_features, labels):
+            print l, 'part:', o
+        '''
 
         start_time = time.time()
         logging.info("Training CRF model...")
@@ -364,7 +369,7 @@ class CRFModel(FeaturizedStructuredModel):
         self._load_model(self.model_file_path)
 
     def _score_featurized_parts(self, instance, featurized_parts_by_type):
-        featurized_parts = featurized_parts_by_type[0]
+        featurized_parts = featurized_parts_by_type[0] # only 1 part type
         crf_labels = self.tagger.tag(featurized_parts)
         return [crf_labels]
 
