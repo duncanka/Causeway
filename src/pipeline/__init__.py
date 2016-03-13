@@ -361,10 +361,14 @@ class Stage(object):
 
     def test(self, document, instances, writer=None):
         predicted_outputs = self.model.test(instances)
-        for instance, predicted_output in itertools.izip_longest(
-            instances, predicted_outputs):
-            self._label_instance(document, instance, predicted_output)
-            if writer:
+        if predicted_outputs is not None:
+            for instance, predicted_output in itertools.izip_longest(
+                instances, predicted_outputs):
+                self._label_instance(document, instance, predicted_output)
+                if writer:
+                    writer.instance_complete(document, instance)
+        elif writer: # No additional labeling needed; signal instance completion
+            for instance in instances:
                 writer.instance_complete(document, instance)
         self._document_complete(document)
 
