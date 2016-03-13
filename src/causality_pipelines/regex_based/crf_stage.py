@@ -54,9 +54,9 @@ class ArgumentLabelerModel(CRFModel):
             pc = crf_part.instance
             true_instance = pc.true_causation_instance
             token = crf_part.observation
-            if true_instance.effect and token in true_instance.effect:
+            if true_instance.cause and token in true_instance.cause:
                 labels[i] = self.CAUSE_LABEL
-            elif true_instance.cause and token in true_instance.cause:
+            elif true_instance.effect and token in true_instance.effect:
                 labels[i] = self.EFFECT_LABEL
 
         return labels
