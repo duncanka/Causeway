@@ -197,6 +197,9 @@ class Pipeline(object):
             if stage is not self.stages[-1]:
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
+                instances_by_document = [
+                    stage._extract_instances(document, False)
+                    for document in documents]
                 stage._test_documents(documents, instances_by_document, None)
                 logging.info('Done testing stage "%s"' % stage.name)
 
