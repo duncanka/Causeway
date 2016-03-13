@@ -35,9 +35,9 @@ class RegexConnectiveModel(Model):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        all_possible_causations = [[] for _ in sentences]
-        for sentence, possible_causations in zip(sentences,
-                                                 all_possible_causations):
+        for sentence in sentences:
+            sentence.possible_causations = []
+
             tokens = sentence.tokens[1:] # skip ROOT
             if FLAGS.regex_include_pos:
                 lemmas_to_match = ['%s/%s' % (token.lemma, token.get_gen_pos())
@@ -81,12 +81,11 @@ class RegexConnectiveModel(Model):
                 possible_causation = PossibleCausation(
                     sentence, matching_patterns, connective_tokens,
                     true_causation_instance)
-                possible_causations.append(possible_causation)
+                sentence.possible_causations.append(possible_causation)
 
         elapsed_seconds = time.time() - start_time
         logging.info("Done tagging possible connectives in %0.2f seconds"
                      % elapsed_seconds)
-        return all_possible_causations
 
     #####################################
     # Sentence preprocessing
@@ -204,6 +203,3 @@ class RegexConnectiveStage(Stage):
                             False, True, 'possible_causations')
 
     produced_attributes = ['possible_causations']
-
-    def _label_instance(self, document, sentence, possible_causations):
-        sentence.possible_causations = possible_causations
