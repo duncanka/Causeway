@@ -21,7 +21,6 @@ class BaselineModel(Model):
     _STOP_POSES = ['MD', 'CC', 'UH', ':', "''", ',' '.']
     
     def __init__(self, save_results_in):
-        super(BaselineModel, self).__init__(StanfordParsedSentence)
         self._connectives = set()
         # (connective word tuple, parse path to cause, parse path to effect) ->
         #   list of [# causal, # non-causal]
@@ -121,7 +120,7 @@ class BaselineModel(Model):
                                  possible_cause, possible_effect, path_1,
                                  path_2)
 
-    def train(self, sentences):
+    def _train_model(self, sentences):
         # Pass 1: extract connective lemmas.
         for sentence in sentences:
             for instance in sentence.causation_instances:
@@ -154,6 +153,9 @@ class BaselineModel(Model):
         self._operate_on_sentences(sentences, training_callback)
 
     def test(self, sentences):
+        for sentence in sentences:
+            setattr(sentence, self._save_results_in, [])
+
         def test_callback(
             sentence_num, connective_lemmas, connective_tokens, possible_cause,
             possible_effect, path_1, path_2):
@@ -173,8 +175,6 @@ class BaselineModel(Model):
                     sentence, None, connective=connective_tokens,
                     cause=expanded_cause, effect=expanded_effect)
                 possible_causations.append(pc)
-        for sentence in sentences:
-            setattr(sentence, self._save_results_in, [])
         self._operate_on_sentences(sentences, test_callback)
 
     @staticmethod
@@ -194,11 +194,8 @@ class BaselineModel(Model):
 class BaselineStage(Stage):
     def __init__(self, name, record_results_in='causation_instances'):
         super(BaselineStage, self).__init__(
-            name=name, models=BaselineModel(record_results_in))
+            name=name, model=BaselineModel(record_results_in))
         self.produced_attributes = [record_results_in]
-
-    def _extract_instances(self, sentence, is_train):
-        return [sentence]
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, False, True, True,
