@@ -16,7 +16,7 @@ from util.metrics import ClassificationMetrics
 # Define pipeline-related flags.
 try:
     DEFINE_boolean('evaluate', False,
-                   "True for evaluating the parser (requires --test_paths).")
+                   "True for evaluating the pipeline (requires --test_paths).")
     DEFINE_list('train_paths', [],
                 "Paths to the files containing the training data")
     DEFINE_list('test_paths', [],
