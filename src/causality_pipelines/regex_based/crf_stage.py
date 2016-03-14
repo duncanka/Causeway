@@ -186,7 +186,13 @@ class ArgumentLabelerStage(Stage):
         super(ArgumentLabelerStage, self).__init__(
             name, ArgumentLabelerModel(training_algorithm, training_params))
 
-    def _extract_instances(self, document, is_train):
+    def _extract_instances(self, document, is_train, is_original):
+        # No possible causations in the gold-standard data. But it doesn't
+        # matter; evaluation will be done by comparing gold to possible, not
+        # possible to possible. Just return no instances.
+        if is_original:
+            return []
+
         if is_train:
             # Filter to possible causations for which we can actually
             # extract the correct labels, i.e., gold-standard causations.
