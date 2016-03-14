@@ -345,7 +345,7 @@ class CRFModel(FeaturizedStructuredModel):
         print "Featurized train:"
         for o, l in izip_longest(observation_features, labels):
             print l, 'part:', o
-        '''
+        # '''
 
         start_time = time.time()
         logging.info("Training CRF model...")
@@ -371,6 +371,11 @@ class CRFModel(FeaturizedStructuredModel):
     def _score_featurized_parts(self, instance, featurized_parts_by_type):
         featurized_parts = featurized_parts_by_type[0] # only 1 part type
         crf_labels = self.tagger.tag(featurized_parts)
+        '''
+        print "Featurized test:"
+        for o, l in izip_longest(featurized_parts, crf_labels):
+            print l, 'part:', o
+        # '''
         return [crf_labels]
 
     def _sequence_for_instance(self, instance, is_train):

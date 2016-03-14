@@ -116,7 +116,7 @@ class ClassifierModel(FeaturizedModel):
         labels = self._get_gold_labels(instances)
 
         '''
-        print("Featurized:")
+        print("Featurized train:")
         strings = []
         for i in range(len(instances)):
             d = self.featurizer.matrow2dict(features, i)
@@ -143,7 +143,7 @@ class ClassifierModel(FeaturizedModel):
             self.raw_instances = instances
 
         '''
-        print("Featurized:")
+        print("Featurized test:")
         strings = []
         for i in range(len(instances)):
             d = self.featurizer.matrow2dict(features, i)

@@ -373,9 +373,18 @@ class Stage(object):
         elif writer: # No additional labeling needed; signal instance completion
             for instance in instances:
                 writer.instance_complete(document, instance)
-        self._document_complete(document)
+
+    def _prepare_document(self, document, instances):
+        '''
+        Prepares the document for testing (e.g., setting variables on the
+        document that will be harder to set after processing the instances).
+        '''
+        pass
 
     def _document_complete(self, document):
+        '''
+        Handles any post-labeling processing for the entire document.
+        '''
         pass
 
     def _make_evaluator(self):
@@ -402,7 +411,9 @@ class Stage(object):
         as appropriate.
         '''
         for document, instances in zip(documents, instances_by_doc):
+            self._prepare_document(document, instances)
             self.test(document, instances, writer)
+            self._document_complete(document)
 
     '''
     Default list of attributes the stage adds to instances. Add a class-wide
