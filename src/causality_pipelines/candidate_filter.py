@@ -326,9 +326,10 @@ class PatternBasedCausationFilter(StructuredModel):
         # Comparator for matching CausationInstances against PossibleCausations
         self.connective_comparator = lambda inst1, inst2: comparator(
                                         inst1.connective, inst2.connective)
+        # By default, regex, not tregex, should use diff correctness.
         if FLAGS.causality_cc_diff_correctness is None:
             FLAGS.causality_cc_diff_correctness = (
-                'tregex' in FLAGS.pipeline_type)
+                'tregex' not in FLAGS.pipeline_type)
             logging.debug("Set flag causality_cc_diff_correctness to %s"
                           % FLAGS.causality_cc_diff_correctness)
 
@@ -398,6 +399,7 @@ class PatternBasedFilterDecoder(StructuredDecoder):
                     if 'steiner_0' in part.connective_pattern:
                         keep_part = False
                         break
+                    # TODO: add check for duplicates in other cases?
             if keep_part:
                 causation_instances.append(CausationInstance(
                     sentence, connective=part.connective,
