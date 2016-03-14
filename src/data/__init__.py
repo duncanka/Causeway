@@ -272,8 +272,9 @@ class StanfordParsedSentence(object):
             discounting punctuation tokens. '''
         assert (self.tokens[token1.index] == token1 and
                 self.tokens[token2.index] == token2), "Tokens not in sentence"
-        if token1.index > token2.index:
-            token1, token2 = token2, token1
+        # TODO: Should this really stay at -1 if tokens are in the wrong order?
+        # if token1.index > token2.index:
+        #    token1, token2 = token2, token1
         words_between = -1
         for token in self.tokens[token1.index : token2.index + 1]:
             if token.pos[0].isalnum():
