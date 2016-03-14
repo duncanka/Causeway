@@ -32,10 +32,13 @@ try:
                    " just making the value 'LONG-RANGE'")
     DEFINE_bool('causality_cc_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation')
-    DEFINE_bool('causality_cc_tuple_correctness', False,
+    DEFINE_bool('causality_cc_diff_correctness', None,
                 'Whether a candidate instance should be considered correct in'
-                ' training based on (connective, cause, effect), as opposed to'
-                ' just connectives.')
+                ' training based on diffing the sequence of true instances and'
+                ' the sequence of proposed instances. If False, then any'
+                ' proposed instance that has been matched to a true instance'
+                " will be marked as true, even if it's a duplicate. Default is"
+                " True for regex pipeline and False for TRegex.")
     DEFINE_bool('causality_cc_train_with_partials', False,
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
@@ -44,19 +47,18 @@ except DuplicateFlagError as e:
 
 
 class PatternFilterPart(object):
-    def __init__(self, possible_causation, correct_connective=None):
+    def __init__(self, possible_causation, connective_correct=None):
         self.possible_causation = possible_causation
         self.sentence = possible_causation.sentence
         self.cause = possible_causation.cause
         self.effect = possible_causation.effect
-        self.cause_head, self.effect_head = [
-            self.sentence.get_head(arg)
-            for arg in [possible_causation.cause, possible_causation.effect]]
+        self.cause_head = self.sentence.get_head(possible_causation.cause)
+        self.effect_head = self.sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
         self.connective_head = self.sentence.get_head(self.connective)
         # TODO: Update this once we have multiple pattern matches sorted out.
         self.connective_pattern = possible_causation.matching_patterns[0]
-        self.connective_correct = correct_connective
+        self.connective_correct = connective_correct
 
 
 # In principle, the causation filter is both a featurized classifier and a
@@ -66,29 +68,12 @@ class PatternFilterPart(object):
 # composition rather than inheritance.
 
 class CausalPatternClassifierModel(ClassifierModel):
+    def __init__(self, classifier, selected_features=None,
+        model_path=None, save_featurized=False):
+        ClassifierModel.__init__(self, classifier, selected_features=selected_features, model_path=model_path, save_featurized=save_featurized)
+
     def _get_gold_labels(self, classifier_parts):
-        if FLAGS.causality_cc_tuple_correctness:
-            # TODO: does this code actually make sense?
-            labels = []
-            for classifier_part in classifier_parts:
-                if not classifier_part.connective_correct:
-                    labels.append(False)
-                else:
-                    true_instance = (classifier_part.possible_causation
-                                     ).true_causation_instance
-                    if true_instance:
-                        true_cause_head = self.sentence.get_head(
-                            true_instance.cause)
-                        true_effect_head = self.sentence.get_head(
-                            true_instance.effect)
-                        labels.append(
-                            (true_cause_head is classifier_part.cause_head and
-                             true_effect_head is classifier_part.effect_head))
-                    else:
-                        labels.append(False)
-            return labels
-        else:
-            return [part.connective_correct for part in classifier_parts]
+        return [part.connective_correct for part in classifier_parts]
 
     #############################
     # Feature extraction methods
@@ -328,40 +313,51 @@ CausalPatternClassifierModel.all_feature_extractors = [
         StanfordNERStage.NER_TYPES)
 ]
 
+
 class PatternBasedCausationFilter(StructuredModel):
-    def __init__(self, classifier):
+    def __init__(self, classifier, save_featurized=False):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder())
         self.classifier = CausalPatternClassifierModel(
-            classifier, FLAGS.causality_cc_features)
+            classifier, FLAGS.causality_cc_features,
+            save_featurized=save_featurized)
         comparator = make_annotation_comparator(
             FLAGS.causality_cc_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations
         self.connective_comparator = lambda inst1, inst2: comparator(
                                         inst1.connective, inst2.connective)
+        if FLAGS.causality_cc_diff_correctness is None:
+            FLAGS.causality_cc_diff_correctness = (
+                'tregex' in FLAGS.pipeline_type)
+            logging.debug("Set flag causality_cc_diff_correctness to %s"
+                          % FLAGS.causality_cc_diff_correctness)
 
     def _make_parts(self, sentence, is_train):
-        # In training, we need to match the causation instances the pipeline has
-        # thus far detected against the original causation instances (provided
-        # by previous pipeline stages). We do this the same way that the IAA
-        # code does it internally: by running a diff on the connectives. Except
-        # we cheat a bit, and compare PossibleCausations against real
-        # CausationInstances.
-        # TODO: try limiting to pairwise only for training.
         if is_train:
-            parts = []
-            # We want the diff to sort by connective position in the sentence.
-            sort_by_key = lambda inst: inst.connective[0].start_offset
-            connectives_diff = SequenceDiff(
-                sentence.possible_causations, sentence.causation_instances,
-                self.connective_comparator, sort_by_key)
-            for correct_pc, _ in connectives_diff.get_matching_pairs():
-                if correct_pc.cause and correct_pc.effect:
-                    parts.append(PatternFilterPart(correct_pc, True))
-            for incorrect_pc in connectives_diff.get_a_only_elements():
-                if incorrect_pc.cause and incorrect_pc.effect:
-                    parts.append(PatternFilterPart(incorrect_pc, False))
-            return parts
+            if FLAGS.causality_cc_diff_correctness:
+                # In training, we need to match the causation instances the
+                # pipeline has thus far detected against the original causation
+                # instances (provided by previous pipeline stages). We do this
+                # the same way that the IAA code does it internally: by running
+                # a diff on the connectives. Except we cheat a bit, and compare
+                # PossibleCausations against real CausationInstances.
+                parts = []
+                # We want the diff to sort by connective position.
+                sort_by_key = lambda inst: inst.connective[0].start_offset
+                connectives_diff = SequenceDiff(
+                    sentence.possible_causations, sentence.causation_instances,
+                    self.connective_comparator, sort_by_key)
+                for correct_pc, _ in connectives_diff.get_matching_pairs():
+                    if correct_pc.cause and correct_pc.effect:
+                        parts.append(PatternFilterPart(correct_pc, True))
+                for incorrect_pc in connectives_diff.get_a_only_elements():
+                    if incorrect_pc.cause and incorrect_pc.effect:
+                        parts.append(PatternFilterPart(incorrect_pc, False))
+                return parts
+            else:
+                return [PatternFilterPart(pc, bool(pc.true_causation_instance))
+                        for pc in sentence.possible_causations
+                        if pc.cause and pc.effect]
         else:
             # If we're not in training, the initial label doesn't really matter.
             return [PatternFilterPart(pc, False) for pc in

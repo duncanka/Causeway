@@ -36,7 +36,7 @@ except DuplicateFlagError as e:
 class ArgumentLabelerModel(CRFModel):
     CAUSE_LABEL = 'Cause'
     EFFECT_LABEL = 'Effect'
-    NONE_LABEL = ''
+    NONE_LABEL = 'None'
 
     def __init__(self, training_algorithm, training_params):
         super(ArgumentLabelerModel, self).__init__(
@@ -60,7 +60,7 @@ class ArgumentLabelerModel(CRFModel):
                 labels[i] = self.EFFECT_LABEL
 
         return labels
-    
+
     @staticmethod
     def get_connective_parse_distance(observation):
         sentence = observation.instance.sentence
