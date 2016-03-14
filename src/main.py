@@ -7,10 +7,9 @@ import os
 from sklearn import tree, neighbors, linear_model, svm, ensemble
 import sys
 
-from causality_pipelines.candidate_filter import CausationPatternFilterStage
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
-# from causality_pipelines.regex_based.candidate_classifier import RegexClassifierStage
+from causality_pipelines.candidate_filter import CausationPatternFilterStage
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
@@ -74,8 +73,8 @@ def get_stages(candidate_classifier):
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
-    else:
-        stages = [BaselineStage('Baseline')] # baseline
+    else: # baseline
+        stages = [BaselineStage('Baseline')]
     return stages
 
 # def main(argv):
