@@ -185,8 +185,8 @@ class Pipeline(object):
 
         for stage in self.stages:
             logging.info('Training stage "%s"...' % stage.name)
-            instances_by_document = [stage._extract_instances(document, True)
-                                     for document in documents]
+            instances_by_document = [
+                stage._extract_instances(doc, True, False) for doc in documents]
             stage.train(documents, instances_by_document)
             logging.info('Finished training stage "%s"' % stage.name)
             # For training, each stage needs a realistic view of what its inputs
@@ -198,7 +198,7 @@ class Pipeline(object):
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
                 instances_by_document = [
-                    stage._extract_instances(document, False)
+                    stage._extract_instances(document, False, False)
                     for document in documents]
                 stage._test_documents(documents, instances_by_document, None)
                 logging.info('Done testing stage "%s"' % stage.name)
@@ -226,15 +226,16 @@ class Pipeline(object):
         return eval_results
 
     def __test_documents(self, documents):
+        if self._evaluators_by_stage: # we're evaluating; avoid overwriting
+            original_documents = [self._copy_fn(doc) for doc in documents]
+
         for i, stage in enumerate(self.stages):
-            original_documents = documents
-            if self._evaluators_by_stage: # we're evaluating; avoid overwriting
-                original_documents = [self._copy_fn(doc) for doc in documents]
+            if self._evaluators_by_stage:
                 original_instances_by_doc = [
-                    stage._extract_instances(original_document, False)
+                    stage._extract_instances(original_document, False, True)
                     for original_document in original_documents]
 
-            instances_by_doc = [stage._extract_instances(document, False)
+            instances_by_doc = [stage._extract_instances(document, False, False)
                                 for document in documents]
 
             logging.info('Testing stage "%s"...' % stage.name)
@@ -244,13 +245,14 @@ class Pipeline(object):
             writer = self.writer if i == len(self.stages) - 1 else None
             stage._test_documents(documents, instances_by_doc, writer)
 
-            for document, original_document, instances, original_instances in (
-                zip(documents, original_documents, instances_by_doc,
-                    original_instances_by_doc)):
-                if self._evaluators_by_stage and self._evaluators_by_stage[i]:
-                    self._evaluators_by_stage[i].evaluate(
-                        document, original_document, instances,
-                        original_instances)
+            if self._evaluators_by_stage:
+                for (document, original_document, instances, original_instances
+                     ) in zip(documents, original_documents, instances_by_doc,
+                              original_instances_by_doc):
+                    if self._evaluators_by_stage[i]:
+                        self._evaluators_by_stage[i].evaluate(
+                            document, original_document, instances,
+                            original_instances)
 
     def __set_up_paths(self):
         if not FLAGS.test_output_paths:
@@ -418,7 +420,8 @@ class Stage(object):
     '''
     Default list of attributes the stage adds to instances. Add a class-wide
     field by the same name in the class for a stage that adds any attributes
-    to instances. Stages can also provide instance-specific lists.
+    to instances. Stages can override with either class-level or instance-level
+    lists.
     '''
     produced_attributes = []
 
@@ -429,7 +432,7 @@ class Stage(object):
     '''
     consumed_attributes = []
 
-    def _extract_instances(self, document, is_train):
+    def _extract_instances(self, document, is_train, is_original):
         '''
         Sentences are the most commonly used unit of analysis for models, so
         the default for SentencesDocuments is to return sentences as instances.
