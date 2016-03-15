@@ -10,10 +10,6 @@ from pipeline.models import Model
 from util import Enum
 
 try:
-    DEFINE_bool('regex_print_patterns', False,
-                'Whether to print all connective patterns')
-    DEFINE_bool('regex_print_test_instances', False,
-                'Whether to print differing IAA results during evaluation')
     DEFINE_bool('regex_include_pos', True,
                 'Whether to include POS tags in the strings matched by regex')
 
@@ -168,7 +164,7 @@ class RegexConnectiveModel(Model):
         regex_patterns = []
         patterns_seen = set()
 
-        if FLAGS.tregex_print_patterns:
+        if FLAGS.print_patterns:
             print 'Patterns:'
         for sentence in sentences:
             for instance in sentence.causation_instances:
@@ -182,9 +178,9 @@ class RegexConnectiveModel(Model):
                         sentence, connective, cause_tokens, effect_tokens))
 
                 if pattern not in patterns_seen:
-                    if FLAGS.regex_print_patterns:
-                        print pattern.encode('utf-8')
-                        print 'Sentence:', sentence.original_text.encode(
+                    if FLAGS.print_patterns:
+                        print ' ', pattern.encode('utf-8')
+                        print '  Sentence:', sentence.original_text.encode(
                             'utf-8')
                         print
                     patterns_seen.add(pattern)
@@ -199,7 +195,7 @@ class RegexConnectiveStage(Stage):
             name=name, model=RegexConnectiveModel())
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.regex_print_test_instances,
+        return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
                             False, True, 'possible_causations')
 
     produced_attributes = ['possible_causations']

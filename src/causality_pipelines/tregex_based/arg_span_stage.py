@@ -1,17 +1,10 @@
-from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
+from gflags import FLAGS
 from itertools import permutations, chain
 import logging
 
 from causality_pipelines import IAAEvaluator
 from pipeline import Stage
 from pipeline.models import Model
-
-try:
-    DEFINE_bool('arg_span_print_test_instances', False,
-                'Whether to print differing IAA results during evaluation')
-except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
-
 
 class ArgSpanModel(Model):
     def __init__(self, *args, **kwargs):
@@ -141,5 +134,5 @@ class ArgSpanStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
-        return IAAEvaluator(False, False, FLAGS.arg_span_print_test_instances,
+        return IAAEvaluator(False, False, FLAGS.args_print_test_instances,
                             True, True, 'possible_causations')

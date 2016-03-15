@@ -18,6 +18,14 @@ try:
     DEFINE_string(
         'stanford_ner_model_name', 'english.all.3class.distsim.crf.ser.gz',
         'Name of model file for Stanford NER')
+    DEFINE_bool('print_patterns', False,
+                'Whether to print all connective patterns')
+    DEFINE_bool('patterns_print_test_instances', False,
+                'Whether to print differing IAA results during evaluation of'
+                ' pattern matching stage')
+    DEFINE_bool('args_print_test_instances', False,
+                'Whether to print differing IAA results during evaluation of'
+                ' argument labelling stage')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -67,15 +75,17 @@ class IAAEvaluator(Evaluator):
                  original_sentences):
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
-                original_document.sentences, document.sentences, True, self.log_test_instances,
-                compare_types=self.compare_types, compare_args=self.compare_args,
+                original_document.sentences, document.sentences, True,
+                self.log_test_instances, compare_types=self.compare_types,
+                compare_args=self.compare_args,
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
                 save_agreements=self.log_test_instances,
                 causations_property_name=self.causations_property_name)
         without_partial = CausalityMetrics(
-            original_document.sentences, document.sentences, False, self.log_test_instances,
-            compare_types=self.compare_types, compare_args=self.compare_args,
+            original_document.sentences, document.sentences, False,
+            self.log_test_instances, compare_types=self.compare_types,
+            compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,
             save_agreements=self.log_test_instances,

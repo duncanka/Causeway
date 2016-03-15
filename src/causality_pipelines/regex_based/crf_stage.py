@@ -18,8 +18,6 @@ try:
                 'Features for the argument-labeling CRF')
     DEFINE_string('arg_label_model_path', '../arg-labeler-crf.model',
                   'Path to save the argument-labeling CRF model to')
-    DEFINE_bool('arg_label_log_differences', False,
-                'Whether to print differing IAA results during evaluation')
     DEFINE_integer('arg_label_max_dep_path_len', 4,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")
@@ -228,5 +226,5 @@ class ArgumentLabelerStage(Stage):
 
     def _make_evaluator(self):
         return ArgumentLabelerEvaluator(
-            False, False, FLAGS.arg_label_log_differences, True, True,
+            False, False, FLAGS.args_print_test_instances, True, True,
             'possible_causations')

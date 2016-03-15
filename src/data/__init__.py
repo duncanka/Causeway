@@ -270,15 +270,17 @@ class StanfordParsedSentence(object):
     def count_words_between(self, token1, token2):
         ''' Counts words between tokens based purely on the token IDs,
             discounting punctuation tokens. '''
-        assert (self.tokens[token1.index] == token1 and
-                self.tokens[token2.index] == token2), "Tokens not in sentence"
+        # assert (self.tokens[token1.index] == token1 and
+        #        self.tokens[token2.index] == token2), "Tokens not in sentence"
         # TODO: Should this really stay at -1 if tokens are in the wrong order?
-        # if token1.index > token2.index:
+        # negate = token1.index > token2.index
+        # if negate:
         #    token1, token2 = token2, token1
         words_between = -1
         for token in self.tokens[token1.index : token2.index + 1]:
             if token.pos[0].isalnum():
                 words_between += 1
+        # return -words_between if negate else words_between
         return words_between
 
     def get_most_direct_parent(self, token):

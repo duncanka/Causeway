@@ -29,10 +29,6 @@ try:
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
-    DEFINE_bool('tregex_print_patterns', False,
-                'Whether to print all connective patterns')
-    DEFINE_bool('tregex_print_test_instances', False,
-                'Whether to print differing IAA results during evaluation')
     DEFINE_enum('tregex_pattern_type', 'dependency',
                 ['dependency', 'constituency'],
                 'Type of tree to generate and run TRegex patterns with')
@@ -510,7 +506,7 @@ class TRegexConnectiveModel(Model):
         preprocessed_ptb_strings = self._preprocess_sentences(sentences)
 
         logging.info('Extracting patterns...')
-        if FLAGS.tregex_print_patterns:
+        if FLAGS.print_patterns:
             print 'Patterns:'
         for sentence, ptb_string in zip(sentences, preprocessed_ptb_strings):
             if FLAGS.tregex_pattern_type == 'dependency':
@@ -525,9 +521,9 @@ class TRegexConnectiveModel(Model):
                         continue
 
                     if pattern not in patterns_seen:
-                        if FLAGS.tregex_print_patterns:
-                            print pattern.encode('utf-8')
-                            print 'Sentence:', (sentence.original_text.encode(
+                        if FLAGS.print_patterns:
+                            print ' ', pattern.encode('utf-8')
+                            print '  Sentence:', (sentence.original_text.encode(
                                                     'utf-8'))
                             print
                         patterns_seen.add(pattern)
@@ -535,8 +531,7 @@ class TRegexConnectiveModel(Model):
                                              in instance.connective]
                         self.tregex_patterns.append((pattern, node_names,
                                                      connective_lemmas))
-        if FLAGS.tregex_print_patterns:
-            sys.stdout.flush()
+        sys.stdout.flush()
         logging.info('Done extracting patterns.')
 
         return preprocessed_ptb_strings
@@ -771,7 +766,7 @@ class TRegexConnectiveStage(Stage):
 
     def _make_evaluator(self):
         # TODO: provide both pairwise and non-pairwise stats
-        return IAAEvaluator(False, False, FLAGS.tregex_print_test_instances,
+        return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
                             True, True, 'possible_causations')
 
     # No need for _label_instance, as we take care of that in _test_documents.
