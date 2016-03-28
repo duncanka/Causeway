@@ -56,8 +56,7 @@ class PatternFilterPart(object):
         self.effect_head = self.sentence.get_head(possible_causation.effect)
         self.connective = possible_causation.connective
         self.connective_head = self.sentence.get_head(self.connective)
-        # TODO: Update this once we have multiple pattern matches sorted out.
-        self.connective_pattern = possible_causation.matching_patterns[0]
+        self.connective_patterns = possible_causation.matching_patterns
         self.connective_correct = connective_correct
 
 
@@ -247,10 +246,8 @@ CausalPatternClassifierModel.all_feature_extractors = [
                      lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)),
                      FeatureExtractor.FeatureTypes.Numerical),
-    # TODO: Update this once we have multiple pattern matches sorted out.
-    # SetValuedFeatureExtractor(# TODO: fix me
-    #     'connective', lambda observation: part.connective_patterns),
-    FeatureExtractor('connective', lambda part: part.connective_pattern),
+    SetValuedFeatureExtractor(
+        'connective', lambda part: part.connective_patterns),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [CausalPatternClassifierModel.extract_tense(head)
@@ -396,7 +393,8 @@ class PatternBasedFilterDecoder(StructuredDecoder):
                     # this match relies on Steiner nodes, it's probably wrong.
                     # TODO: should we worry about cases where all connectives
                     # on this word were found using Steiner patterns?
-                    if 'steiner_0' in part.connective_pattern:
+                    if any('steiner_0' in pattern
+                           for pattern in part.connective_patterns):
                         keep_part = False
                         break
                     # TODO: add check for duplicates in other cases?

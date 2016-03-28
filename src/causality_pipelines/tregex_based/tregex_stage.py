@@ -14,7 +14,8 @@ from threading import Lock
 from data import Token
 from pipeline import Stage
 from pipeline.models import Model
-from causality_pipelines import PossibleCausation, IAAEvaluator
+from causality_pipelines import PossibleCausation, IAAEvaluator, \
+    get_causation_tuple
 from util import pairwise, igroup
 from util.nltk import subtree_at_index, index_of_subtree
 from util.scipy import steiner_tree, longest_path_in_tree
@@ -717,6 +718,14 @@ class TRegexConnectiveModel(Model):
                     true_connectives.get(tuple(connective), None),
                     [cause], [effect])
                 possible_causations.append(possible)
+                '''
+                # Debugging code to search for specific matches
+                if [t.lemma for t in connective] == ['help']:
+                    print "Match:", possible
+                    print "Sentence:", sentence.original_text.encode('utf8')
+                    print "Pattern:", pattern
+                    print
+                '''
 
             return possible_causations
 
@@ -775,6 +784,21 @@ class TRegexConnectiveStage(Stage):
 
     # No need for _label_instance, as we take care of that in _test_documents.
 
+    def __deduplicate(self, sentence_pcs):
+        pc_tuples_to_pcs = {}
+        for pc in sentence_pcs:
+            pc_tuple = get_causation_tuple(pc.connective, pc.cause[0],
+                                           pc.effect[0])
+            previous_pc = pc_tuples_to_pcs.get(pc_tuple, None)
+            if previous_pc is None:
+                pc_tuples_to_pcs[pc_tuple] = pc
+            else:
+                # print "Duplicate found:", pc
+                previous_pc.matching_patterns.append(pc.matching_patterns[0])
+        sentence_pcs = pc_tuples_to_pcs.values()
+        sentence_pcs.sort(key=lambda pc: pc.connective[0].index)
+        return sentence_pcs
+
     def _test_documents(self, documents, sentences_by_doc, writer):
         all_sentences = list(itertools.chain(*sentences_by_doc))
         all_possible_causations = self.model.test(all_sentences)
@@ -782,7 +806,8 @@ class TRegexConnectiveStage(Stage):
         causations_iter = iter(all_possible_causations)
         for document, doc_sentences in zip(documents, sentences_by_doc):
             for sentence in doc_sentences:
-                sentence.possible_causations = causations_iter.next()
+                sentence.possible_causations = self.__deduplicate(
+                    causations_iter.next())
                 if writer:
                     writer.instance_complete(document, sentence)
         try:

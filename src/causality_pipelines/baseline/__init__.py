@@ -2,7 +2,7 @@ from collections import defaultdict
 from gflags import DEFINE_integer, FLAGS, DuplicateFlagError
 from itertools import product
 
-from causality_pipelines import IAAEvaluator, PossibleCausation
+from causality_pipelines import IAAEvaluator, PossibleCausation, get_causation_tuple
 from data import StanfordParsedSentence
 import logging
 from pipeline import Stage
@@ -73,11 +73,6 @@ class BaselineModel(Model):
         deps = sentence.extract_dependency_path(closest_connective_token, token,
                                                 False)
         return str(deps)
-    
-    @staticmethod
-    def _get_causation_tuple(connective_tokens, cause, effect):
-        return (tuple(t.index for t in connective_tokens),
-                cause.index, effect.index)
 
     def _operate_on_sentences(self, sentences, callback):
         '''
@@ -131,8 +126,8 @@ class BaselineModel(Model):
         # checking of whether a given possible causation is in the gold
         # standard. List of lists of token indices (1 list per sentence).
         true_causation_tuples = [ 
-            [self._get_causation_tuple(i.connective, sentence.get_head(i.cause),
-                                       sentence.get_head(i.effect))
+            [get_causation_tuple(i.connective, sentence.get_head(i.cause),
+                                 sentence.get_head(i.effect))
              # Filter to pairwise.
              for i in sentence.causation_instances if i.cause and i.effect]
             for sentence in sentences]
@@ -141,9 +136,8 @@ class BaselineModel(Model):
         def training_callback(
             sentence_num, connective_lemmas, connective_tokens, possible_cause,
             possible_effect, path_1, path_2):
-            causation_tuple = self._get_causation_tuple(
-                connective_tokens, possible_cause,
-                possible_effect)
+            causation_tuple = get_causation_tuple(
+                connective_tokens, possible_cause, possible_effect)
             is_causal = causation_tuple in true_causation_tuples[sentence_num]
             # Increment appropriate counter by 1
             key = (connective_lemmas, path_1, path_2)

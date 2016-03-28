@@ -144,7 +144,7 @@ class StanfordNERStage(Stage):
     def train(self, documents):
         pass
 
-    def test(self, documents):
+    def _test_documents(self, documents, instances_by_doc, writer):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
@@ -159,3 +159,10 @@ class StanfordNERStage(Stage):
             for token, token_result in zip(sentence.tokens[1:], sentence_result):
                 tag = token_result[1]
                 token.ner_tag = self.NER_TYPES.index(tag.title())
+            if writer:
+                writer.instance_complete(sentence)
+
+
+def get_causation_tuple(connective_tokens, cause_head, effect_head):
+    return (tuple(t.index for t in connective_tokens),
+            cause_head.index, effect_head.index)
