@@ -421,6 +421,10 @@ class TRegexConnectiveModel(Model):
                     pattern = ('%s : (__=%s == =%s)'
                                % (pattern, arg_name, node_names[arg.index]))
 
+        # Prevent patterns from matching if cause and effect are identical.
+        # These are always spurious matches.
+        pattern += " : (=effect !== =cause)"
+
         return pattern, node_names_to_print
 
     @staticmethod

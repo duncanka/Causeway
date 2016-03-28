@@ -37,7 +37,7 @@ class RegexConnectiveModel(Model):
             tokens = sentence.tokens[1:] # skip ROOT
             if FLAGS.regex_include_pos:
                 lemmas_to_match = ['%s/%s' % (token.lemma, token.get_gen_pos())
-                                 for token in tokens]
+                                   for token in tokens]
             else:
                 lemmas_to_match = [token.lemma for token in tokens]
             # Remember bounds of tokens so that we can recover the correct
