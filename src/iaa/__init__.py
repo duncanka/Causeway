@@ -55,10 +55,13 @@ def make_annotation_comparator(allow_partial):
     min_partial_overlap = [1.0, FLAGS.iaa_min_partial_overlap][allow_partial]
 
     def match_annotations(token_list_1, token_list_2):
+        # Just in case we accidentally added tokens to an annotation in the
+        # wrong order, sort by token position.
+        sort_key = lambda token: token.index
         offsets_1 = [(token.start_offset, token.end_offset)
-                     for token in token_list_1]
+                     for token in sorted(token_list_1, key=sort_key)]
         offsets_2 = [(token.start_offset, token.end_offset)
-                     for token in token_list_2]
+                     for token in sorted(token_list_2, key=sort_key)]
         if offsets_1 == offsets_2:
             return True
 
