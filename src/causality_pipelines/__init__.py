@@ -8,6 +8,7 @@ from data import StanfordParsedSentence, CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented, Enum
+import operator
 
 try:
     DEFINE_bool("iaa_calculate_partial", False,
@@ -26,6 +27,8 @@ try:
     DEFINE_bool('args_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation of'
                 ' argument labelling stage')
+    DEFINE_bool('log_connective_stats', False,
+                "When evaluating a stage, include per-connective stats")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -54,7 +57,8 @@ class IAAEvaluator(Evaluator):
     # TODO: refactor arguments
     def __init__(self, compare_degrees, compare_types, log_test_instances,
                  compare_args, pairwise_only,
-                 causations_property_name='causation_instances'):
+                 causations_property_name='causation_instances',
+                 log_connective_stats=None):
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics = CausalityMetrics(
                 [], [], True, log_test_instances, None, compare_degrees,
@@ -70,9 +74,15 @@ class IAAEvaluator(Evaluator):
         self.log_test_instances = log_test_instances
         self.compare_args = compare_args
         self.pairwise_only = pairwise_only
+        if log_connective_stats is None:
+            self.log_connective_stats = FLAGS.log_connective_stats
+        else:
+            self.log_connective_stats = log_connective_stats
 
     def evaluate(self, document, original_document, sentences,
                  original_sentences):
+        save_agreements = (self.log_test_instances or FLAGS.log_connective_stats
+                           or self.log_connective_stats)
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
                 original_document.sentences, document.sentences, True,
@@ -80,7 +90,7 @@ class IAAEvaluator(Evaluator):
                 compare_args=self.compare_args,
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
-                save_agreements=self.log_test_instances,
+                save_agreements=save_agreements,
                 causations_property_name=self.causations_property_name)
         without_partial = CausalityMetrics(
             original_document.sentences, document.sentences, False,
@@ -88,7 +98,7 @@ class IAAEvaluator(Evaluator):
             compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,
-            save_agreements=self.log_test_instances,
+            save_agreements=save_agreements,
             causations_property_name=self.causations_property_name)
 
         if self.log_test_instances:
@@ -102,6 +112,14 @@ class IAAEvaluator(Evaluator):
                 with_partial.pp(log_stats=False, log_confusion=False,
                                 log_differences=True, log_agreements=True,
                                 indent=1)
+                print
+
+        if self.log_connective_stats:
+            print "Connective stats:"
+            metrics_by_connective = without_partial.metrics_by_connective()
+            for connective, metrics in metrics_by_connective.iteritems():
+                print ','.join([str(x) for x in connective, metrics.tp,
+                                metrics.fp, metrics.fn])
 
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics += with_partial

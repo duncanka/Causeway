@@ -115,7 +115,7 @@ if __name__ == '__main__':
         candidate_classifier = svm.SVC()
     elif FLAGS.classifier_model == 'forest':
         candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
-    
+
     candidate_classifier = ClassBalancingClassifierWrapper(
         candidate_classifier, FLAGS.rebalance_ratio)
 
@@ -128,6 +128,15 @@ if __name__ == '__main__':
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()
+        if FLAGS.log_connective_stats:
+            print
+            for stage, eval_metrics in zip(causality_pipeline.stages[1:],
+                                           eval_results[1:]):
+                print "Connective stats for stage %s:" % stage.name
+                metrics_by_connective = eval_metrics.metrics_by_connective()
+                for connective, metrics in metrics_by_connective.iteritems():
+                    print ','.join([str(x) for x in connective, metrics.tp,
+                                    metrics.fp, metrics.fn])
         causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:

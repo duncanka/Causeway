@@ -1,6 +1,7 @@
 from __future__ import print_function
 from collections import defaultdict
 import colorama
+import itertools
 colorama.init()
 colorama.deinit()
 from copy import copy
@@ -16,8 +17,7 @@ from textwrap import wrap
 from data import CausationInstance, StanfordParsedSentence, Token
 from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
-from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, \
-    safe_divisor
+from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, safe_divisor
 
 np.seterr(divide='ignore') # Ignore nans in division
 
@@ -560,6 +560,26 @@ class CausalityMetrics(object):
         if log_differences:
             colorama.deinit()
 
+    def metrics_by_connective(self):
+        def stringify_connective(instance):
+            sorted_tokens = sorted(instance.connective,
+                                   key=lambda token: token.index)
+            return ' '.join(t.lemma for t in sorted_tokens)
+
+        metrics = defaultdict(ClassificationMetrics)
+
+        for _, instance in self.agreeing_instances:
+            metrics[stringify_connective(instance)].tp += 1
+        for _, instance in self.gold_only_instances:
+            metrics[stringify_connective(instance)].fn += 1
+        for _, instance in self.predicted_only_instances:
+            metrics[stringify_connective(instance)].fp += 1
+
+        for connective_metrics in metrics.values():
+            connective_metrics._finalize_counts()
+
+        return metrics
+
     def __repr__(self):
         '''
         This is a dumb hack, but it's easier than trying to rewrite all of pp to
@@ -578,12 +598,18 @@ class CausalityMetrics(object):
         '''
         assert metrics_list, "Can't aggregate empty list of causality metrics!"
         aggregated = object.__new__(CausalityMetrics)
-        # For an aggregated, it won't make sense to list all the individual
-        # sets of instances/properties processed in the individual computations.
-        for attr_name in [
-            'ids_considered', 'gold_only_instances',
-            'predicted_only_instances', 'property_differences',
-            'argument_differences', 'agreeing_instances']:
+
+        # Save lists of instances needed for metrics_by_connective.
+        for attr_name in ['gold_only_instances', 'predicted_only_instances',
+                          'agreeing_instances']:
+            all_relevant_instances = itertools.chain.from_iterable(
+                getattr(m, attr_name) for m in metrics_list)
+            setattr(aggregated, attr_name, list(all_relevant_instances))
+
+        # For other sets of instances/properties processed in the individual
+        # computations, it won't make sense to include them in aggregated.
+        for attr_name in ['ids_considered', 'property_differences',
+                          'argument_differences']:
             setattr(aggregated, attr_name, [])
         aggregated.save_differences = None
 
