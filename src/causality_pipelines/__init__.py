@@ -81,24 +81,24 @@ class IAAEvaluator(Evaluator):
 
     def evaluate(self, document, original_document, sentences,
                  original_sentences):
-        save_agreements = (self.log_test_instances or FLAGS.log_connective_stats
+        save_instances = (self.log_test_instances or FLAGS.log_connective_stats
                            or self.log_connective_stats)
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
                 original_document.sentences, document.sentences, True,
-                self.log_test_instances, compare_types=self.compare_types,
+                save_instances, compare_types=self.compare_types,
                 compare_args=self.compare_args,
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
-                save_agreements=save_agreements,
+                save_agreements=save_instances,
                 causations_property_name=self.causations_property_name)
         without_partial = CausalityMetrics(
             original_document.sentences, document.sentences, False,
-            self.log_test_instances, compare_types=self.compare_types,
+            save_instances, compare_types=self.compare_types,
             compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,
-            save_agreements=save_agreements,
+            save_agreements=save_instances,
             causations_property_name=self.causations_property_name)
 
         if self.log_test_instances:
