@@ -196,6 +196,6 @@ class RegexConnectiveStage(Stage):
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
-                            False, True, 'possible_causations')
+                            False, True, 'possible_causations', False)
 
     produced_attributes = ['possible_causations']
