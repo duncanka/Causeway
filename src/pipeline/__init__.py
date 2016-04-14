@@ -41,6 +41,10 @@ try:
                    " documents. Only valid if documents are SentencesDocuments."
                    " If True, folds are split by creating new pseudo-documents"
                    " with randomly partitioned instances.")
+    DEFINE_integer('test_doc_batch_size', 1,
+                   "If documents are being read from test_paths, defines how"
+                   " many test documents are read and tested at once. -1 means"
+                   " read all documents at once.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -209,7 +213,7 @@ class Pipeline(object):
                                                instances_by_document):
                     stage._consume_attributes(document, instances)
 
-    def evaluate(self, documents):
+    def evaluate(self, documents=None):
         '''
         Evaluates the pipeline on a collection of documents (by running the
         pipeline and then letting the stages' evaluators compare the results to
@@ -268,8 +272,8 @@ class Pipeline(object):
 
     def __test_documents_from_reader(self):
         if (not self.writer):
-            logging.warn("No writer provided; pipeline results not written"
-                         " anywhere")
+            logging.warn("No writer provided; pipeline results not being"
+                         " written anywhere")
 
         paths_written = set()
         for input_path, output_path in zip(FLAGS.test_paths,
@@ -288,10 +292,22 @@ class Pipeline(object):
                     paths_written.add(output_file_path)
                     self.writer.open(output_file_path, 'w')
 
-            for document in self.reader:
-                self.__test_documents([document])
+            if FLAGS.test_doc_batch_size > 0:
+                if FLAGS.test_doc_batch_size != 1:
+                    logging.info("Processing documents in batches of %d",
+                                 FLAGS.test_doc_batch_size)
+                doc_groups = itertools.izip_longest(
+                    *([iter(self.reader)] * FLAGS.test_doc_batch_size))
+            else:
+                logging.info("Processing all documents in one batch")
+                doc_groups = [list(self.reader)]
+            for documents in doc_groups:
+                if documents[-1] is None: # padded by izip_longest
+                    documents = [d for d in documents if d is not None]
+                self.__test_documents(documents)
                 if self.writer:
-                    self.writer.write(document)
+                    for document in documents:
+                        self.writer.write(document)
 
         if self.writer:
             self.writer.close()
