@@ -1,4 +1,4 @@
-from gflags import DEFINE_string, DEFINE_bool, FLAGS, DuplicateFlagError, DEFINE_integer, DEFINE_enum
+from gflags import DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer, DEFINE_enum
 import itertools
 import threading
 import logging
@@ -144,9 +144,9 @@ class TRegexConnectiveModel(Model):
                 'normalize_acl_no_agent_1',
                 'normalize_acl_no_agent_2',
                 'normalize_acl_no_agent_3']
+            module_dir = path.dirname(path.realpath(__file__))
             tsurgeon_script_names = [
-                path.join('causality_pipelines', 'tregex_based', 'tsurgeon_dep',
-                          script_name) + '.ts'
+                path.join(module_dir, 'tsurgeon_dep', script_name) + '.ts'
                 for script_name in tsurgeon_script_names]
 
             with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
