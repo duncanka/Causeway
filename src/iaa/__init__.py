@@ -17,7 +17,7 @@ from textwrap import wrap
 from data import CausationInstance, StanfordParsedSentence, Token
 from util import Enum, print_indented, truncated_string, get_terminal_size
 from util.diff import SequenceDiff
-from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, safe_divisor
+from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, safe_divide
 
 np.seterr(divide='ignore') # Ignore nans in division
 
@@ -373,7 +373,7 @@ class CausalityMetrics(object):
                 match_jaccard = 1.0
             jaccard_avg_numerator += match_jaccard
 
-        return jaccard_avg_numerator / safe_divisor(float(len(matches)))
+        return safe_divide(jaccard_avg_numerator, len(matches))
 
     def _compute_agreement_matrix(self, matches, labels_enum, property_name,
                                   gold_sentences):

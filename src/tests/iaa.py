@@ -127,10 +127,10 @@ class CausalityMetricsTest(unittest.TestCase):
                                    self.modified_sentences, False)
         aggregated = CausalityMetrics.aggregate([metrics] * 3)
         self._test_metrics(
-            metrics, aggregated.connective_metrics,
-            aggregated.cause_span_metrics, aggregated.effect_span_metrics,
-            aggregated.cause_head_metrics, aggregated.effect_head_metrics,
-            aggregated.cause_jaccard, aggregated.effect_jaccard)
+            aggregated, metrics.connective_metrics,
+            metrics.cause_span_metrics, metrics.effect_span_metrics,
+            metrics.cause_head_metrics, metrics.effect_head_metrics,
+            metrics.cause_jaccard, metrics.effect_jaccard)
 
         self_metrics = CausalityMetrics(self.sentences, self.sentences, False)
         aggregated = CausalityMetrics.aggregate([metrics, self_metrics])

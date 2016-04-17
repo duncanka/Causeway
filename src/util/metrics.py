@@ -13,10 +13,17 @@ try:
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
-safe_divisor = lambda divisor: divisor if divisor != 0 else np.nan
+
+def safe_divide(dividend, divisor):
+    if divisor != 0:
+        return float(dividend) / divisor
+    elif dividend == 0:
+        return 0.0
+    else:
+        return np.nan
 
 def f1(precision, recall):
-    return 2 * precision * recall / safe_divisor(precision + recall)
+    return safe_divide(2 * precision * recall, precision + recall)
 
 class ClassificationMetrics(object):
     def __init__(self, tp=0, fp=0, fn=0, tn=None, finalize=True):
@@ -49,15 +56,15 @@ class ClassificationMetrics(object):
 
     def _finalize_counts(self):
         tp = float(self._tp)
-        self._precision = tp / safe_divisor(tp + self._fp)
-        self._recall = tp / safe_divisor(tp + self._fn)
+        self._precision = safe_divide(tp, tp + self._fp)
+        self._recall = safe_divide(tp, tp + self._fn)
         self._f1 = f1(self._precision, self._recall)
         if self._tn is not None:
-            self._accuracy = (tp + self._tn) / safe_divisor(
-                tp + self._tn + self._fp + self._fn)
+            self._accuracy = safe_divide(tp + self._tn,
+                                         tp + self._tn + self._fp + self._fn)
         else:
-            self._accuracy = float('nan')
-            self._tn = self._accuracy
+            self._accuracy = np.nan
+            self._tn = np.nan
         self._finalized = True
 
     def __repr__(self):
@@ -107,10 +114,11 @@ class ClassificationMetrics(object):
             underlying_property_name = '_' + property_name
             values = [getattr(m, underlying_property_name)
                       for m in metrics_list]
-            if ignore_nans:
+            if ignore_nans and property_name != 'tn': # TN nans are meaningful.
                 values = [v for v in values if not np.isnan(v)]
             setattr(avg, underlying_property_name,
-                    sum(values) / safe_divisor(float(len(values))))
+                    safe_divide(sum(values), len(values)))
+
         avg._finalized = True
         return avg
 
@@ -258,7 +266,7 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
         return self._correct
 
     def pct_agreement(self):
-        return self._correct / safe_divisor(float(self._total))
+        return safe_divide(self._correct, self._total)
 
     def kappa(self):
         if not self._total:
@@ -266,12 +274,11 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
 
         row_totals = np.sum(self._confusion, axis=1)
         col_totals = np.sum(self._confusion, axis=0)
-        total_float = safe_divisor(float(self._total))
-        agree_by_chance = sum([(row_total * col_total) / total_float
+        agree_by_chance = sum([safe_divide(row_total * col_total, self._total)
                                for row_total, col_total
                                in zip(row_totals, col_totals)])
-        kappa = (self._correct - agree_by_chance) / safe_divisor(
-            self._total - agree_by_chance)
+        kappa = safe_divide(self._correct - agree_by_chance,
+                            self._total - agree_by_chance)
         return kappa
 
     def _get_f1_stats_arrays(self):
@@ -284,8 +291,8 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
 
     def f1_micro(self):
         _, fp, fn = self._get_f1_stats_arrays()
-        p_micro = self._correct / float(safe_divisor(self._correct + fp.sum()))
-        r_micro = self._correct / float(safe_divisor(self._correct + fn.sum()))
+        p_micro = safe_divide(self._correct, self._correct + fp.sum())
+        r_micro = safe_divide(self._correct, self._correct + fn.sum())
         return f1(p_micro, r_micro)
 
     def f1_macro(self):
@@ -301,7 +308,7 @@ class AccuracyMetrics(object):
     def __init__(self, correct, incorrect):
         self.correct = correct
         self.incorrect = incorrect
-        self.accuracy = correct / safe_divisor(float(correct + incorrect))
+        self.accuracy = safe_divide(correct, correct + incorrect)
 
     def pretty_format(self):
         if FLAGS.metrics_log_raw_counts:

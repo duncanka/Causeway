@@ -19,14 +19,19 @@ class ClassificationMetricsTest(unittest.TestCase):
         self.assertEqual(self.metrics.recall, 0.75)
         self.assertAlmostEqual(self.metrics.f1, 2 / 3.0)
 
-    def testUndefinedMetrics(self):
+    def testMetricsWithZeroes(self):
         self.metrics.tp = 0
+        self.assertEqual(0, self.metrics.recall)
+        self.assertEqual(0, self.metrics.precision)
+
         self.metrics.fn = 0
-        self.assertTrue(isnan(self.metrics.recall))
+        self.assertEqual(0, self.metrics.recall)
 
         self.metrics.fn = 5
         self.metrics.fp = 0
-        self.assertTrue(isnan(self.metrics.precision))
+        self.assertEqual(0, self.metrics.precision)
+        self.assertEqual(0, self.metrics.f1)
+
 
 class ConfusionMatrixTest(unittest.TestCase):
     def setUp(self):
