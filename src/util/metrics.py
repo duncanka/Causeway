@@ -107,6 +107,10 @@ class ClassificationMetrics(object):
         To get around this, we manually modify the underlying attributes, then
         reassure the object that it's been finalized.
         '''
+        for metrics in metrics_list:
+            if not metrics._finalized:
+                metrics._finalize_counts()
+
         avg = ClassificationMetrics(0, 0, 0, None, False)
         property_names = (ClassificationMetrics.MUTABLE_PROPERTY_NAMES +
                           ClassificationMetrics.DERIVED_PROPERTY_NAMES)
