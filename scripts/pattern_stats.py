@@ -36,5 +36,25 @@ if __name__ == '__main__':
                         CausalityStandoffReader()))
 
     FLAGS.test_paths = FLAGS.train_paths
+    FLAGS.log_connective_stats = True
+
     pipeline.train()
     eval_results = pipeline.evaluate()[0]
+
+    by_connective = eval_results.metrics_by_connective()
+    to_remap = {'for too to': 'too for to', 'for too': 'too for',
+                'reason be': 'reason', 'that now': 'now that',
+                'to for': 'for to', 'give': 'given', 'result of': 'result'}
+    for connective, metrics in by_connective.items():
+        if connective.startswith('be '):
+            by_connective[connective[3:]] += metrics
+            del by_connective[connective]
+            print "Replaced", connective
+        elif connective in to_remap:
+            by_connective[to_remap[connective]] += metrics
+            del by_connective[connective]
+            print 'Replaced', connective
+
+    for connective, metrics in sorted(by_connective.iteritems(),
+                                      key=lambda pair: pair[0]):
+        print ','.join([str(x) for x in connective, metrics.precision])
