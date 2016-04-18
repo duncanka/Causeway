@@ -114,10 +114,14 @@ class ClassificationMetrics(object):
             underlying_property_name = '_' + property_name
             values = [getattr(m, underlying_property_name)
                       for m in metrics_list]
-            if ignore_nans and property_name != 'tn': # TN nans are meaningful.
+            if ignore_nans:
                 values = [v for v in values if not np.isnan(v)]
-            setattr(avg, underlying_property_name,
-                    safe_divide(sum(values), len(values)))
+            # TN nans are meaningful, so if that's all we got, we keep them.
+            if property_name in ['tn', 'accuracy'] and not values:
+                attr_val = np.nan
+            else:
+                attr_val = safe_divide(sum(values), len(values))
+            setattr(avg, underlying_property_name, attr_val)
 
         avg._finalized = True
         return avg
