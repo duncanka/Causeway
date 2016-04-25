@@ -778,7 +778,6 @@ class TRegexConnectiveStage(Stage):
     produced_attributes = ['possible_causations']
 
     def _make_evaluator(self):
-        # TODO: provide both pairwise and non-pairwise stats
         return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
                             True, True, 'possible_causations', False)
 

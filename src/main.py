@@ -77,6 +77,22 @@ def get_stages(candidate_classifier):
         stages = [BaselineStage('Baseline')]
     return stages
 
+
+def remap_by_connective(by_connective):
+    to_remap = {'for too to':'too for to', 'for too':'too for', 'reason be':'reason', 'that now':'now that',
+        'to for':'for to', 'give':'given',
+        'result of':'result'}
+    for connective, metrics in by_connective.items():
+        if connective.startswith('be '):
+            by_connective[connective[3:]] += metrics
+            del by_connective[connective]
+            # print 'Replaced', connective
+        elif connective in to_remap:
+            by_connective[to_remap[connective]] += metrics
+            del by_connective[connective]
+            # print "Replaced", connective
+
+
 # def main(argv):
 if __name__ == '__main__':
     argv = sys.argv
@@ -132,11 +148,23 @@ if __name__ == '__main__':
             print
             for stage, eval_metrics in zip(causality_pipeline.stages[1:],
                                            eval_results[1:]):
-                print "Connective stats for stage %s:" % stage.name
-                metrics_by_connective = eval_metrics.metrics_by_connective()
-                for connective, metrics in metrics_by_connective.iteritems():
-                    print ','.join([str(x) for x in connective, metrics.tp,
-                                    metrics.fp, metrics.fn])
+                print "Per-connective stats for stage %s:" % stage.name
+                by_connective = eval_metrics.metrics_by_connective()
+                remap_by_connective(by_connective)
+                
+                for connective, metrics in by_connective.iteritems():
+                    csv_metrics = [str(x) for x in connective,
+                                   metrics.connective_metrics.tp,
+                                   metrics.connective_metrics.fp,
+                                   metrics.connective_metrics.fn,
+                                   metrics.cause_span_metrics.accuracy,
+                                   metrics.cause_head_metrics.accuracy,
+                                   metrics.cause_jaccard,
+                                   metrics.effect_span_metrics.accuracy,
+                                   metrics.effect_head_metrics.accuracy,
+                                   metrics.effect_jaccard]
+                    print ','.join(csv_metrics)
+                print
         causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:

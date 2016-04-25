@@ -28,7 +28,7 @@ try:
                 'Whether to print differing IAA results during evaluation of'
                 ' argument labelling stage')
     DEFINE_bool('log_connective_stats', False,
-                "When evaluating a stage, include per-connective stats")
+                "When logging a stage's results, include per-connective stats")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -55,18 +55,24 @@ class PossibleCausation(object):
 
 class IAAEvaluator(Evaluator):
     # TODO: refactor arguments
+    # TODO: provide both pairwise and non-pairwise stats
     def __init__(self, compare_degrees, compare_types, log_test_instances,
                  compare_args, pairwise_only,
                  causations_property_name='causation_instances',
                  log_connective_stats=None):
+        if log_connective_stats is None:
+            log_connective_stats = FLAGS.log_connective_stats
+        self.log_connective_stats = log_connective_stats
+        self.save_differences = bool(log_test_instances or log_connective_stats)
+
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics = CausalityMetrics(
-                [], [], True, log_test_instances, None, compare_degrees,
+                [], [], True, self.save_differences, None, compare_degrees,
                 compare_types, True, True, log_test_instances)
         else:
             self._with_partial_metrics = None
         self._without_partial_metrics = CausalityMetrics(
-            [], [], False, log_test_instances, None, compare_degrees,
+            [], [], False, self.save_differences, None, compare_degrees,
             compare_types, True, True, log_test_instances)
         self.causations_property_name = causations_property_name
         self.compare_degrees = compare_degrees
@@ -74,31 +80,25 @@ class IAAEvaluator(Evaluator):
         self.log_test_instances = log_test_instances
         self.compare_args = compare_args
         self.pairwise_only = pairwise_only
-        if log_connective_stats is None:
-            self.log_connective_stats = FLAGS.log_connective_stats
-        else:
-            self.log_connective_stats = log_connective_stats
 
     def evaluate(self, document, original_document, sentences,
                  original_sentences):
-        save_instances = (self.log_test_instances or FLAGS.log_connective_stats
-                           or self.log_connective_stats)
         if FLAGS.iaa_calculate_partial:
             with_partial = CausalityMetrics(
                 original_document.sentences, document.sentences, True,
-                save_instances, compare_types=self.compare_types,
+                self.save_differences, compare_types=self.compare_types,
                 compare_args=self.compare_args,
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
-                save_agreements=save_instances,
+                save_agreements=self.save_differences,
                 causations_property_name=self.causations_property_name)
         without_partial = CausalityMetrics(
             original_document.sentences, document.sentences, False,
-            save_instances, compare_types=self.compare_types,
+            self.save_differences, compare_types=self.compare_types,
             compare_args=self.compare_args,
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,
-            save_agreements=save_instances,
+            save_agreements=self.save_differences,
             causations_property_name=self.causations_property_name)
 
         if self.log_test_instances:
@@ -114,12 +114,12 @@ class IAAEvaluator(Evaluator):
                                 indent=1)
                 print
 
-        if self.log_connective_stats:
-            print "Connective stats:"
-            metrics_by_connective = without_partial.metrics_by_connective()
-            for connective, metrics in metrics_by_connective.iteritems():
-                print ','.join([str(x) for x in connective, metrics.tp,
-                                metrics.fp, metrics.fn])
+            if self.log_connective_stats:
+                print "Connective stats:"
+                metrics_by_connective = without_partial.metrics_by_connective()
+                for connective, metrics in metrics_by_connective.iteritems():
+                    print ','.join([str(x) for x in connective, metrics.tp,
+                                    metrics.fp, metrics.fn])
 
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics += with_partial

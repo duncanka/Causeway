@@ -122,8 +122,12 @@ class CausalityMetrics(object):
     _ARG_ATTR_NAMES = ['cause_span_metrics', 'effect_span_metrics',
                        'cause_head_metrics', 'effect_head_metrics',
                        'cause_jaccard', 'effect_jaccard']
+    _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
+                          'agreeing_instances', 'property_differences',
+                          'argument_differences']
 
     # TODO: Refactor order of parameters
+    # TODO: provide both pairwise and non-pairwise stats
     def __init__(
         self, gold, predicted, allow_partial, save_differences=False,
         ids_considered=None, compare_degrees=True, compare_types=True,
@@ -186,12 +190,10 @@ class CausalityMetrics(object):
                              " comparison criteria")
 
         sum_metrics = copy(self)
-        # Add recorded instances/differences
-        sum_metrics.gold_only_instances.extend(other.gold_only_instances)
-        sum_metrics.predicted_only_instances.extend(
-            other.predicted_only_instances)
-        sum_metrics.property_differences.extend(other.property_differences)
-        sum_metrics.agreeing_instances.extend(other.agreeing_instances)
+        # Add recorded instances/differences.
+        for attr_name in self._SAVED_ATTR_NAMES:
+            getattr(sum_metrics, attr_name).extend(getattr(other, attr_name))
+
         # Add together submetrics, if they exist
         sum_metrics.connective_metrics += other.connective_metrics
         for attr_name in (['degree_matrix', 'causation_type_matrix']
@@ -336,7 +338,7 @@ class CausalityMetrics(object):
                     i.sentence.source_file_path)[-1]]
                  .index(i.sentence) + 1, i)
                 for i in predicted_only_instances]
-            
+
         if self.save_agreements:
             self.agreeing_instances = [
                 (gold_by_file[os.path.split(i1.sentence.source_file_path)[-1]]
@@ -434,7 +436,7 @@ class CausalityMetrics(object):
     def _filter_punct_tokens(tokens):
         return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
 
-    def _match_arguments(self, matches, gold):
+    def _match_arguments(self, matches, gold=None): 
         correct_causes = 0
         correct_effects = 0
 
@@ -442,7 +444,11 @@ class CausalityMetrics(object):
         correct_effect_heads = 0
 
         for instance_1, instance_2 in matches:
-            sentence_num = gold.index(instance_1.sentence) + 1
+            if gold is not None:
+                sentence_num = gold.index(instance_1.sentence) + 1
+            else:
+                sentence_num = -1 # No valid sentence number
+
             if FLAGS.iaa_check_punct:
                 cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
                 effect_1, effect_2 = [i.effect for i
@@ -468,6 +474,7 @@ class CausalityMetrics(object):
             if (self.save_differences and
                 not (causes_match and effects_match and
                      cause_heads_match and effect_heads_match)):
+                print("Recording arg difference")
                 self.argument_differences.append((instance_1, instance_2,
                                                   sentence_num))
 
@@ -566,17 +573,36 @@ class CausalityMetrics(object):
                                    key=lambda token: token.index)
             return ' '.join(t.lemma for t in sorted_tokens)
 
-        metrics = defaultdict(ClassificationMetrics)
+        metrics = defaultdict(lambda: CausalityMetrics([], [], False))
 
+        # Compute connective accuracy metrics by connective.
         for _, instance in self.agreeing_instances:
-            metrics[stringify_connective(instance)].tp += 1
+            metrics[stringify_connective(instance)].connective_metrics.tp += 1
         for _, instance in self.gold_only_instances:
-            metrics[stringify_connective(instance)].fn += 1
+            metrics[stringify_connective(instance)].connective_metrics.fn += 1
         for _, instance in self.predicted_only_instances:
-            metrics[stringify_connective(instance)].fp += 1
+            metrics[stringify_connective(instance)].connective_metrics.fp += 1
 
-        for connective_metrics in metrics.values():
-            connective_metrics._finalize_counts()
+        for causality_metrics in metrics.values():
+            causality_metrics.connective_metrics._finalize_counts()
+
+        # Compute arg match metrics by connective.
+        arg_diffs_by_connective = defaultdict(list)
+        for instance_1, instance_2, _ in self.argument_differences:
+            connective = stringify_connective(instance_1)
+            arg_diffs_by_connective[connective].append((instance_1, instance_2))
+
+        for connective, conn_matches in arg_diffs_by_connective.iteritems():
+            conn_metrics = metrics[connective]
+            (conn_metrics.cause_span_metrics, conn_metrics.effect_span_metrics,
+             conn_metrics.cause_head_metrics,
+             conn_metrics.effect_head_metrics) = (
+                conn_metrics._match_arguments(conn_matches))
+
+            conn_metrics.cause_jaccard = self._get_jaccard(conn_matches,
+                                                           'cause')
+            conn_metrics.effect_jaccard = self._get_jaccard(conn_matches,
+                                                            'effect')
 
         return metrics
 
@@ -599,19 +625,17 @@ class CausalityMetrics(object):
         assert metrics_list, "Can't aggregate empty list of causality metrics!"
         aggregated = object.__new__(CausalityMetrics)
 
+        aggregated.ids_considered = None
+        aggregated.save_differences = any(m.save_differences
+                                          for m in metrics_list)
         # Save lists of instances needed for metrics_by_connective.
-        for attr_name in ['gold_only_instances', 'predicted_only_instances',
-                          'agreeing_instances']:
-            all_relevant_instances = itertools.chain.from_iterable(
-                getattr(m, attr_name) for m in metrics_list)
-            setattr(aggregated, attr_name, list(all_relevant_instances))
-
-        # For other sets of instances/properties processed in the individual
-        # computations, it won't make sense to include them in aggregated.
-        for attr_name in ['ids_considered', 'property_differences',
-                          'argument_differences']:
-            setattr(aggregated, attr_name, [])
-        aggregated.save_differences = None
+        for attr_name in CausalityMetrics._SAVED_ATTR_NAMES:
+            if aggregated.save_differences:
+                all_relevant_instances = itertools.chain.from_iterable(
+                    getattr(m, attr_name) for m in metrics_list)
+                setattr(aggregated, attr_name, list(all_relevant_instances))
+            else:
+                setattr(aggregated, attr_name, [])
 
         aggregated.connective_metrics = ClassificationMetrics.average(
             [m.connective_metrics for m in metrics_list])

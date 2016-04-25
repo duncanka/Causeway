@@ -133,6 +133,5 @@ class ArgSpanStage(Stage):
             pc.cause, pc.effect = args
 
     def _make_evaluator(self):
-        # TODO: provide both pairwise and non-pairwise stats
         return IAAEvaluator(False, False, FLAGS.args_print_test_instances,
                             True, True, 'possible_causations')
