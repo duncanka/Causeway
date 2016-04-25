@@ -36,12 +36,12 @@ class NameDictionary(object):
 
 
 # Add some Colorama functionality.
-class AnsiFormats:
+class AnsiFormats(object):
     BOLD = 1
     UNDERLINE = 4
     BLINK = 5
     RESET_ALL = 0
-colorama.Format = colorama.ansi.AnsiCodes(AnsiFormats)
+colorama.Format = AnsiFormats
 
 def recursively_list_files(path):
     walker = os.walk(path)
