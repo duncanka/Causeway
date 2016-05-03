@@ -568,11 +568,6 @@ class CausalityMetrics(object):
             colorama.deinit()
 
     def metrics_by_connective(self):
-        def stringify_connective(instance):
-            sorted_tokens = sorted(instance.connective,
-                                   key=lambda token: token.index)
-            return ' '.join(t.lemma for t in sorted_tokens)
-
         metrics = defaultdict(lambda: CausalityMetrics([], [], False))
 
         # Compute connective accuracy metrics by connective.
@@ -802,3 +797,9 @@ class CausalityMetrics(object):
                 ' (', filename, ':', sentence_num, ': "',
                 _wrapped_sentence_highlighting_instance(instance_1), '")',
                 sep='', file=file)
+
+
+def stringify_connective(instance):
+    sorted_tokens = sorted(instance.connective,
+                           key=lambda token: token.index)
+    return ' '.join(t.lemma for t in sorted_tokens)

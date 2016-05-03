@@ -417,6 +417,5 @@ class CausationPatternFilterStage(Stage):
         sentence.causation_instances = predicted_causations
 
     def _make_evaluator(self):
-        # TODO: provide both pairwise and non-pairwise stats
         return IAAEvaluator(False, False,
                             FLAGS.causality_cc_print_test_instances, True, True)

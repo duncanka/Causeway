@@ -20,6 +20,7 @@ from pipeline import Pipeline
 from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
 import subprocess
+from causality_pipelines.baseline.most_freq_filter import MostFreqSenseFilterStage
 
 FLAGS = gflags.FLAGS
 
@@ -40,7 +41,7 @@ try:
     gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
     gflags.DEFINE_enum('pipeline_type', 'tregex',
                        ['tregex', 'regex', 'baseline', 'baseline+tregex',
-                        'baseline+regex'],
+                        'baseline+regex', 'tregex_mostfreq', 'regex_mostfreq'],
                        'Which causality pipeline to run')
 except gflags.DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -73,15 +74,22 @@ def get_stages(candidate_classifier):
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
-    else: # baseline
+    elif FLAGS.pipeline_type == 'baseline':
         stages = [BaselineStage('Baseline')]
+    elif FLAGS.pipeline_type == 'tregex_mostfreq':
+        stages = [TRegexConnectiveStage('TRegex'),
+                  MostFreqSenseFilterStage('Most frequent sense filter')]
+    elif FLAGS.pipeline_type == 'regex_mostfreq':
+        stages = [RegexConnectiveStage('Regex'),
+                  MostFreqSenseFilterStage('Most frequent sense filter')]
     return stages
 
 
 def remap_by_connective(by_connective):
-    to_remap = {'for too to':'too for to', 'for too':'too for', 'reason be':'reason', 'that now':'now that',
-        'to for':'for to', 'give':'given',
-        'result of':'result'}
+    to_remap = {'for too to':'too for to', 'for too':'too for',
+                'reason be':'reason', 'that now':'now that', 'to for':'for to',
+                'give':'given', 'thank to': 'thanks to', 'result of':'result',
+                'to need': 'need to'}
     for connective, metrics in by_connective.items():
         if connective.startswith('be '):
             by_connective[connective[3:]] += metrics
@@ -151,7 +159,7 @@ if __name__ == '__main__':
                 print "Per-connective stats for stage %s:" % stage.name
                 by_connective = eval_metrics.metrics_by_connective()
                 remap_by_connective(by_connective)
-                
+
                 for connective, metrics in by_connective.iteritems():
                     csv_metrics = [str(x) for x in connective,
                                    metrics.connective_metrics.tp,
