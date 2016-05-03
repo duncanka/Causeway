@@ -23,8 +23,8 @@ def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot',
                 subprocess.call(['xdg-open', img_fname], stderr=null)
 
 
-def vis_pipeline_trees(pipeline, stage_num, model_num=0, open_imgs=True):
-    model = pipeline.stages[stage_num].models[model_num]
+def vis_pipeline_trees(pipeline, stage_num, open_imgs=True):
+    model = pipeline.stages[stage_num].model
     if isinstance(model.classifier, ClassBalancingClassifierWrapper):
         classifier = model.classifier.classifier
     else:
