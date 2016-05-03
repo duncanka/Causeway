@@ -5,6 +5,7 @@ import itertools
 import logging
 import numpy as np
 from scipy.sparse import lil_matrix, vstack
+from sklearn.base import BaseEstimator
 
 from pipeline.featurization import FeatureExtractor, Featurizer, FeaturizationError
 from util import NameDictionary, listify
@@ -164,7 +165,7 @@ class ClassifierModel(FeaturizedModel):
         raise NotImplementedError
 
 
-class ClassBalancingClassifierWrapper(object):
+class ClassBalancingClassifierWrapper(BaseEstimator):
     def __init__(self, classifier, ratio=float('inf')):
         self.classifier = classifier
         self.ratio = ratio
@@ -231,5 +232,3 @@ class ClassBalancingClassifierWrapper(object):
 
     def predict(self, data):
         return self.classifier.predict(data)
-
-
