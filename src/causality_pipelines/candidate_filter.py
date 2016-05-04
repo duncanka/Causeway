@@ -20,26 +20,26 @@ from util.diff import SequenceDiff
 
 try:
     DEFINE_list(
-        'causality_cc_features',
+        'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination'.split(','),
         'Features to use for pattern-based candidate classifier model')
-    DEFINE_integer('causality_cc_max_wordsbtw', 10,
+    DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max")
-    DEFINE_integer('causality_cc_max_dep_path_len', 3,
+    DEFINE_integer('filter_max_dep_path_len', 3,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")
-    DEFINE_bool('causality_cc_print_test_instances', False,
+    DEFINE_bool('filter_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation')
-    DEFINE_bool('causality_cc_diff_correctness', None,
+    DEFINE_bool('filter_diff_correctness', None,
                 'Whether a candidate instance should be considered correct in'
                 ' training based on diffing the sequence of true instances and'
                 ' the sequence of proposed instances. If False, then any'
                 ' proposed instance that has been matched to a true instance'
                 " will be marked as true, even if it's a duplicate. Default is"
                 " True for regex pipeline and False for TRegex.")
-    DEFINE_bool('causality_cc_train_with_partials', False,
+    DEFINE_bool('filter_train_with_partials', False,
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
 except DuplicateFlagError as e:
@@ -78,13 +78,13 @@ class CausalPatternClassifierModel(ClassifierModel):
     def words_btw_heads(part):
         words_btw = part.sentence.count_words_between(
             part.cause_head, part.effect_head)
-        return min(words_btw, FLAGS.causality_cc_max_wordsbtw)
+        return min(words_btw, FLAGS.filter_max_wordsbtw)
 
     @staticmethod
     def extract_dep_path(part):
         deps = part.sentence.extract_dependency_path(
             part.cause_head, part.effect_head, False)
-        if len(deps) > FLAGS.causality_cc_max_dep_path_len:
+        if len(deps) > FLAGS.filter_max_dep_path_len:
             return 'LONG-RANGE'
         else:
             return str(deps)
@@ -315,20 +315,20 @@ class PatternBasedCausationFilter(StructuredModel):
         self.base_classifier = classifier
         self.classifiers = {}
         comparator = make_annotation_comparator(
-            FLAGS.causality_cc_train_with_partials)
+            FLAGS.filter_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations
         self.connective_comparator = lambda inst1, inst2: comparator(
                                         inst1.connective, inst2.connective)
         # By default, regex, not tregex, should use diff correctness.
-        if FLAGS.causality_cc_diff_correctness is None:
-            FLAGS.causality_cc_diff_correctness = (
+        if FLAGS.filter_diff_correctness is None:
+            FLAGS.filter_diff_correctness = (
                 'tregex' not in FLAGS.pipeline_type)
-            logging.debug("Set flag causality_cc_diff_correctness to %s"
-                          % FLAGS.causality_cc_diff_correctness)
+            logging.debug("Set flag filter_diff_correctness to %s"
+                          % FLAGS.filter_diff_correctness)
 
     def _make_parts(self, sentence, is_train):
         if is_train:
-            if FLAGS.causality_cc_diff_correctness:
+            if FLAGS.filter_diff_correctness:
                 # In training, we need to match the causation instances the
                 # pipeline has thus far detected against the original causation
                 # instances (provided by previous pipeline stages). We do this
@@ -367,8 +367,7 @@ class PatternBasedCausationFilter(StructuredModel):
             connective = stringify_connective(pc)
             if connective not in self.classifiers:
                 self.classifiers[connective] = CausalPatternClassifierModel(
-                    sklearn.clone(self.base_classifier),
-                    FLAGS.causality_cc_features)
+                    sklearn.clone(self.base_classifier), FLAGS.filter_features)
                 pcs_by_connective[connective] = [pc]
             else:
                 pcs_by_connective[connective].append(pc)
@@ -427,4 +426,4 @@ class CausationPatternFilterStage(Stage):
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False,
-                            FLAGS.causality_cc_print_test_instances, True, True)
+                            FLAGS.filter_print_test_instances, True, True)
