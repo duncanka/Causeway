@@ -4,7 +4,7 @@ import gflags
 import logging
 import numpy as np
 import os
-from sklearn import tree, neighbors, linear_model, svm, ensemble
+from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import sys
 
 from causality_pipelines.baseline import BaselineStage
@@ -27,7 +27,7 @@ FLAGS = gflags.FLAGS
 
 try:
     gflags.DEFINE_enum('classifier_model', 'forest',
-                       ['tree', 'knn', 'logistic', 'svm', 'forest'],
+                       ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')
     gflags.DEFINE_float(
@@ -139,6 +139,8 @@ if __name__ == '__main__':
         candidate_classifier = svm.SVC()
     elif FLAGS.classifier_model == 'forest':
         candidate_classifier = ensemble.RandomForestClassifier(n_jobs=-1)
+    elif FLAGS.classifier_model == 'nb':
+        candidate_classifier = naive_bayes.MultinomialNB()
 
     candidate_classifier = ClassBalancingClassifierWrapper(
         candidate_classifier, FLAGS.rebalance_ratio)

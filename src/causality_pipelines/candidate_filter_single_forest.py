@@ -4,11 +4,10 @@ import itertools
 import logging
 from nltk.corpus import wordnet
 from scipy.spatial import distance
-import sklearn
 
 from causality_pipelines import IAAEvaluator, StanfordNERStage
 from data import Token, StanfordParsedSentence, CausationInstance
-from iaa import make_annotation_comparator, stringify_connective
+from iaa import make_annotation_comparator
 from nlp.senna import SennaEmbeddings
 import numpy as np
 from pipeline import Stage
@@ -22,7 +21,8 @@ try:
     DEFINE_list(
         'causality_cc_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'tenses,cause_case_children,effect_case_children,domination'.split(','),
+        'tenses,cause_case_children,effect_case_children,domination,'
+        'vector_dist,vector_cos_dist'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('causality_cc_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -60,12 +60,16 @@ class PatternFilterPart(object):
         self.connective_correct = connective_correct
 
 
+# In principle, the causation filter is both a featurized classifier and a
+# structured model. (It is structured in that we get a list of predicted
+# instances for each sentence, and then we want to choose the best list for the
+# entire sentence.) In practice, it is easier to describe the classifier through
+# composition rather than inheritance.
+
 class CausalPatternClassifierModel(ClassifierModel):
     def __init__(self, classifier, selected_features=None,
         model_path=None, save_featurized=False):
-        super(CausalPatternClassifierModel, self).__init__(
-            classifier, selected_features=selected_features,
-            model_path=model_path, save_featurized=save_featurized)
+        ClassifierModel.__init__(self, classifier, selected_features=selected_features, model_path=model_path, save_featurized=save_featurized)
 
     def _get_gold_labels(self, classifier_parts):
         return [part.connective_correct for part in classifier_parts]
@@ -311,9 +315,9 @@ class PatternBasedCausationFilter(StructuredModel):
     def __init__(self, classifier, save_featurized=False):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder())
-        
-        self.base_classifier = classifier
-        self.classifiers = {}
+        self.classifier = CausalPatternClassifierModel(
+            classifier, FLAGS.causality_cc_features,
+            save_featurized=save_featurized)
         comparator = make_annotation_comparator(
             FLAGS.causality_cc_train_with_partials)
         # Comparator for matching CausationInstances against PossibleCausations
@@ -357,28 +361,15 @@ class PatternBasedCausationFilter(StructuredModel):
             return [PatternFilterPart(pc, False) for pc in
                     sentence.possible_causations if pc.cause and pc.effect]
 
-    def reset(self):
-        super(PatternBasedCausationFilter, self).reset()
-        self.classifiers = {}
+    def _train_structured(self, instances, parts_by_instance):
+        self.classifier.train(list(itertools.chain(*parts_by_instance)))
 
-    def _train_structured(self, sentences, parts_by_sentence):
-        pcs_by_connective = {}
-        for pc in itertools.chain.from_iterable(parts_by_sentence):
-            connective = stringify_connective(pc)
-            if connective not in self.classifiers:
-                self.classifiers[connective] = CausalPatternClassifierModel(
-                    sklearn.clone(self.base_classifier),
-                    FLAGS.causality_cc_features)
-                pcs_by_connective[connective] = [pc]
-            else:
-                pcs_by_connective[connective].append(pc)
-
-        for connective, pcs in pcs_by_connective.iteritems():
-            self.classifiers[connective].train(pcs)
-
-    def _score_parts(self, sentence, possible_causations):
-        return [self.classifiers[stringify_connective(pc)].test([pc])
-                for pc in possible_causations]
+    def _score_parts(self, instance, instance_parts):
+        if instance_parts:
+            # Return array of classification results by part.
+            return self.classifier.test(instance_parts)
+        else:
+            return []
 
 
 class PatternBasedFilterDecoder(StructuredDecoder):
