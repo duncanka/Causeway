@@ -128,9 +128,9 @@ class ClassifierModel(FeaturizedModel):
         print '\n'.join(strings)
         # '''
 
-        logging.info('Fitting classifier...')
+        logging.debug('Fitting classifier...')
         self.classifier.fit(features, labels)
-        logging.info('Done fitting classifier.')
+        logging.debug('Done fitting classifier.')
         return self.featurizer.feature_name_dictionary
 
     def test(self, instances):
