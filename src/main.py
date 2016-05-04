@@ -26,7 +26,7 @@ FLAGS = gflags.FLAGS
 
 
 try:
-    gflags.DEFINE_enum('classifier_model', 'forest',
+    gflags.DEFINE_enum('classifier_model', 'nb',
                        ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
                        'What type of machine learning model to use as the'
                        ' underlying simple causality classifier')

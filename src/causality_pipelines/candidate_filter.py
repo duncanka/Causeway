@@ -5,6 +5,8 @@ import logging
 from nltk.corpus import wordnet
 from scipy.spatial import distance
 import sklearn
+from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.pipeline import Pipeline as SKLPipeline
 
 from causality_pipelines import IAAEvaluator, StanfordNERStage
 from data import Token, StanfordParsedSentence, CausationInstance
@@ -42,6 +44,10 @@ try:
     DEFINE_bool('filter_train_with_partials', False,
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
+    DEFINE_integer('filter_feature_select_k', 100,
+                   "Specifies how many features to keep in feature selection"
+                   " for per-connective causality filters. -1 means no feature"
+                   " selection.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -312,7 +318,15 @@ class PatternBasedCausationFilter(StructuredModel):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder())
         
-        self.base_classifier = classifier
+        if FLAGS.filter_feature_select_k == -1:
+            self.base_classifier = classifier
+        else:
+            k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
+            self.base_classifier = SKLPipeline([
+                ('feature_selection', k_best),
+                ('classification', classifier)
+            ])
+
         self.classifiers = {}
         comparator = make_annotation_comparator(
             FLAGS.filter_train_with_partials)
@@ -373,7 +387,12 @@ class PatternBasedCausationFilter(StructuredModel):
                 pcs_by_connective[connective].append(pc)
 
         for connective, pcs in pcs_by_connective.iteritems():
-            self.classifiers[connective].train(pcs)
+            classifier = self.classifiers[connective]
+            try:
+                classifier.train(pcs)
+            except ValueError: # can happen if k > number of features
+                classifier.classifier.named_steps['feature_selection'].k = 'all'
+                classifier.train(pcs)
 
     def _score_parts(self, sentence, possible_causations):
         return [self.classifiers[stringify_connective(pc)].test([pc])
