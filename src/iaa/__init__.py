@@ -474,7 +474,6 @@ class CausalityMetrics(object):
             if (self.save_differences and
                 not (causes_match and effects_match and
                      cause_heads_match and effect_heads_match)):
-                print("Recording arg difference")
                 self.argument_differences.append((instance_1, instance_2,
                                                   sentence_num))
 
@@ -491,7 +490,7 @@ class CausalityMetrics(object):
                 cause_head_metrics, effect_head_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
-           log_agreements=None, indent=0, file=sys.stdout):
+           log_agreements=None, indent=0, log_file=sys.stdout):
         # Flags aren't available as defaults when the function is created, so
         # set the defaults here.
         if log_confusion is None:
@@ -507,62 +506,63 @@ class CausalityMetrics(object):
             colorama.reinit()
 
         if log_agreements:
-            print_indented(indent, "Agreeing instances:", file=file)
+            print_indented(indent, "Agreeing instances:", file=log_file)
             for sentence_num, instance in self.agreeing_instances:
                 self._log_instance_for_connective(
-                    instance, sentence_num, "", indent + 1, file)
+                    instance, sentence_num, "", indent + 1, log_file)
 
         if log_differences and (
             self.gold_only_instances or self.predicted_only_instances
             or self.property_differences or self.argument_differences):
-            print_indented(indent, 'Annotation differences:', file=file)
+            print_indented(indent, 'Annotation differences:', file=log_file)
             for sentence_num, instance in self.gold_only_instances:
                 self._log_instance_for_connective(
                     instance, sentence_num, "Annotator 1 only:", indent + 1,
-                    file)
+                    log_file)
             for sentence_num, instance in self.predicted_only_instances:
                 self._log_instance_for_connective(
                     instance, sentence_num, "Annotator 2 only:", indent + 1,
-                    file)
+                    log_file)
             self._log_property_differences(CausationInstance.CausationTypes,
-                                           indent + 1, file)
+                                           indent + 1, log_file)
             self._log_property_differences(CausationInstance.Degrees,
-                                           indent + 1, file)
-            self._log_arg_label_differences(indent + 1, file)
+                                           indent + 1, log_file)
+            self._log_arg_label_differences(indent + 1, log_file)
 
         # Ignore connective-related metrics if we have nothing interesting to
         # show there.
         printing_connective_metrics = (log_stats and self.connective_metrics)
         if printing_connective_metrics or log_confusion:
-            print_indented(indent, 'Connectives:', file=file)
+            print_indented(indent, 'Connectives:', file=log_file)
         if printing_connective_metrics:
-            print_indented(indent + 1, self.connective_metrics, file=file)
+            print_indented(indent + 1, self.connective_metrics, file=log_file)
         if log_stats or log_confusion:
             if self.degree_matrix is not None:
                 self._log_property_metrics(
                     'Degrees', self.degree_matrix, indent + 1, log_confusion,
-                    log_stats, file)
+                    log_stats, log_file)
             if self.causation_type_matrix is not None:
                 self._log_property_metrics(
                     'Causation types', self.causation_type_matrix, indent + 1,
-                    log_confusion, log_stats, file)
+                    log_confusion, log_stats, log_file)
 
         # If any argument properties are set, all should be.
         if log_stats and self.cause_span_metrics is not None:
-            print_indented(indent, 'Arguments:', file=file)
+            print_indented(indent, 'Arguments:', file=log_file)
             for arg_type in ['cause', 'effect']:
                 print_indented(indent + 1, arg_type.title(), 's:', sep='',
-                               file=file)
-                print_indented(indent + 2, 'Spans:', file=file)
+                               file=log_file)
+                print_indented(indent + 2, 'Spans:', file=log_file)
                 print_indented(indent + 3, getattr(self,
                                                    arg_type + '_span_metrics'),
-                               file=file)
-                print_indented(indent + 2, 'Heads:', file=file)
+                               file=log_file)
+                print_indented(indent + 2, 'Heads:', file=log_file)
                 print_indented(indent + 3, getattr(self,
                                                    arg_type + '_head_metrics'),
-                               file=file)
+                               file=log_file)
                 print_indented(indent + 2, 'Jaccard index: ',
-                               getattr(self, arg_type + '_jaccard'), file=file)
+                               getattr(self, arg_type + '_jaccard'),
+                               file=log_file)
 
         if log_differences:
             colorama.deinit()
@@ -673,27 +673,28 @@ class CausalityMetrics(object):
         return aggregated
 
     def _log_property_metrics(self, name, matrix, indent, log_confusion,
-                              log_stats, file):
-        print_indented(indent, name, ':', sep='', file=file)
+                              log_stats, log_file):
+        print_indented(indent, name, ':', sep='', file=log_file)
         if log_confusion:
             print_indented(indent + 1, matrix.pretty_format(metrics=log_stats),
-                           file=file)
+                           file=log_file)
         else: # we must be logging just stats
             print_indented(indent + 1, matrix.pretty_format_metrics(),
-                           file=file)
+                           file=log_file)
 
     @staticmethod
-    def _log_instance_for_connective(instance, sentence_num, msg, indent, file):
+    def _log_instance_for_connective(instance, sentence_num, msg, indent,
+                                     log_file):
         filename = os.path.split(instance.sentence.source_file_path)[-1]
         print_indented(
             indent, msg,
             _wrapped_sentence_highlighting_instance(instance).encode('utf-8'),
             '(%s:%d)' % (filename, sentence_num),
-            file=file)
+            file=log_file)
 
     @staticmethod
-    def _print_with_labeled_args(instance, indent, file, cause_start, cause_end,
-                                 effect_start, effect_end):
+    def _print_with_labeled_args(instance, indent, out_file, cause_start,
+                                 cause_end, effect_start, effect_end):
         '''
         Prints sentences annotated according to a particular CausationInstance.
         Connectives are printed in ALL CAPS. If run from a TTY, arguments are
@@ -712,6 +713,7 @@ class CausalityMetrics(object):
             return word
             
         tokens = instance.sentence.tokens[1:] # skip ROOT
+        # TODO: should this be checking out_file?
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             words = [token.original_text
                      for token in tokens]
@@ -739,9 +741,9 @@ class CausalityMetrics(object):
                     indent += 1 # future lines should be printed more indented
         else: # non-TTY: we're ready to print
             print_indented(indent, *[line.encode('utf-8') for line in lines],
-                           sep='\n')
+                           sep='\n', file=out_file)
 
-    def _log_arg_label_differences(self, indent, file):
+    def _log_arg_label_differences(self, indent, log_file):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             cause_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
             cause_end = colorama.Fore.RESET
@@ -763,16 +765,16 @@ class CausalityMetrics(object):
                 '" (', filename, ':', sentence_num, ')',
                 ' with ', cause_start, 'cause', cause_end, ' and ',
                 effect_start, 'effect', effect_end, ':',
-                sep='', file=file)
+                sep='', file=log_file)
             self._print_with_labeled_args(
-                instance_1, indent + 1, file, cause_start, cause_end,
+                instance_1, indent + 1, log_file, cause_start, cause_end,
                 effect_start, effect_end)
-            # print_indented(indent + 1, "vs.", file=file)
+            # print_indented(indent + 1, "vs.", file=log_file)
             self._print_with_labeled_args(
-                instance_2, indent + 1, file, cause_start, cause_end,
+                instance_2, indent + 1, log_file, cause_start, cause_end,
                 effect_start, effect_end)
 
-    def _log_property_differences(self, property_enum, indent, file):
+    def _log_property_differences(self, property_enum, indent, log_file):
         filtered_differences = [x for x in self.property_differences
                                 if x[2] is property_enum]
 
@@ -796,10 +798,8 @@ class CausalityMetrics(object):
                 '" differ: ', values[0], ' vs. ', values[1],
                 ' (', filename, ':', sentence_num, ': "',
                 _wrapped_sentence_highlighting_instance(instance_1), '")',
-                sep='', file=file)
+                sep='', file=log_file)
 
 
 def stringify_connective(instance):
-    sorted_tokens = sorted(instance.connective,
-                           key=lambda token: token.index)
-    return ' '.join(t.lemma for t in sorted_tokens)
+    return ' '.join(t.lemma for t in instance.connective)
