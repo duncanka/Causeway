@@ -38,9 +38,9 @@ class Model(object):
         raise NotImplementedError
 
     def load(self, filepath):
-        logging.info("Loading model from %s...", filepath)
+        logging.debug("Loading model from %s...", filepath)
         load_result = self._load_model(filepath)
-        logging.info("Done loading model.")
+        logging.debug("Done loading model.")
         self._post_model_load(load_result)
 
     def _load_model(self, filepath):
@@ -109,9 +109,9 @@ class ClassifierModel(FeaturizedModel):
 
     def _train_model(self, instances):
         # print "Featurizing", len(instances), "instances"
-        logging.info("Registering features...")
+        logging.debug("Registering features...")
         self.featurizer.register_features_from_instances(instances)
-        logging.info('Done registering features.')
+        logging.debug('Done registering features.')
 
         features = self.featurizer.featurize(instances)
         labels = self._get_gold_labels(instances)
