@@ -74,7 +74,7 @@ class TRegexConnectiveModel(Model):
             possible_sentence_indices = self._filter_sentences_for_pattern(
                 sentences, pattern, connective_lemmas)
             queue.put_nowait((pattern, connective_labels,
-                              possible_sentence_indices))
+                              possible_sentence_indices, connective_lemmas))
             # Estimate total output file size for this pattern: each
             # sentence has sentence #, + 3 bytes for : and newlines.
             # As a very rough estimate, matching node names increase the
@@ -565,8 +565,8 @@ class TRegexConnectiveModel(Model):
         def run(self):
             try:
                 while(True):
-                    (pattern, connective_labels, possible_sentence_indices) = (
-                        self.queue.get_nowait())
+                    (pattern, connective_labels, possible_sentence_indices,
+                     connective_lemmas) = self.queue.get_nowait()
                     if not possible_sentence_indices: # no sentences to scan
                         self.queue.task_done()
                         continue
@@ -584,16 +584,16 @@ class TRegexConnectiveModel(Model):
                         # Make sure the file is synced for threads to access
                         tree_file.flush()
                         self._process_pattern(
-                            pattern, connective_labels, possible_sentences,
-                            tree_file.name)
+                            pattern, connective_labels, connective_lemmas,
+                            possible_sentences, tree_file.name)
                     self.queue.task_done()
             except Queue.Empty: # no more items in queue
                 return
 
         FIXED_TREGEX_ARGS = '-o -l -N -h cause -h effect'.split()
         def _process_pattern(
-            self, pattern, connective_labels, possible_sentences,
-            tree_file_path):
+            self, pattern, connective_labels, connective_lemmas,
+            possible_sentences, tree_file_path):
             # Create output file
             with tempfile.NamedTemporaryFile(
                 'w+b', prefix='matches') as self.output_file:
@@ -618,7 +618,7 @@ class TRegexConnectiveModel(Model):
 
                 for sentence_index, sentence in possible_sentences:
                     possible_causations = self._process_tregex_for_sentence(
-                        pattern, connective_labels, sentence)
+                        pattern, connective_labels, connective_lemmas, sentence)
                     # NOTE: This is the ONLY PLACE where we modify shared data.
                     # It is thread-safe because self.predicted_outputs itself is
                     # never modified; its individual elements -- themselves
@@ -654,7 +654,7 @@ class TRegexConnectiveModel(Model):
             return sentence.tokens[token_index]
 
         def _process_tregex_for_sentence(self, pattern, connective_labels,
-                                         sentence):
+                                         connective_lemmas, sentence):
             # Read TRegex output for the sentence.
             # For each sentence, we leave the file positioned at the next
             # tree number line.
@@ -709,7 +709,8 @@ class TRegexConnectiveModel(Model):
                         self._get_constituency_token_from_tregex_line(
                             line, sentence, all_treepositions)
                         for line in connective_lines]
-                connective.sort(key=lambda token: token.index)
+                connective.sort( # Ensure connective order is always consistent
+                    key=lambda token: connective_lemmas.index(token.lemma))
 
                 # TODO: Make this eliminate duplicate PossibleCausations on
                 # the same connective words, like regex pipeline does.
