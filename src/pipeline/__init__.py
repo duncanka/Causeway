@@ -34,6 +34,8 @@ try:
                    ' 0 or negative value indicates leave-one-out CV.')
     DEFINE_integer('cv_debug_stop_after', None,
                    'Number of CV rounds to stop after (for debugging)')
+    DEFINE_integer('cv_debug_start_at', 1,
+                   'CV round to start at (1-indexed; for debugging)')
     DEFINE_boolean('cv_print_fold_results', True,
                    "Whether to print each fold's results as they are computed")
     DEFINE_boolean('cv_by_sentences', True,
@@ -117,7 +119,7 @@ class Pipeline(object):
 
         results = [[] for _ in self.stages] # each list holds results by fold
 
-        for i, fold in enumerate(folds):
+        for i, fold in list(enumerate(folds))[FLAGS.cv_debug_start_at - 1:]:
             print "Beginning fold", i + 1, 'of', num_folds
             testing = fold
             training = list(itertools.chain(
