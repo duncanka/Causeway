@@ -15,7 +15,7 @@ from nlp.senna import SennaEmbeddings
 import numpy as np
 from pipeline import Stage
 from pipeline.featurization import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, VectorValuedFeatureExtractor
-from pipeline.models import ClassifierModel
+from pipeline.models import ClassifierModel, MajorityClassClassifier
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from util.diff import SequenceDiff
 
@@ -48,6 +48,9 @@ try:
                    "Specifies how many features to keep in feature selection"
                    " for per-connective causality filters. -1 means no feature"
                    " selection.")
+    DEFINE_integer('filter_maj_class_threshold', 10,
+                   "Minimum number of samples before reverting to majority"
+                   " class for classification")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -64,6 +67,11 @@ class PatternFilterPart(object):
         self.connective_head = self.sentence.get_head(self.connective)
         self.connective_patterns = possible_causation.matching_patterns
         self.connective_correct = connective_correct
+
+
+class CausalPatternMajorityClassModel(MajorityClassClassifier):
+    def _get_gold_labels(self, classifier_parts):
+        return [part.connective_correct for part in classifier_parts]
 
 
 class CausalPatternClassifierModel(ClassifierModel):
@@ -387,7 +395,11 @@ class PatternBasedCausationFilter(StructuredModel):
                 pcs_by_connective[connective].append(pc)
 
         for connective, pcs in pcs_by_connective.iteritems():
-            classifier = self.classifiers[connective]
+            if len(pcs) < FLAGS.filter_maj_class_threshold:
+                classifier = CausalPatternMajorityClassModel()
+                self.classifiers[connective] = classifier
+            else:
+                classifier = self.classifiers[connective]
             try:
                 classifier.train(pcs)
             except ValueError: # can happen if k > number of features
