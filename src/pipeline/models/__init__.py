@@ -232,3 +232,21 @@ class ClassBalancingClassifierWrapper(BaseEstimator):
 
     def predict(self, data):
         return self.classifier.predict(data)
+
+
+class MajorityClassClassifier(ClassifierModel):
+    def __init__(self):
+        self.decision = None
+
+    def reset(self):
+        self.decision = None
+
+    def _train_model(self, instances):
+        labels = self._get_gold_labels(instances)
+        label_counts = [0, 0]
+        for label in labels:
+            label_counts[bool(label)] += 1
+        self.decision = label_counts[True] > label_counts[False]
+
+    def test(self, instances):
+        return [self.decision for _ in instances]
