@@ -61,8 +61,15 @@ class PatternFilterPart(object):
         self.sentence = possible_causation.sentence
         self.cause = possible_causation.cause
         self.effect = possible_causation.effect
-        self.cause_head = self.sentence.get_head(possible_causation.cause)
-        self.effect_head = self.sentence.get_head(possible_causation.effect)
+        # If we're missing an argument, we'll want to keep the instance around
+        # for majority-class classification, but it'll be excluded if we build a
+        # proper classifier.
+        if possible_causation.cause and possible_causation.effect:
+            self.cause_head = self.sentence.get_head(possible_causation.cause)
+            self.effect_head = self.sentence.get_head(possible_causation.effect)
+        else:
+            self.cause_head = None
+            self.effect_head = None
         self.connective = possible_causation.connective
         self.connective_head = self.sentence.get_head(self.connective)
         self.connective_patterns = possible_causation.matching_patterns
@@ -364,18 +371,16 @@ class PatternBasedCausationFilter(StructuredModel):
                     sentence.possible_causations, sentence.causation_instances,
                     self.connective_comparator, sort_by_key)
                 for correct_pc, _ in connectives_diff.get_matching_pairs():
-                    if correct_pc.cause and correct_pc.effect:
-                        parts.append(PatternFilterPart(correct_pc, True))
+                    parts.append(PatternFilterPart(correct_pc, True))
                 for incorrect_pc in connectives_diff.get_a_only_elements():
-                    if incorrect_pc.cause and incorrect_pc.effect:
-                        parts.append(PatternFilterPart(incorrect_pc, False))
+                    parts.append(PatternFilterPart(incorrect_pc, False))
                 return parts
             else:
                 return [PatternFilterPart(pc, bool(pc.true_causation_instance))
-                        for pc in sentence.possible_causations
-                        if pc.cause and pc.effect]
+                        for pc in sentence.possible_causations]
         else:
             # If we're not in training, the initial label doesn't really matter.
+            # We do want to filter to only 2-arg matches.
             return [PatternFilterPart(pc, False) for pc in
                     sentence.possible_causations if pc.cause and pc.effect]
 
@@ -395,11 +400,14 @@ class PatternBasedCausationFilter(StructuredModel):
                 pcs_by_connective[connective].append(pc)
 
         for connective, pcs in pcs_by_connective.iteritems():
-            if len(pcs) < FLAGS.filter_maj_class_threshold:
+            pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
+            if len(pcs_with_both_args) < FLAGS.filter_maj_class_threshold:
                 classifier = CausalPatternMajorityClassModel()
                 self.classifiers[connective] = classifier
             else:
                 classifier = self.classifiers[connective]
+                pcs = pcs_with_both_args # train only on instances with 2 args
+
             try:
                 classifier.train(pcs)
             except ValueError: # can happen if k > number of features

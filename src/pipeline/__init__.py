@@ -52,6 +52,8 @@ except DuplicateFlagError as e:
 
 
 class Pipeline(object):
+    # TODO: allow creating a Pipeline with no reader, which can only be used
+    # with documents passed in as function arguments.
     def __init__(self, stages, reader, writer=None, copy_fn=deepcopy):
         '''
         copy_fn is the function to use when copying over documents to avoid

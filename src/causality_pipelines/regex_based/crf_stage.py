@@ -216,6 +216,7 @@ class ArgumentLabelerStage(Stage):
         if not possible_causation.cause: possible_causation.cause = None
         if not possible_causation.effect: possible_causation.effect = None
 
+    '''
     def _document_complete(self, document):
         for sentence in document:
             # print "Unfiltered:", sentence.possible_causations
@@ -223,6 +224,7 @@ class ArgumentLabelerStage(Stage):
                 pc for pc in sentence.possible_causations
                 if pc.cause and pc.effect]
             # print "Filtered:", sentence.possible_causations
+    '''
 
     def _make_evaluator(self):
         return ArgumentLabelerEvaluator(
