@@ -1,3 +1,4 @@
+from collections import defaultdict
 from copy import copy
 from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
 import logging
@@ -166,12 +167,12 @@ class StanfordNERStage(Stage):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
-        st = StanfordNERTagger(model_path, jar_path)
+        tagger = StanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
             for sentence in documents]
         # Batch process sentences (faster than repeatedly running Stanford NLP)
-        ner_results = st.tag_sents(tokens_by_sentence)
+        ner_results = tagger.tag_sents(tokens_by_sentence)
         for sentence, sentence_result in zip(documents, ner_results):
             sentence.tokens[0].ner_tag = None # ROOT has no NER tag
             for token, token_result in zip(sentence.tokens[1:], sentence_result):
@@ -179,6 +180,32 @@ class StanfordNERStage(Stage):
                 token.ner_tag = self.NER_TYPES.index(tag.title())
             if writer:
                 writer.instance_complete(sentence)
+
+
+def remove_smaller_matches(sentence):
+    causations_by_size = defaultdict(list) # causation instances by conn. size
+    # Each token can only appear in one connective. Remember which ones have
+    # already been deemed part of a larger connective, so that future instances
+    # that use that token as part of the connective can be ignored.
+    tokens_used = [False for _ in sentence.tokens]
+    for causation in sentence.causation_instances:
+        causations_by_size[len(causation.connective)].append(causation)
+
+    causations_to_keep = []
+    # Process connectives biggest to smallest, discarding any that reuse tokens.
+    # If we have two connectives of the same length competing for a token, this
+    # will arbitrarily choose the first one we find.
+    for connective_length in sorted(causations_by_size.keys(), reverse=True):
+        for causation in causations_by_size[connective_length]:
+            for conn_token in causation.connective:
+                if tokens_used[conn_token.index]:
+                    break
+            else: # Executes only if loop over tokens didn't break
+                causations_to_keep.append(causation)
+                for conn_token in causation.connective:
+                    tokens_used[conn_token.index] = True
+
+    sentence.causation_instances = causations_to_keep
 
 
 def get_causation_tuple(connective_tokens, cause_head, effect_head):

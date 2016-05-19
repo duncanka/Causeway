@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 
-import gflags
+from gflags import FLAGS, DEFINE_enum, DEFINE_bool, DEFINE_integer, DEFINE_float, DuplicateFlagError, FlagsError
 import logging
 import numpy as np
 import os
 from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
+import subprocess
 import sys
 
+from causality_pipelines import remove_smaller_matches
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
+from causality_pipelines.baseline.most_freq_filter import MostFreqSenseFilterStage
 from causality_pipelines.candidate_filter import CausationPatternFilterStage
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
@@ -16,34 +19,33 @@ from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
 from data import StanfordParsedSentence
 from data.io import DirectoryReader, CausalityStandoffReader
-from pipeline import Pipeline
+from pipeline import Pipeline, SimpleStage
 from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
-import subprocess
-from causality_pipelines.baseline.most_freq_filter import MostFreqSenseFilterStage
-
-FLAGS = gflags.FLAGS
 
 
 try:
-    gflags.DEFINE_enum('classifier_model', 'nb',
-                       ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
-                       'What type of machine learning model to use as the'
-                       ' underlying simple causality classifier')
-    gflags.DEFINE_float(
+    DEFINE_enum('classifier_model', 'forest',
+                ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
+                'What type of machine learning model to use as the underlying'
+                ' causality filter classifier')
+    DEFINE_float(
         'rebalance_ratio', 1.0,
         'The maximum ratio by which to rebalance classes for training')
-    gflags.DEFINE_bool('eval_with_cv', False,
-                       'Evaluate with cross-validation. Overrides --evaluate'
-                       ' flag, and causes both train and test to be combined.')
-    gflags.DEFINE_bool('debug', False,
-                       'Whether to print debug-level logging.')
-    gflags.DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
-    gflags.DEFINE_enum('pipeline_type', 'tregex',
-                       ['tregex', 'regex', 'baseline', 'baseline+tregex',
-                        'baseline+regex', 'tregex_mostfreq', 'regex_mostfreq'],
-                       'Which causality pipeline to run')
-except gflags.DuplicateFlagError as e:
+    DEFINE_bool('eval_with_cv', False,
+               'Evaluate with cross-validation. Overrides --evaluate flag, and'
+               ' causes both train and test to be combined.')
+    DEFINE_bool('debug', False,
+                'Whether to print debug-level logging.')
+    DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
+    DEFINE_enum('pipeline_type', 'tregex',
+                ['tregex', 'regex', 'baseline', 'baseline+tregex',
+                 'baseline+regex', 'tregex_mostfreq', 'regex_mostfreq'],
+                'Which causality pipeline to run')
+    DEFINE_bool('filter_overlapping', True,
+                'Whether to filter smaller connectives that overlap with larger'
+                ' ones')
+except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
@@ -82,6 +84,12 @@ def get_stages(candidate_classifier):
     elif FLAGS.pipeline_type == 'regex_mostfreq':
         stages = [RegexConnectiveStage('Regex'),
                   MostFreqSenseFilterStage('Most frequent sense filter')]
+
+    if FLAGS.filter_overlapping:
+        if FLAGS.pipeline_type != 'baseline':
+            stages.append(SimpleStage('Filter smaller connectives',
+                                      remove_smaller_matches,
+                                      stages[-1]._make_evaluator()))
     return stages
 
 
@@ -114,7 +122,7 @@ if __name__ == '__main__':
         print_indented(1, subprocess.check_output("git rev-parse HEAD".split()),
                        "Modified:", sep='')
         print_indented(2, subprocess.check_output("git ls-files -m".split()))
-    except gflags.FlagsError, e:
+    except FlagsError, e:
         print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
 
