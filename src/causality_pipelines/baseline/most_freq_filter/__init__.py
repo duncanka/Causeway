@@ -50,4 +50,4 @@ class MostFreqSenseFilterStage(Stage):
 
     def _make_evaluator(self):
         return IAAEvaluator(False, False,
-                            FLAGS.causality_cc_print_test_instances, True, True)
+                            FLAGS.filter_print_test_instances, True, True)
