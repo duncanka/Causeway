@@ -89,7 +89,7 @@ def get_stages(candidate_classifier):
         if FLAGS.pipeline_type != 'baseline':
             stages.append(SimpleStage('Filter smaller connectives',
                                       remove_smaller_matches,
-                                      stages[-1]._make_evaluator()))
+                                      stages[-1]._make_evaluator))
     return stages
 
 

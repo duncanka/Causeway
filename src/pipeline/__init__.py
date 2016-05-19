@@ -491,12 +491,12 @@ class SimpleStage(Stage):
                 self.operation(instance)
             # No return value -> no labeling will be done
 
-    def __init__(self, name, operation, evaluator=None):
+    def __init__(self, name, operation, evaluator_fn=lambda: None):
         super(SimpleStage, self).__init__(name, self.SimpleModel(operation))
-        self._evaluator = evaluator
+        self._evaluator_fn = evaluator_fn
 
     def _make_evaluator(self):
-        return self._evaluator
+        return self._evaluator_fn()
 
 
 class ClassifierEvaluator(Evaluator):
