@@ -9,6 +9,7 @@ from os import path
 import sys
 
 from data import SentencesDocument
+from pipeline.models import Model
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
 
@@ -409,6 +410,7 @@ class Stage(object):
         '''
         pass
 
+    # TODO: rename to "get_evaluator"
     def _make_evaluator(self):
         '''
         Creates a new Evaluator object that knows how to properly evaluate
@@ -466,6 +468,35 @@ class Stage(object):
 
     def _label_instance(self, document, instance, predicted_output):
         pass
+
+
+class SimpleStage(Stage):
+    '''
+    A stage that simply runs an operation on each instance, with the operation
+    encapsulated as a single function. The function should be entirely
+    self-contained; its return value will be ignored.
+    
+    If instances other than the default are required, this stage should be
+    overridden with an appropriate _extract_instances function.
+    '''
+    class SimpleModel(Model):
+        def __init__(self, operation):
+            self.operation = operation
+
+        def train(self, instances):
+            pass
+
+        def test(self, instances):
+            for instance in instances:
+                self.operation(instance)
+            # No return value -> no labeling will be done
+
+    def __init__(self, name, operation, evaluator=None):
+        super(SimpleStage, self).__init__(name, self.SimpleModel(operation))
+        self._evaluator = evaluator
+
+    def _make_evaluator(self):
+        return self._evaluator
 
 
 class ClassifierEvaluator(Evaluator):
