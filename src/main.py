@@ -39,8 +39,8 @@ try:
                 'Whether to print debug-level logging.')
     DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
     DEFINE_enum('pipeline_type', 'tregex',
-                ['tregex', 'regex', 'baseline', 'baseline+tregex',
-                 'baseline+regex', 'tregex_mostfreq', 'regex_mostfreq'],
+                ['tregex', 'regex', 'baseline', 'tregex+baseline',
+                 'regex+baseline', 'tregex_mostfreq', 'regex_mostfreq'],
                 'Which causality pipeline to run')
     DEFINE_bool('filter_overlapping', True,
                 'Whether to filter smaller connectives that overlap with larger'
@@ -62,14 +62,14 @@ def get_stages(candidate_classifier):
                   ArgumentLabelerStage('CRF arg labeler'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier')]
-    elif FLAGS.pipeline_type == 'baseline+tregex':
+    elif FLAGS.pipeline_type == 'tregex+baseline':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   TRegexConnectiveStage('TRegex connectives'),
                   ArgSpanStage('Argument span expander'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier'),
                   BaselineCombinerStage('Combiner', BASELINE_CAUSATIONS_NAME)]
-    elif FLAGS.pipeline_type == 'baseline+regex':
+    elif FLAGS.pipeline_type == 'regex+baseline':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   RegexConnectiveStage('Regex connectives'),
                   ArgumentLabelerStage('CRF arg labeler'),
