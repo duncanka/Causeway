@@ -25,7 +25,7 @@ from util import print_indented
 
 
 try:
-    DEFINE_enum('classifier_model', 'forest',
+    DEFINE_enum('classifier_model', 'tree',
                 ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
                 'What type of machine learning model to use as the underlying'
                 ' causality filter classifier')
@@ -79,10 +79,12 @@ def get_stages(candidate_classifier):
     elif FLAGS.pipeline_type == 'baseline':
         stages = [BaselineStage('Baseline')]
     elif FLAGS.pipeline_type == 'tregex_mostfreq':
-        stages = [TRegexConnectiveStage('TRegex'),
+        stages = [TRegexConnectiveStage('TRegex connectives'),
+                  ArgSpanStage('Argument span expander'),
                   MostFreqSenseFilterStage('Most frequent sense filter')]
     elif FLAGS.pipeline_type == 'regex_mostfreq':
-        stages = [RegexConnectiveStage('Regex'),
+        stages = [RegexConnectiveStage('Regex connectives'),
+                  ArgumentLabelerStage('CRF arg labeler'),
                   MostFreqSenseFilterStage('Most frequent sense filter')]
 
     if FLAGS.filter_overlapping:

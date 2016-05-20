@@ -4,7 +4,7 @@ from copy import deepcopy
 from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_string, FlagsError
 import itertools
 import logging
-from numpy import random
+import numpy as np
 from os import path
 import sys
 
@@ -108,14 +108,14 @@ class Pipeline(object):
             all_instances = list(itertools.chain(*[d.sentences
                                                    for d in documents]))
             print len(all_instances), "instances"
-            random.shuffle(all_instances)
+            np.random.shuffle(all_instances)
             if num_folds <= 0:
                 num_folds = len(all_instances)
             sentence_folds = partition(all_instances, num_folds)
             folds = [[SentencesDocument('fold%d' % i, sentences)]
                      for i, sentences in enumerate(sentence_folds)]
         else:
-            random.shuffle(documents)
+            np.random.shuffle(documents)
             if num_folds <= 0:
                 num_folds = len(documents)
             folds = partition(documents, num_folds)

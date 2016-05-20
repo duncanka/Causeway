@@ -204,8 +204,7 @@ class ClassBalancingClassifierWrapper(BaseEstimator):
         for j in xrange(len(label_set)):
             label_row_indices = np.where(label_indices == j)[0]
             if FLAGS.rebalance_stochastically:
-                indices = np.random.choice(label_row_indices,
-                                           counts_to_add[j])
+                indices = np.random.choice(label_row_indices, counts_to_add[j])
             else:
                 full_repetitions = (
                     counts_to_add[j] / label_row_indices.shape[0])
