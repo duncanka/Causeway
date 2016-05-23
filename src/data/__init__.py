@@ -33,6 +33,9 @@ class Document(object):
     def __init__(self, filename):
         self.filename = filename
 
+    def __repr__(self):
+        return '<%s: %s>' % (self.__class__.__name__, self.filename)
+
 
 class SentencesDocument(Document):
     def __init__(self, filename, sentences):
