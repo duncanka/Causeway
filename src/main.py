@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from gflags import FLAGS, DEFINE_enum, DEFINE_bool, DEFINE_integer, DEFINE_float, DuplicateFlagError, FlagsError
+from gflags import (FLAGS, DEFINE_enum, DEFINE_bool, DEFINE_integer,
+                    DEFINE_float, DuplicateFlagError, FlagsError)
 import logging
 import numpy as np
 import os
@@ -11,13 +12,13 @@ import sys
 from causality_pipelines import remove_smaller_matches
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
-from causality_pipelines.baseline.most_freq_filter import MostFreqSenseFilterStage
+from causality_pipelines.baseline.most_freq_filter import (
+    MostFreqSenseFilterStage)
 from causality_pipelines.candidate_filter import CausationPatternFilterStage
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
 from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
-from data import StanfordParsedSentence
 from data.io import DirectoryReader, CausalityStandoffReader
 from pipeline import Pipeline, SimpleStage
 from pipeline.models import ClassBalancingClassifierWrapper
@@ -159,8 +160,8 @@ if __name__ == '__main__':
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
-                                CausalityStandoffReader()),
-        copy_fn=StanfordParsedSentence.shallow_copy_doc_with_sentences_fixed)
+                                CausalityStandoffReader())) # ,
+        # copy_fn=StanfordParsedSentence.shallow_copy_doc_with_sentences_fixed)
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()

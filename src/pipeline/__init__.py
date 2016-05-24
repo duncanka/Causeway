@@ -12,6 +12,7 @@ from data import SentencesDocument
 from pipeline.models import Model
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
+from util.freezer import freeze
 
 
 # Define pipeline-related flags.
@@ -55,7 +56,7 @@ except DuplicateFlagError as e:
 class Pipeline(object):
     # TODO: allow creating a Pipeline with no reader, which can only be used
     # with documents passed in as function arguments.
-    def __init__(self, stages, reader, writer=None, copy_fn=deepcopy):
+    def __init__(self, stages, reader, writer=None):
         '''
         copy_fn is the function to use when copying over documents to avoid
         lasting impacts of modification during testing. Defaults to built-in
@@ -69,7 +70,6 @@ class Pipeline(object):
         self.reader = reader
         self.writer = writer
         self._evaluators_by_stage = []
-        self._copy_fn = copy_fn
 
     def _read_documents(self, doc_paths=None):
         documents = []
@@ -189,7 +189,7 @@ class Pipeline(object):
             # overwrite the originals. This is especially important during
             # cross-validation, when we could otherwise overwrite data that will
             # later be used again for both training and testing.
-            documents = [self._copy_fn(document) for document in documents]
+            documents = [deepcopy(document) for document in documents]
             logging.info("Training on %d documents" % len(documents))
 
         for stage in self.stages:
@@ -236,7 +236,8 @@ class Pipeline(object):
 
     def __test_documents(self, documents):
         if self._evaluators_by_stage: # we're evaluating; avoid overwriting
-            original_documents = [self._copy_fn(doc) for doc in documents]
+            original_documents = freeze(documents) # freeze just as a precaution
+            documents = [deepcopy(doc) for doc in documents]
 
         for i, stage in enumerate(self.stages):
             if self._evaluators_by_stage:
@@ -457,11 +458,11 @@ class Stage(object):
     def _extract_instances(self, document, is_train, is_original):
         '''
         Sentences are the most commonly used unit of analysis for models, so
-        the default for SentencesDocuments is to return sentences as instances.
+        the default is to return sentences as instances.
         For other document types or to implement other behavior, this method
         must be overridden.
         '''
-        if isinstance(document, SentencesDocument):
+        if hasattr(document, 'sentences'): # Will work on SentencesDocument
             return document.sentences
         else:
             raise NotImplementedError

@@ -551,12 +551,6 @@ class StanfordParsedSentence(object):
                              " its root. Wow.")
 
     @staticmethod
-    def shallow_copy_doc_with_sentences_fixed(document):
-        copied = [StanfordParsedSentence.shallow_copy_with_sentences_fixed(s)
-                  for s in document.sentences]
-        return SentencesDocument(document, copied)
-
-    @staticmethod
     def shallow_copy_with_sentences_fixed(sentence):
         '''
         Creates a shallow copy of sentence, but with causation_instances and
