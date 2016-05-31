@@ -1,15 +1,16 @@
 from collections import defaultdict
 from copy import copy
 from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
+from itertools import chain
 import logging
 from nltk.tag.stanford import StanfordNERTagger
+import operator
 from os import path
 
 from data import StanfordParsedSentence, CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented, Enum
-import operator
 
 try:
     DEFINE_bool("iaa_calculate_partial", False,
@@ -46,7 +47,11 @@ class PossibleCausation(object):
         self.connective = connective
         self.true_causation_instance = true_causation_instance
         # Cause/effect spans are filled in by the second stage.
+        if cause is not None:
+            cause = sorted(cause, key=lambda token: token.index)
         self.cause = cause
+        if effect is not None:
+            cause = sorted(effect, key=lambda token: token.index)
         self.effect = effect
         # TODO: Add spans of plausible ranges for argument spans
 
@@ -160,22 +165,24 @@ class StanfordNERStage(Stage):
         self.name = name
         # Omit models
 
-    def train(self, documents):
+    def train(self, documents, instances_by_doc):
         pass
 
-    def _test_documents(self, documents, instances_by_doc, writer):
+    def _test_documents(self, documents, sentences_by_doc, writer):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
         tagger = StanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
-            for sentence in documents]
+            for sentence in chain.from_iterable(sentences_by_doc)]
         # Batch process sentences (faster than repeatedly running Stanford NLP)
         ner_results = tagger.tag_sents(tokens_by_sentence)
-        for sentence, sentence_result in zip(documents, ner_results):
+        all_sentences = chain.from_iterable(sentences_by_doc)
+        for sentence, sentence_result in zip(all_sentences, ner_results):
             sentence.tokens[0].ner_tag = None # ROOT has no NER tag
-            for token, token_result in zip(sentence.tokens[1:], sentence_result):
+            for token, token_result in zip(sentence.tokens[1:],
+                                           sentence_result):
                 tag = token_result[1]
                 token.ner_tag = self.NER_TYPES.index(tag.title())
             if writer:
