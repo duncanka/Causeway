@@ -215,6 +215,9 @@ def remove_smaller_matches(sentence):
     sentence.causation_instances = causations_to_keep
 
 
+RELATIVE_POSITIONS = Enum(['Before', 'Overlapping', 'After'])
+
+
 def get_causation_tuple(connective_tokens, cause_head, effect_head):
     return (tuple(t.index for t in connective_tokens),
             cause_head.index, effect_head.index)

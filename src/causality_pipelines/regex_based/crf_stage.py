@@ -3,7 +3,7 @@ from itertools import chain
 import logging
 import numpy as np
 
-from causality_pipelines import IAAEvaluator
+from causality_pipelines import IAAEvaluator, RELATIVE_POSITIONS
 from pipeline.models.structured import CRFModel
 from pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
 from pipeline import Stage
@@ -82,7 +82,6 @@ class ArgumentLabelerModel(CRFModel):
         else:
             return str(deps)
 
-    RELATIVE_POSITIONS = Enum(['Before', 'Overlapping', 'After'])
     @staticmethod
     def get_connective_relative_position(observation):
         word = observation.observation
@@ -90,11 +89,11 @@ class ArgumentLabelerModel(CRFModel):
         closest_connective_token, _ = sentence.get_closest_of_tokens(
             word, observation.instance.connective, False) # lexically closest
         if word.index < closest_connective_token.index:
-            return ArgumentLabelerModel.RELATIVE_POSITIONS.Before
+            return RELATIVE_POSITIONS.Before
         elif word.index > closest_connective_token.index:
-            return ArgumentLabelerModel.RELATIVE_POSITIONS.After
+            return RELATIVE_POSITIONS.After
         else:
-            return ArgumentLabelerModel.RELATIVE_POSITIONS.Overlapping
+            return RELATIVE_POSITIONS.Overlapping
 
     class LexicalDistanceFeatureExtractor(FeatureExtractor):
         ABS_DIST_NAME = 'absdist'
