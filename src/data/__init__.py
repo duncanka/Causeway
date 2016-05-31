@@ -645,6 +645,16 @@ class StanfordParsedSentence(object):
         else:
             return self.DOMINATION_DIRECTION.Independent
 
+    @staticmethod
+    def is_contiguous(tokens):
+        last_index = tokens[0].index
+        for token in tokens[1:]:
+            if token.pos in Token.PUNCT_TAGS or token.index == last_index + 1:
+                last_index = token.index
+            else:
+                return False
+
+        return True
 
     ###########################################
     # Private initialization support functions
