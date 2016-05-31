@@ -330,6 +330,14 @@ class StanfordParsedSentence(object):
                      self.tokens[edge_end_index])
                     for edge_end_index in self.edge_graph[token.index].indices]
 
+    def is_copula_head(self, token):
+        # Grab the sparse column of the edge matrix with the edges of this
+        # token, and check the labels on each non-zero edge.
+        for edge_end_index in self.edge_graph[token.index].indices:
+            # A copula edge to a child also indicates a clause.
+            if self.edge_labels[(token.index, edge_end_index)] == 'cop':
+                return True
+
     def is_clause_head(self, token):
         if token.pos == 'ROOT':
             return False
@@ -338,12 +346,9 @@ class StanfordParsedSentence(object):
             if token.pos != 'MD': # Modals, though verbs, aren't clause heads
                 return True
         except ValueError: # this POS wasn't in the list
-            # Grab the sparse column of the edge matrix with the edges of this
-            # token, and check the labels on each non-zero edge.
-            for edge_end_index in self.edge_graph[token.index].indices:
-                # A copula edge to a child also indicates a clause.
-                if self.edge_labels[(token.index, edge_end_index)] == 'cop':
-                    return True
+            if self.is_copula_head(token):
+                return True
+
             incoming = self.edge_graph[:, token.index]
             for edge_start_index in incoming.nonzero()[0]:
                 # An incoming clause edge also indicates a clause.
