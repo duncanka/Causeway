@@ -148,6 +148,7 @@ class Featurizer(object):
               of feature names, separated by FLAGS.conjoined_feature_sep. (This
               character should be escaped in the names of any conjoined features
               containing it, or the conjoined features may not work properly.)
+              The special name 'all' activates all non-conjoined features.
             - a NameDictionary that should be used for this Featurizer. This
               implicitly encodes the selected features.
         instance_filter is a filter function that takes an instance and returns
@@ -308,6 +309,13 @@ class Featurizer(object):
         # base features that aren't part of some conjoined feature?
         self._conjoined_extractors = []
         sep = FLAGS.conjoined_feature_sep
+
+        if 'all' in selected_features:
+            conjoined_names = [
+                name for name in selected_features
+                if len(self.separate_conjoined_feature_names(name, sep)) > 1]
+            selected_features = ([e.name for e in self.all_feature_extractors]
+                                 ) + conjoined_names
 
         for feature_name in selected_features:
             extractor_names = self.separate_conjoined_feature_names(
