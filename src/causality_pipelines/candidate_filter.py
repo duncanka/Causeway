@@ -8,13 +8,16 @@ import sklearn
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
-from causality_pipelines import IAAEvaluator, StanfordNERStage
+from causality_pipelines import (IAAEvaluator, StanfordNERStage,
+                                 RELATIVE_POSITIONS)
 from data import Token, StanfordParsedSentence, CausationInstance
 from iaa import make_annotation_comparator, stringify_connective
 from nlp.senna import SennaEmbeddings
 import numpy as np
 from pipeline import Stage
-from pipeline.featurization import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, VectorValuedFeatureExtractor
+from pipeline.featurization import (
+    KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
+    VectorValuedFeatureExtractor)
 from pipeline.models import ClassifierModel, MajorityClassClassifier
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from util.diff import SequenceDiff
@@ -212,7 +215,8 @@ class CausalPatternClassifierModel(ClassifierModel):
         if not CausalPatternClassifierModel._embeddings:
             CausalPatternClassifierModel._embeddings = SennaEmbeddings()
         try:
-            return CausalPatternClassifierModel._embeddings[arg_head.lowered_text]
+            return CausalPatternClassifierModel._embeddings[
+                arg_head.lowered_text]
         except KeyError: # Unknown word; return special vector
             return CausalPatternClassifierModel._embeddings['UNKNOWN']
 
@@ -228,10 +232,39 @@ class CausalPatternClassifierModel(ClassifierModel):
         v2 = CausalPatternClassifierModel.extract_vector(head2)
         return distance.cosine(v1, v2)
 
+    @staticmethod
+    def count_commas_between(cause, effect):
+        if not (StanfordParsedSentence.is_contiguous(cause) and
+                StanfordParsedSentence.is_contiguous(effect)):
+            return 0 # TODO: something more intelligent?
+
+        if cause[0].index < effect[0].index: # cause comes first
+            start, end = cause[-1].index + 1, effect[0].index
+        else:
+            start, end = effect[-1].index + 1, cause[0].index
+
+        count = 0
+        for token in cause[0].parent_sentence.tokens[start:end]:
+            if token.original_text == ',':
+                count += 1
+        return count
+
+    @staticmethod
+    def cause_pos_wrt_effect(cause, effect):
+        # NOTE: this works only because cause and effect spans are sorted.
+        if effect[0].index > cause[-1].index: # effect starts after cause ends
+            return RELATIVE_POSITIONS.Before
+        elif cause[0].index > effect[-1].index: # cause starts after effect ends
+            return RELATIVE_POSITIONS.After
+        else:
+            return RELATIVE_POSITIONS.Overlapping
+
     all_feature_extractors = []
 
 
+Numerical = FeatureExtractor.FeatureTypes.Numerical
 CausalPatternClassifierModel.all_feature_extractors = [
+    # TODO: make these indicate copulas for copulas.
     KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
                                 Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
@@ -257,12 +290,11 @@ CausalPatternClassifierModel.all_feature_extractors = [
         'effect_pos_gen', lambda part: part.effect_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
     FeatureExtractor('wordsbtw', CausalPatternClassifierModel.words_btw_heads,
-                     FeatureExtractor.FeatureTypes.Numerical),
+                     Numerical),
     FeatureExtractor('deppath', CausalPatternClassifierModel.extract_dep_path),
     FeatureExtractor('deplen',
                      lambda part: len(part.sentence.extract_dependency_path(
-                        part.cause_head, part.effect_head)),
-                     FeatureExtractor.FeatureTypes.Numerical),
+                        part.cause_head, part.effect_head)), Numerical),
     SetValuedFeatureExtractor(
         'connective', lambda part: part.connective_patterns),
     FeatureExtractor('tenses',
@@ -313,18 +345,30 @@ CausalPatternClassifierModel.all_feature_extractors = [
     FeatureExtractor(
         'vector_dist',
         lambda part: CausalPatternClassifierModel.extract_vector_dist(
-                         part.cause_head, part.effect_head),
-        FeatureExtractor.FeatureTypes.Numerical),
+                         part.cause_head, part.effect_head), Numerical),
     FeatureExtractor(
         'vector_cos_dist',
         lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
-                        part.cause_head, part.effect_head),
-        FeatureExtractor.FeatureTypes.Numerical),
+                        part.cause_head, part.effect_head), Numerical),
     KnownValuesFeatureExtractor(
         'ners', lambda part: '/'.join(
                     StanfordNERStage.NER_TYPES[arg_head.ner_tag]
                     for arg_head in [part.cause_head, part.effect_head]),
-        StanfordNERStage.NER_TYPES)
+        StanfordNERStage.NER_TYPES),
+    FeatureExtractor(
+        'commas_btw',
+        lambda part: CausalPatternClassifierModel.count_commas_between(
+            part.cause, part.effect), Numerical),
+    FeatureExtractor('cause_len', lambda part: len(part.cause), Numerical),
+    FeatureExtractor('effect_len', lambda part: len(part.effect), Numerical),
+    FeatureExtractor(
+        'args_rel_pos',
+        lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
+            part.cause, part.effect)),
+    FeatureExtractor(
+        'heads_rel_pos',
+        lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
+            [part.cause_head], [part.effect_head]))
 ]
 
 
