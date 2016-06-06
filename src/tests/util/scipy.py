@@ -1,12 +1,17 @@
 from __future__ import absolute_import
 import numpy as np
 import numpy.ma as ma
-from scipy.sparse import lil_matrix
+from scipy.sparse import (bsr_matrix, coo_matrix, csc_matrix, csr_matrix,
+                          lil_matrix)
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics.classification import accuracy_score
 import unittest
 
-from util.scipy import add_rows_and_cols_to_matrix, CycleError, dreyfus_wagner, \
-    get_incoming_indices, get_outgoing_indices, longest_path_in_tree, tarjan_topological_sort, UnconnectedNodesError
-from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix
+from util.scipy import (
+    add_rows_and_cols_to_matrix, CycleError, dreyfus_wagner,
+    get_incoming_indices, get_outgoing_indices, longest_path_in_tree,
+    tarjan_topological_sort, UnconnectedNodesError,
+    AutoWeightedVotingClassifier)
 from tests import NumpyAwareTestCase
 
 
@@ -290,6 +295,42 @@ class TopologicalSortTest(unittest.TestCase):
             graph = _generate_graph(graph_generator, (3, 3), edges)
             self.assertRaises(CycleError,
                               lambda: tarjan_topological_sort(graph))
+
+
+class AutoWeightedVotingClassifierTest(NumpyAwareTestCase):
+    def setUp(self):
+        base_c0 = DummyClassifier(strategy='prior')
+        base_c0.fit([[], [], []], [0, 0, 1])
+        base_c1 = DummyClassifier(strategy='prior')
+        base_c1.fit([[], [], []], [0, 1, 1])
+        base_classifiers = [('c0', base_c0), ('c1', base_c1)]
+        self.classifier = AutoWeightedVotingClassifier(
+            accuracy_score, base_classifiers, voting='soft')
+        self.X = np.array([[0, 0, 0, 2],
+                           [0, 0, 0, 4],
+                           [1, 1, 1, 3]])
+        self.y = np.array([1, 0, 0])
+
+    def test_fit_weights(self):
+        self.classifier.fit_weights(self.X, self.y)
+        self.assertEqual([1 / 3., 2 / 3.], self.classifier.weights)
+
+    def test_predict_before_fit(self):
+        probs = self.classifier.predict_proba(self.X)
+        expected = np.full((3, 2), 0.5)
+        self.assertArraysEqual(expected, probs)
+
+        self.classifier.fit_weights(self.X, self.y)
+        expected = (1 / 3. * np.tile([1 / 3., 2 / 3.], [3, 1])
+                    + 2 / 3. * np.tile([2 / 3., 1 / 3.], [3, 1]))
+        probs = self.classifier.predict_proba(self.X)
+        self.assertArraysEqual(expected, probs)
+
+    def test_full_fit(self):
+        self.classifier.fit(self.X, self.y)
+        expected = np.tile([2 / 3., 1 / 3.], [3, 1])
+        probs = self.classifier.predict_proba(self.X)
+        self.assertArraysEqual(expected, probs)
 
 
 if __name__ == "__main__":

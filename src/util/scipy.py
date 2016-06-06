@@ -4,6 +4,8 @@ import numpy as np
 import numpy.ma as ma
 from scipy.sparse import lil_matrix
 from scipy.sparse.csgraph import shortest_path, breadth_first_order
+from sklearn.ensemble.voting_classifier import VotingClassifier
+from sklearn.preprocessing.label import LabelEncoder
 
 from util import pairwise, Enum
 
@@ -539,3 +541,44 @@ def tarjan_topological_sort(tree):
 
     sorted_nodes.reverse()
     return sorted_nodes
+
+
+class DummyLabelEncoder(LabelEncoder):
+    def fit(self, y):
+        return self
+    
+    def fit_transform(self, y):
+        return y
+    
+    def transform(self, y):
+        return y
+
+    def inverse_transform(self, y):
+        return y
+
+
+class AutoWeightedVotingClassifier(VotingClassifier):
+    '''
+    Voting classifier that fits the classifier weights automatically depending
+    on how accurate each is on the training data.
+    '''
+    def __init__(self, score_fn, *args, **kwargs):
+        self.score_fn = score_fn
+        super(AutoWeightedVotingClassifier, self).__init__(*args, **kwargs)
+
+        # If the original estimators were fitted, allow using the classifier
+        # even before fitting.
+        self.estimators_ = self.named_estimators.values()
+        self.le_ = DummyLabelEncoder()
+
+    def fit_weights(self, X, y):
+        self.weights = []
+        for estimator in self.estimators_:
+            predicted = estimator.predict(X)
+            self.weights.append(self.score_fn(y, predicted))
+        return self.weights
+
+    def fit(self, X, y):
+        retval = super(AutoWeightedVotingClassifier, self).fit(X, y)
+        self.fit_weights(X, y)
+        return retval
