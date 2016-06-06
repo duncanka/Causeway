@@ -91,12 +91,20 @@ class CausalPatternClassifierModel(ClassifierModel):
             classifier, selected_features=selected_features,
             model_path=model_path, save_featurized=save_featurized)
 
-    def _get_gold_labels(self, classifier_parts):
+    @staticmethod
+    def _get_gold_labels(classifier_parts):
         return [part.connective_correct for part in classifier_parts]
 
     #############################
     # Feature extraction methods
     #############################
+
+    @staticmethod
+    def get_pos_with_copulas(token):
+        if token.parent_sentence.is_copula_head(token):
+            return token.pos + '<COP>'
+        else:
+            return token.pos
 
     @staticmethod
     def words_btw_heads(part):
@@ -168,22 +176,25 @@ class CausalPatternClassifierModel(ClassifierModel):
 
     @staticmethod
     def extract_parent_pos(part):
-        return part.sentence.get_most_direct_parent(part.connective_head)[1].pos
+        parent = part.sentence.get_most_direct_parent(part.connective_head)[1]
+        return CausalPatternClassifierModel.get_pos_with_copulas(parent)
 
     _ALL_POS_PAIRS = ['/'.join(tags) for tags in itertools.product(
                         Token.ALL_POS_TAGS, Token.ALL_POS_TAGS)]
     @staticmethod
-    def extract_pos_bigram(part, argument_head):
-        if argument_head.index < 2:
+    def extract_pos_bigram(part, arg_head):
+        if arg_head.index < 2:
             prev_pos = 'NONE'
+            pos = CausalPatternClassifierModel.get_pos_with_copulas(arg_head)
         else:
-            previous_token = part.sentence.tokens[argument_head.index - 1]
+            previous_token = part.sentence.tokens[arg_head.index - 1]
             # TODO: would this be helpful or harmful?
             # while previous_token.pos in Token.PUNCT_TAGS:
             #     previous_token = part.sentence.tokens[
             #         previous_token.index - 1]
-            prev_pos = previous_token.pos
-        '/'.join([prev_pos, argument_head.pos])
+            prev_pos, pos = [CausalPatternClassifierModel.get_pos_with_copulas(
+                                token) for token in previous_token, arg_head]
+        '/'.join([prev_pos, pos])
 
     @staticmethod
     def extract_wn_hypernyms(token):
@@ -265,13 +276,16 @@ class CausalPatternClassifierModel(ClassifierModel):
 Numerical = FeatureExtractor.FeatureTypes.Numerical
 CausalPatternClassifierModel.all_feature_extractors = [
     # TODO: make these indicate copulas for copulas.
-    KnownValuesFeatureExtractor('cause_pos', lambda part: part.cause_head.pos,
-                                Token.ALL_POS_TAGS),
-    KnownValuesFeatureExtractor('effect_pos', lambda part: part.effect_head.pos,
-                                Token.ALL_POS_TAGS),
-    KnownValuesFeatureExtractor('pos_pair', lambda part: '/'.join([
-                                    part.cause_head.pos, part.effect_head.pos]),
-                                CausalPatternClassifierModel._ALL_POS_PAIRS),
+    KnownValuesFeatureExtractor(
+        'cause_pos',
+        lambda part: CausalPatternClassifierModel.get_pos_with_copulas(
+                        part.cause_head),
+        Token.ALL_POS_TAGS),
+    KnownValuesFeatureExtractor(
+        'effect_pos',
+        lambda part: CausalPatternClassifierModel.get_pos_with_copulas(
+                        part.effect_head),
+        Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
         'cause_pos_bigram',
         lambda part: CausalPatternClassifierModel.extract_pos_bigram(
