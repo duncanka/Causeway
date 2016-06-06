@@ -463,8 +463,17 @@ class PatternBasedCausationFilter(StructuredModel):
                 classifier = CausalPatternMajorityClassModel()
                 self.classifiers[connective] = classifier
             else:
-                classifier = self.classifiers[connective]
                 pcs = pcs_with_both_args # train only on instances with 2 args
+                labels = CausalPatternClassifierModel._get_gold_labels(pcs)
+                # Some classifiers don't deal well with all labels being the
+                # same. If this is the case, we might as well be using majority
+                # class anyway, so just do that.
+                if len(set(labels)) == 1:
+                    classifier = CausalPatternMajorityClassModel()
+                    classifier.all_same = True # for tracking purposes
+                    self.classifiers[connective] = classifier
+                else:
+                    classifier = self.classifiers[connective]
 
             try:
                 classifier.train(pcs)
