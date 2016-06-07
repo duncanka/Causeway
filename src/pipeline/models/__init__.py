@@ -20,10 +20,15 @@ except DuplicateFlagError as e:
 
 
 class Model(object):
+    def __init__(self, *args, **kwargs):
+        if args or kwargs:
+            logging.debug("Extra model arguments: args=%s, kwargs=%s",
+                          args, kwargs)
+
     def train(self, instances):
         self.reset() # Reset state in case we've been previously trained.
-        train_result = self._train_model(instances)
-        self._post_model_train(train_result)
+        self._train_model(instances)
+        self._post_model_train()
 
     # TODO: refactor so that overriding behavior is similar between train and
     # test (i.e., _test_model should be the thing to override)
@@ -52,60 +57,115 @@ class Model(object):
     def _post_model_load(self, load_result):
         pass
 
-    def _post_model_train(self, train_result):
+    def _post_model_train(self):
         pass
 
     def reset(self):
         pass
 
 
-class FeaturizedModel(Model):
+class FeaturizedModelBase(Model):
     '''
-    Subclasses' _load_model function should return a FeatureNameDictionary or a
-    list of them, or else the _post_model_load hook must be overridden.
+    Subclasses' _load_model function should return a list of
+    FeatureNameDictionary objects, one per featurizer, or else the
+    _post_model_load hook must be overridden.
     '''
 
-    def __init__(self, selected_features, model_path, save_featurized, *args,
-                 **kwargs):
-        super(FeaturizedModel, self).__init__(*args, **kwargs)
+    def __init__(self, selected_features_lists, model_path, save_featurized,
+                 *args, **kwargs):
+        super(FeaturizedModelBase, self).__init__(
+            model_path=model_path, save_featurized=save_featurized,
+            *args, **kwargs)
         self.save_featurized = save_featurized
 
         if model_path:
             self.load(model_path)
-        else:
-            if selected_features is None:
+        else: # Featurizers won't be set up by post-load hook
+            if selected_features_lists is None:
                 raise FeaturizationError(
                     'Featurized model must be initialized with either selected'
                     ' features or a model path')
+            self.__set_up_featurizers(selected_features_lists)
+
+    def __set_up_featurizers(self, featurizer_params_by_group):
+        extractor_groups = self._get_feature_extractor_groups()
+        self.featurizers = [
+            self._make_featurizer(extractors, featurizer_params, i)
+            for i, (featurizer_params, extractors)
+            in enumerate(zip(featurizer_params_by_group, extractor_groups))]
+
+    def _make_featurizer(self, extractors, featurizer_params, featurizer_index):
+        return Featurizer(extractors, featurizer_params, self.save_featurized)
+
+    @classmethod
+    def _get_feature_extractor_groups(klass):
+        raise NotImplementedError
+
+    def _post_model_load(self, feature_name_dictionaries):
+        super(FeaturizedModelBase,
+              self)._post_model_load(feature_name_dictionaries)
+        self.__set_up_featurizers(feature_name_dictionaries)
+
+    def reset(self):
+        super(FeaturizedModelBase, self).reset()
+        for featurizer in self.featurizers:
+            featurizer.reset()
+
+
+class FeaturizedModel(FeaturizedModelBase):
+    def __init__(self, selected_features=None, model_path=None,
+                 save_featurized=False, *args, **kwargs):
+        super(FeaturizedModel, self).__init__(
+            selected_features_lists=[selected_features], model_path=model_path,
+            save_featurized=save_featurized, *args, **kwargs)
+        self.featurizer = self.featurizers[0]
+
+    def _post_model_load(self, feature_name_dictionary):
+        super(FeaturizedModel, self)._post_model_load([feature_name_dictionary])
+        self.featurizer = self.featurizers[0]
+
+    @classmethod
+    def _get_feature_extractor_groups(klass):
+        return [klass.all_feature_extractors]
 
     # Subclasses should override this class-level variable to include actual
     # feature extractor objects.
     all_feature_extractors = []
 
 
+class MultiplyFeaturizedModel(FeaturizedModelBase):
+    def __init__(self, model_path=None, selected_features=None,
+                 *args, **kwargs):
+        selected_features_lists = []
+        selected_features = set(selected_features)
+        for extractor_group in self._get_feature_extractor_groups():
+            group_selected_names = [e.name for e in extractor_group
+                                    if e.name in selected_features]
+            selected_features_lists.append(group_selected_names)
+
+        super(MultiplyFeaturizedModel, self).__init__(
+            model_path=model_path,
+            selected_features_lists=selected_features_lists, *args, **kwargs)
+
+    @classmethod
+    def _get_feature_extractor_groups(klass):
+        return klass.feature_extractor_groups
+    
+    # Subclasses should override this class-level variable to include lists of
+    # actual feature extractor objects.
+    feature_extractor_groups = []
+    
+
 class ClassifierModel(FeaturizedModel):
-    def __init__(self, classifier, selected_features=None,
-                 model_path=None, save_featurized=False):
+    ''' Wraps a scikit-learn classifier for use in a pipeline stage. '''
+
+    def __init__(self, classifier, *args, **kwargs):
         """
         Note that classifier must support the fit and predict methods in the
         style of scikit-learn.
         """
         self.classifier = classifier
-        super(ClassifierModel, self).__init__(
-            selected_features, model_path, save_featurized)
-        if not model_path: # Won't be taken care of by _post_model_load
-            self.featurizer = Featurizer(self.all_feature_extractors,
-                                         selected_features,
-                                         save_featurized=self.save_featurized)
-
-    def _post_model_load(self, feature_name_dictionary):
-        super(ClassifierModel, self)._post_model_load(feature_name_dictionary)
-        self.featurizer = Featurizer(
-            self.all_feature_extractors, feature_name_dictionary,
-            save_featurized=self.save_featurized)
-
-    def reset(self):
-        self.featurizer.reset()
+        super(ClassifierModel, self).__init__(*args, **kwargs)
 
     def _train_model(self, instances):
         # print "Featurizing", len(instances), "instances"
@@ -151,7 +211,8 @@ class ClassifierModel(FeaturizedModel):
             label = bool(labels[i])
             gold_label = bool(gold_labels[i])
             strings.append('{%s} -> %s / %s' % (', '.join(
-                ['%s: %s' % (key, d[key]) for key in sorted(d.keys())]), label, gold_label))
+                ['%s: %s' % (key, d[key]) for key in sorted(d.keys())]), label,
+                gold_label))
         strings.sort()
         print '\n'.join(strings)
         # '''
@@ -233,6 +294,7 @@ class ClassBalancingClassifierWrapper(BaseEstimator):
         return self.classifier.predict(data)
 
 
+# TODO: remove in favor of sklearn's DummyClassifier?
 class MajorityClassClassifier(ClassifierModel):
     def __init__(self):
         self.decision = None

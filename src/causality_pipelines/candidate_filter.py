@@ -86,9 +86,9 @@ class CausalPatternMajorityClassModel(MajorityClassClassifier):
 
 class CausalPatternClassifierModel(ClassifierModel):
     def __init__(self, classifier, selected_features=None,
-        model_path=None, save_featurized=False):
+                 model_path=None, save_featurized=False):
         super(CausalPatternClassifierModel, self).__init__(
-            classifier, selected_features=selected_features,
+            classifier=classifier, selected_features=selected_features,
             model_path=model_path, save_featurized=save_featurized)
 
     @staticmethod
@@ -468,7 +468,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 # Some classifiers don't deal well with all labels being the
                 # same. If this is the case, we might as well be using majority
                 # class anyway, so just do that.
-                if len(set(labels)) == 1:
+                if len(set(labels)) < 2:
                     classifier = CausalPatternMajorityClassModel()
                     classifier.all_same = True # for tracking purposes
                     self.classifiers[connective] = classifier

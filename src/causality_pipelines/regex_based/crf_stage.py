@@ -36,12 +36,12 @@ class ArgumentLabelerModel(CRFModel):
     EFFECT_LABEL = 'Effect'
     NONE_LABEL = 'None'
 
-    def __init__(self, training_algorithm, training_params):
+    def __init__(self, training_algorithm, training_params, *args, **kwargs):
         super(ArgumentLabelerModel, self).__init__(
             selected_features=FLAGS.arg_label_features,
             model_file_path=FLAGS.arg_label_model_path,
             training_algorithm=training_algorithm,
-            training_params=training_params)
+            training_params=training_params, *args, **kwargs)
 
     def _sequence_for_instance(self, possible_causation, is_train):
         return possible_causation.sentence.tokens[1:] # all tokens but ROOT

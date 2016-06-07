@@ -356,7 +356,7 @@ class Featurizer(object):
 
 class DictOnlyFeaturizer(Featurizer):
     def __init__(self, feature_extractors, selected_features,
-                 instance_filter=None, save_featurized=False):
+                 save_featurized=False, instance_filter=None):
         self.all_feature_extractors = feature_extractors
         self.save_featurized = save_featurized
         self._instance_filter = instance_filter

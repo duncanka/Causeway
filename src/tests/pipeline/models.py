@@ -6,7 +6,8 @@ from scipy.sparse import lil_matrix, vstack
 import unittest
 
 from pipeline.featurization import FeatureExtractor, Featurizer
-from pipeline.models import ClassBalancingClassifierWrapper, FeaturizationError, ClassifierModel
+from pipeline.models import (ClassBalancingClassifierWrapper,
+                             FeaturizationError, ClassifierModel)
 from pipeline.models.structured import Semiring, ViterbiDecoder
 
 
@@ -187,7 +188,8 @@ class ClassifierTest(unittest.TestCase):
                                       FeatureExtractor("test2", test2, Num)]
 
         c = CheckingClassifier()
-        m = TestClassifierModel(c, ["test1", "test2"])
+        m = TestClassifierModel(classifier=c,
+                                selected_features=["test1", "test2"])
         c.fit = MagicMock()
         c.predict = MagicMock(return_value=np.array([1, 0]))
         m._get_gold_labels = MagicMock(return_value=LABELS)

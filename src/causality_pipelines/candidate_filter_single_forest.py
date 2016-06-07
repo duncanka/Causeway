@@ -65,11 +65,14 @@ class PatternFilterPart(object):
 # instances for each sentence, and then we want to choose the best list for the
 # entire sentence.) In practice, it is easier to describe the classifier through
 # composition rather than inheritance.
+# TODO: is this still true?
 
 class CausalPatternClassifierModel(ClassifierModel):
     def __init__(self, classifier, selected_features=None,
         model_path=None, save_featurized=False):
-        ClassifierModel.__init__(self, classifier, selected_features=selected_features, model_path=model_path, save_featurized=save_featurized)
+        super(CausalPatternClassifierModel, self).__init__(
+            self, classifier=classifier, selected_features=selected_features,
+            model_path=model_path, save_featurized=save_featurized)
 
     def _get_gold_labels(self, classifier_parts):
         return [part.connective_correct for part in classifier_parts]

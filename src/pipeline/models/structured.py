@@ -6,8 +6,8 @@ import pycrfsuite
 import time
 from types import MethodType
 
-from pipeline.models import Model, FeaturizedModel
-from pipeline.featurization import Featurizer, DictOnlyFeaturizer
+from pipeline.models import Model, FeaturizedModel, MultiplyFeaturizedModel
+from pipeline.featurization import DictOnlyFeaturizer, Featurizer
 
 try:
     DEFINE_bool('pycrfsuite_verbose', False,
@@ -61,7 +61,7 @@ class StructuredModel(Model):
         raise NotImplementedError
 
 
-class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
+class FeaturizedStructuredModel(StructuredModel, MultiplyFeaturizedModel):
     '''
     If there is more than one part type, the subclass's _load_model() function
     should return a list of NameDictionary objects and/or selected features
@@ -70,7 +70,8 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
     these dictionaries.
     '''
     def __init__(self, decoder, part_types, selected_features=None,
-                 part_filters=None, model_path=None, save_featurized=False):
+                 part_filters=None, model_path=None, save_featurized=False,
+                 *args, **kwargs):
         """
         decoder is some StructuredDecoder object.
         part_types is a list of types of part that will need to be featurized
@@ -98,34 +99,12 @@ class FeaturizedStructuredModel(StructuredModel, FeaturizedModel):
 
         super(FeaturizedStructuredModel, self).__init__(
             decoder=decoder, selected_features=selected_features,
-            model_path=model_path, save_featurized=save_featurized)
-        if not model_path: # load() won't be called by FeaturizedModel
-            self._set_up_featurizers(selected_features)
+            model_path=model_path, save_featurized=save_featurized,
+            *args, **kwargs)
 
-    def _make_featurizer(self, featurizer_params, part_filter):
-        return Featurizer(self.all_feature_extractors, featurizer_params,
-                          part_filter, self.save_featurized)
-
-    def _set_up_featurizers(self, selected_features_or_name_dicts):
-        self.featurizers = []
-        if not hasattr(selected_features_or_name_dicts[0], '__iter__'):
-            # Only one list of selected features, because only one part type.
-            selected_features_or_name_dicts = [selected_features_or_name_dicts]
-        assert len(self.part_types) == len(selected_features_or_name_dicts)
-        for featurizer_params, part_filter in zip(
-            selected_features_or_name_dicts, self._part_filters):
-            featurizer = self._make_featurizer(featurizer_params, part_filter)
-            self.featurizers.append(featurizer)
-
-    def _post_model_load(self, feature_name_dictionaries):
-        super(FeaturizedStructuredModel, self)._post_model_load(
-            feature_name_dictionaries)
-        self._set_up_featurizers(feature_name_dictionaries)
-
-    def reset(self):
-        super(FeaturizedStructuredModel, self).reset()
-        for featurizer in self.featurizers:
-            featurizer.reset()
+    def _make_featurizer(self, extractors, featurizer_params, featurizer_index):
+        return Featurizer(extractors, featurizer_params, self.save_featurized,
+                          self._part_filters[featurizer_index])
 
     def _score_parts(self, instance, instance_parts):
         featurized_parts_by_type = []
@@ -307,24 +286,25 @@ class CRFModel(FeaturizedStructuredModel):
 
     def __init__(self, selected_features, model_file_path, training_algorithm,
                  training_params, decoder=CRFDecoder(), part_filters=None,
-                 load_from_file=False, save_featurized=False):
+                 load_from_file=False, save_featurized=False, *args, **kwargs):
         self.model_file_path = model_file_path
         if not load_from_file:
             model_file_path = None # to tell the super constructor not to load
         super(CRFModel, self).__init__(
             decoder=decoder, part_types=[CRFModel.CRFPart],
             selected_features=selected_features, part_filters=part_filters,
-            model_path=model_file_path, save_featurized=save_featurized)
+            model_path=model_file_path, save_featurized=save_featurized,
+            *args, **kwargs)
         self.training_algorithm = training_algorithm
         self.training_params = training_params
         self.tagger = None
 
     # Override featurizer creation to make default featurization produce a dict
     # of feature values rather than a matrix.
-    def _make_featurizer(self, featurizer_params, part_filter):
-        return DictOnlyFeaturizer(self.all_feature_extractors,
-                                  featurizer_params, part_filter,
-                                  self.save_featurized)
+    def _make_featurizer(self, extractors, featurizer_params, featurizer_index):
+        part_filter = self._part_filters[featurizer_index]
+        return DictOnlyFeaturizer(extractors, featurizer_params,
+                                  self.save_featurized, part_filter)
 
     @staticmethod
     def __handle_training_error(trainer, log):
@@ -363,8 +343,8 @@ class CRFModel(FeaturizedStructuredModel):
         self.tagger = pycrfsuite.Tagger()
         self.tagger.open(self.model_file_path)
 
-    def _post_model_train(self, feature_name_dictionaries):
-        super(CRFModel, self)._post_model_train(feature_name_dictionaries)
+    def _post_model_train(self):
+        super(CRFModel, self)._post_model_train()
         # Initialize tagger from on-disk file
         self._load_model(self.model_file_path)
 
@@ -380,3 +360,10 @@ class CRFModel(FeaturizedStructuredModel):
 
     def _sequence_for_instance(self, instance, is_train):
         raise NotImplementedError
+
+    def _get_feature_extractor_groups(self):
+        return [self.all_feature_extractors]
+
+    # Subclasses should override this class-level variable to include actual
+    # feature extractor objects.
+    all_feature_extractors = []
