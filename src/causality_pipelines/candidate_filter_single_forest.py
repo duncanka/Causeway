@@ -1,5 +1,6 @@
 from collections import defaultdict
-from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
+from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
+                    DuplicateFlagError)
 import itertools
 import logging
 from nltk.corpus import wordnet
@@ -11,7 +12,9 @@ from iaa import make_annotation_comparator
 from nlp.senna import SennaEmbeddings
 import numpy as np
 from pipeline import Stage
-from pipeline.featurization import KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor, VectorValuedFeatureExtractor
+from pipeline.featurization import (
+    KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
+    VectorValuedFeatureExtractor)
 from pipeline.models import ClassifierModel
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from util.diff import SequenceDiff
