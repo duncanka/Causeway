@@ -26,7 +26,7 @@ from util import print_indented
 
 
 try:
-    DEFINE_enum('classifier_model', 'tree',
+    DEFINE_enum('classifier_model', 'logistic',
                 ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
                 'What type of machine learning model to use as the underlying'
                 ' causality filter classifier')

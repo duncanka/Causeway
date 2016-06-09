@@ -1,11 +1,11 @@
 from collections import defaultdict
 from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
-import itertools
+from itertools import chain, product
 import logging
 from nltk.corpus import wordnet
+import numpy as np
 from scipy.spatial import distance
 import sklearn
-from sklearn.dummy import DummyClassifier
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
@@ -14,14 +14,13 @@ from causality_pipelines import (IAAEvaluator, StanfordNERStage,
 from data import Token, StanfordParsedSentence, CausationInstance
 from iaa import make_annotation_comparator, stringify_connective
 from nlp.senna import SennaEmbeddings
-import numpy as np
-
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
-    VectorValuedFeatureExtractor)
-from pipeline.models import ClassifierModel, MajorityClassClassifier
+    VectorValuedFeatureExtractor, FeaturizationError)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
+from skpipeline import (make_featurizing_estimator,
+                        make_mostfreq_featurizing_estimator)
 from util.diff import SequenceDiff
 from util.scipy import AutoWeightedVotingClassifier
 
@@ -79,12 +78,7 @@ class PatternFilterPart(object):
         self.connective_correct = connective_correct
 
 
-class CausalPatternMajorityClassModel(MajorityClassClassifier):
-    def _get_gold_labels(self, classifier_parts):
-        return [part.connective_correct for part in classifier_parts]
-
-
-class CausalPatternClassifierModel(ClassifierModel):
+class CausalPatternClassifierModel(object):
     def __init__(self, classifier, selected_features=None,
                  model_path=None, save_featurized=False):
         super(CausalPatternClassifierModel, self).__init__(
@@ -179,7 +173,7 @@ class CausalPatternClassifierModel(ClassifierModel):
         parent = part.sentence.get_most_direct_parent(part.connective_head)[1]
         return CausalPatternClassifierModel.get_pos_with_copulas(parent)
 
-    _ALL_POS_PAIRS = ['/'.join(tags) for tags in itertools.product(
+    _ALL_POS_PAIRS = ['/'.join(tags) for tags in product(
                         Token.ALL_POS_TAGS, Token.ALL_POS_TAGS)]
     @staticmethod
     def extract_pos_bigram(part, arg_head):
@@ -274,8 +268,18 @@ class CausalPatternClassifierModel(ClassifierModel):
 
 
 Numerical = FeatureExtractor.FeatureTypes.Numerical
-CausalPatternClassifierModel.all_feature_extractors = [
-    # TODO: make these indicate copulas for copulas.
+
+CausalPatternClassifierModel.connective_feature_extractors = [
+    SetValuedFeatureExtractor(
+        'connective', lambda part: part.connective_patterns),
+    FeatureExtractor('cn_words',
+                     lambda part: ' '.join([t.lowered_text
+                                            for t in part.connective])),
+    FeatureExtractor('cn_lemmas',
+                     lambda part: ' '.join([t.lemma
+                                            for t in part.connective])), ]
+
+CausalPatternClassifierModel.general_feature_extractors = [
     KnownValuesFeatureExtractor(
         'cause_pos',
         lambda part: CausalPatternClassifierModel.get_pos_with_copulas(
@@ -309,8 +313,6 @@ CausalPatternClassifierModel.all_feature_extractors = [
     FeatureExtractor('deplen',
                      lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)), Numerical),
-    SetValuedFeatureExtractor(
-        'connective', lambda part: part.connective_patterns),
     FeatureExtractor('tenses',
                      lambda part: '/'.join(
                         [CausalPatternClassifierModel.extract_tense(head)
@@ -323,12 +325,6 @@ CausalPatternClassifierModel.all_feature_extractors = [
                      CausalPatternClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
                      CausalPatternClassifierModel.extract_parent_pos),
-    FeatureExtractor('cn_words',
-                     lambda part: ' '.join([t.lowered_text
-                                            for t in part.connective])),
-    FeatureExtractor('cn_lemmas',
-                     lambda part: ' '.join([t.lemma
-                                            for t in part.connective])),
     SetValuedFeatureExtractor(
         'cause_hypernyms',
         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
@@ -385,6 +381,10 @@ CausalPatternClassifierModel.all_feature_extractors = [
             [part.cause_head], [part.effect_head]))
 ]
 
+CausalPatternClassifierModel.all_feature_extractors = (
+    CausalPatternClassifierModel.connective_feature_extractors
+    + CausalPatternClassifierModel.general_feature_extractors)
+
 
 class PatternBasedCausationFilter(StructuredModel):
     def __init__(self, classifier, save_featurized=False):
@@ -392,18 +392,37 @@ class PatternBasedCausationFilter(StructuredModel):
             PatternBasedFilterDecoder())
         
         if FLAGS.filter_feature_select_k == -1:
-            per_conn_classifier = classifier
+            base_per_conn_classifier = classifier
+            general_classifier = classifier
         else:
             k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
-            per_conn_classifier = SKLPipeline([
+            base_per_conn_classifier = SKLPipeline([
                 ('feature_selection', k_best),
                 ('classification', classifier)
             ])
+            general_classifier = sklearn.clone(base_per_conn_classifier)
 
-        self.base_classifier = AutoWeightedVotingClassifier(
-            estimators=[('per_conn', per_conn_classifier),
-                        ('mostfreq', DummyClassifier(strategy='prior'))],
-            voting='soft')
+        all_extractors = CausalPatternClassifierModel.all_feature_extractors
+        general_extractors = (
+            CausalPatternClassifierModel.general_feature_extractors)
+        all_extractor_names = set([e.name for e in all_extractors] + ['all'])
+        for selected_name in FLAGS.filter_features:
+            if selected_name not in all_extractor_names:
+                raise FeaturizationError('Invalid feature name: %s'
+                                         % selected_name)
+
+        self.base_per_conn_classifier = make_featurizing_estimator(
+            base_per_conn_classifier, all_extractors,
+            self._get_selected_features_for_extractors(FLAGS.filter_features,
+                                                       all_extractors),
+            'per_conn_classifier')
+        self.general_classifier = make_featurizing_estimator(
+            general_classifier, general_extractors,
+            self._get_selected_features_for_extractors(FLAGS.filter_features,
+                                                       general_extractors),
+            'global_causality_classifier')
+        self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
+            'most_freq_classifier')
 
         self.classifiers = {}
         comparator = make_annotation_comparator(
@@ -417,6 +436,11 @@ class PatternBasedCausationFilter(StructuredModel):
                 'tregex' not in FLAGS.pipeline_type)
             logging.debug("Set flag filter_diff_correctness to %s"
                           % FLAGS.filter_diff_correctness)
+
+    @staticmethod
+    def _get_selected_features_for_extractors(selected_features, extractors):
+        extractor_names = [e.name for e in extractors] + ['all']
+        return [name for name in selected_features if name in extractor_names]
 
     def _make_parts(self, sentence, is_train):
         if is_train:
@@ -452,39 +476,48 @@ class PatternBasedCausationFilter(StructuredModel):
         self.classifiers = {}
 
     def _train_structured(self, sentences, parts_by_sentence):
-        pcs_by_connective = {}
-        for pc in itertools.chain.from_iterable(parts_by_sentence):
+        all_pcs = list(chain.from_iterable(parts_by_sentence))
+        all_labels = CausalPatternClassifierModel._get_gold_labels(all_pcs)
+        self.general_classifier.fit(all_pcs, all_labels)
+
+        pcs_by_connective = defaultdict(list)
+        for pc in all_pcs:
             connective = stringify_connective(pc)
-            if connective not in self.classifiers:
-                self.classifiers[connective] = CausalPatternClassifierModel(
-                    sklearn.clone(self.base_classifier), FLAGS.filter_features)
-                pcs_by_connective[connective] = [pc]
-            else:
-                pcs_by_connective[connective].append(pc)
+            pcs_by_connective[connective].append(pc)
 
         for connective, pcs in pcs_by_connective.iteritems():
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
             pcs = pcs_with_both_args # train only on instances with 2 args
             labels = CausalPatternClassifierModel._get_gold_labels(pcs)
-            # Some classifiers don't deal well with all labels being the
-            # same. If this is the case, it should just default to majority
-            # class anyway, so just do that.
-            if len(set(labels)) < 2:
-                classifier = CausalPatternMajorityClassModel()
-                classifier.all_same = True # for tracking purposes
-                self.classifiers[connective] = classifier
-            else:
-                classifier = self.classifiers[connective]
 
-            try:
-                classifier.train(pcs)
-            except ValueError: # can happen if k > number of features
-                pipeline = classifier.classifier.estimators[0][1]
-                pipeline.named_steps['feature_selection'].k = 'all'
-                classifier.train(pcs)
+            # Some classifiers don't deal well with all labels being the same.
+            # If this is the case, it should just default to majority class
+            # anyway, so just do that.
+            if len(set(labels)) < 2:
+                classifier = make_mostfreq_featurizing_estimator()
+                classifier.fit(pcs, labels)
+            else:
+                per_conn = sklearn.clone(self.base_per_conn_classifier)
+                mostfreq = sklearn.clone(self.base_mostfreq_classifier)
+                for new_classifier in per_conn, mostfreq:
+                    try:
+                        new_classifier.fit(pcs, labels)
+                    except ValueError:
+                        classification_pipeline = new_classifier.steps[1][1]
+                        feature_selector = classification_pipeline.steps[0][1]
+                        feature_selector.k = 'all'
+                        new_classifier.fit(pcs, labels)
+
+                classifier = AutoWeightedVotingClassifier(
+                    estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
+                                ('global_causality', self.general_classifier)],
+                    voting='soft')
+                classifier.fit_weights(pcs, labels)
+
+            self.classifiers[connective] = classifier
 
     def _score_parts(self, sentence, possible_causations):
-        return [self.classifiers[stringify_connective(pc)].test([pc])
+        return [self.classifiers[stringify_connective(pc)].predict([pc])
                 for pc in possible_causations]
 
 
