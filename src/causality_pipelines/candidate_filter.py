@@ -5,6 +5,7 @@ import logging
 from nltk.corpus import wordnet
 from scipy.spatial import distance
 import sklearn
+from sklearn.dummy import DummyClassifier
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
@@ -14,6 +15,7 @@ from data import Token, StanfordParsedSentence, CausationInstance
 from iaa import make_annotation_comparator, stringify_connective
 from nlp.senna import SennaEmbeddings
 import numpy as np
+
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
@@ -21,6 +23,7 @@ from pipeline.featurization import (
 from pipeline.models import ClassifierModel, MajorityClassClassifier
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from util.diff import SequenceDiff
+from util.scipy import AutoWeightedVotingClassifier
 
 
 try:
@@ -51,9 +54,6 @@ try:
                    "Specifies how many features to keep in feature selection"
                    " for per-connective causality filters. -1 means no feature"
                    " selection.")
-    DEFINE_integer('filter_maj_class_threshold', 10,
-                   "Minimum number of samples before reverting to majority"
-                   " class for classification")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -392,13 +392,18 @@ class PatternBasedCausationFilter(StructuredModel):
             PatternBasedFilterDecoder())
         
         if FLAGS.filter_feature_select_k == -1:
-            self.base_classifier = classifier
+            per_conn_classifier = classifier
         else:
             k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
-            self.base_classifier = SKLPipeline([
+            per_conn_classifier = SKLPipeline([
                 ('feature_selection', k_best),
                 ('classification', classifier)
             ])
+
+        self.base_classifier = AutoWeightedVotingClassifier(
+            estimators=[('per_conn', per_conn_classifier),
+                        ('mostfreq', DummyClassifier(strategy='prior'))],
+            voting='soft')
 
         self.classifiers = {}
         comparator = make_annotation_comparator(
@@ -459,26 +464,23 @@ class PatternBasedCausationFilter(StructuredModel):
 
         for connective, pcs in pcs_by_connective.iteritems():
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
-            if len(pcs_with_both_args) < FLAGS.filter_maj_class_threshold:
+            pcs = pcs_with_both_args # train only on instances with 2 args
+            labels = CausalPatternClassifierModel._get_gold_labels(pcs)
+            # Some classifiers don't deal well with all labels being the
+            # same. If this is the case, it should just default to majority
+            # class anyway, so just do that.
+            if len(set(labels)) < 2:
                 classifier = CausalPatternMajorityClassModel()
+                classifier.all_same = True # for tracking purposes
                 self.classifiers[connective] = classifier
             else:
-                pcs = pcs_with_both_args # train only on instances with 2 args
-                labels = CausalPatternClassifierModel._get_gold_labels(pcs)
-                # Some classifiers don't deal well with all labels being the
-                # same. If this is the case, we might as well be using majority
-                # class anyway, so just do that.
-                if len(set(labels)) < 2:
-                    classifier = CausalPatternMajorityClassModel()
-                    classifier.all_same = True # for tracking purposes
-                    self.classifiers[connective] = classifier
-                else:
-                    classifier = self.classifiers[connective]
+                classifier = self.classifiers[connective]
 
             try:
                 classifier.train(pcs)
             except ValueError: # can happen if k > number of features
-                classifier.classifier.named_steps['feature_selection'].k = 'all'
+                pipeline = classifier.classifier.estimators[0][1]
+                pipeline.named_steps['feature_selection'].k = 'all'
                 classifier.train(pcs)
 
     def _score_parts(self, sentence, possible_causations):
