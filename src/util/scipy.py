@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from itertools import izip
+from nltk.metrics.scores import accuracy
 import numpy as np
 import numpy.ma as ma
 from scipy.sparse import lil_matrix
@@ -562,9 +563,11 @@ class AutoWeightedVotingClassifier(VotingClassifier):
     Voting classifier that fits the classifier weights automatically depending
     on how accurate each is on the training data.
     '''
-    def __init__(self, score_fn, *args, **kwargs):
+    def __init__(self, estimators, voting='hard', weights=None,
+                 score_fn=accuracy):
         self.score_fn = score_fn
-        super(AutoWeightedVotingClassifier, self).__init__(*args, **kwargs)
+        super(AutoWeightedVotingClassifier, self).__init__(estimators,
+                                                           voting, weights)
 
         # If the original estimators were fitted, allow using the classifier
         # even before fitting.

@@ -293,6 +293,9 @@ class ClassBalancingClassifierWrapper(BaseEstimator):
     def predict(self, data):
         return self.classifier.predict(data)
 
+    def predict_proba(self, data):
+        return self.classifier.predict_proba(data)
+
 
 # TODO: remove in favor of sklearn's DummyClassifier?
 class MajorityClassClassifier(ClassifierModel):
