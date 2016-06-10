@@ -461,10 +461,10 @@ class PatternBasedCausationFilter(StructuredModel):
                     parts.append(PatternFilterPart(correct_pc, True))
                 for incorrect_pc in connectives_diff.get_a_only_elements():
                     parts.append(PatternFilterPart(incorrect_pc, False))
-                return parts
             else:
-                return [PatternFilterPart(pc, bool(pc.true_causation_instance))
-                        for pc in sentence.possible_causations]
+                parts = [PatternFilterPart(pc, bool(pc.true_causation_instance))
+                         for pc in sentence.possible_causations]
+            return [pc for pc in parts if pc.cause and pc.effect]
         else:
             # If we're not in training, the initial label doesn't really matter.
             # We do want to filter to only 2-arg matches.
