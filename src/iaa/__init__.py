@@ -103,7 +103,7 @@ compare_annotations_exact = make_annotation_comparator(False)
 
 def _get_printable_connective_word(word):
     if sys.stdout.isatty() or FLAGS.iaa_force_color:
-        return colorama.Format.BOLD + word.upper() + colorama.Format.RESET_ALL
+        return colorama.Style.BRIGHT + word.upper() + colorama.Style.RESET_ALL
     else:
         return word.upper()
 
