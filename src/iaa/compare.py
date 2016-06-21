@@ -1,5 +1,8 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
-from gflags import DEFINE_list, DEFINE_bool, DEFINE_integer, DuplicateFlagError, FlagsError, FLAGS
+from gflags import (DEFINE_list, DEFINE_bool, DEFINE_integer,
+                    DuplicateFlagError, FlagsError, FLAGS)
 import itertools
 import logging
 import sys
@@ -91,14 +94,16 @@ def main(argv):
     logging.captureWarnings(True)
 
     reader = DirectoryReader(FLAGS.iaa_file_regexes, CausalityStandoffReader())
-    all_instances = []
+    instances_by_path = []
     for path in FLAGS.iaa_paths:
         reader.open(path)
-        path_instances = reader.get_all()[:FLAGS.iaa_max_sentence]
-        all_instances.append(path_instances)
+        path_docs = reader.get_all()[:FLAGS.iaa_max_sentence]
+        path_instances = list(itertools.chain.from_iterable(doc.sentences for
+                                                            doc in path_docs))
+        instances_by_path.append(path_instances)
     reader.close()
 
-    instances_path_pairs = zip(all_instances, FLAGS.iaa_paths)
+    instances_path_pairs = zip(instances_by_path, FLAGS.iaa_paths)
     for ((gold, gold_path), (predicted, predicted_path)) in (
             itertools.combinations(instances_path_pairs, 2)):
         print('%s vs. %s:' % (gold_path, predicted_path))
