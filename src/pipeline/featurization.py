@@ -347,6 +347,14 @@ class Featurizer(object):
                     raise FeaturizationError("Invalid feature name: %s"
                                              % feature_name)
 
+    # Pickling functions
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['featurized']
+        del state['all_feature_extractors']
+        return state
+
     # Support function, useful for debugging featurized results.
     def matrow2dict(self, features, row_index):
         row = features[row_index, :]
