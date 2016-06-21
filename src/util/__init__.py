@@ -34,6 +34,16 @@ class NameDictionary(object):
     def __contains__(self, entry):
         return self.names_to_ids.has_key(entry)
 
+    # Pickling functions (to improve efficiency)
+
+    def __getstate__(self):
+        return self.ids_to_names
+
+    def __setstate__(self, ids_to_names):
+        self.ids_to_names = ids_to_names
+        self.names_to_ids = {}
+        for i, name in enumerate(ids_to_names):
+            self.names_to_ids[name] = i
 
 # Add some Colorama functionality.
 for style, code in [('UNDERLINE', 4), ('BLINK', 5)]:
