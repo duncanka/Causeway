@@ -196,14 +196,21 @@ class Featurizer(object):
         # Build feature name dictionary. (Unfortunately, this means we
         # featurize many things twice, but I can't think of a cleverer way to
         # discover the possible values of a feature.)
+        sep = FLAGS.conjoined_feature_sep
         names_by_extractor = {}
         for extractor in self._selected_base_extractors:
             subfeature_names = extractor.extract_subfeature_names(instances)
+            subfeature_names = [
+                Featurizer.escape_conjoined_name(subfeature_name, sep)
+                for subfeature_name in subfeature_names]
             self.register_feature_names(subfeature_names)
             names_by_extractor[extractor] = subfeature_names
 
         for extractor in self._unselected_base_extractors:
             subfeature_names = extractor.extract_subfeature_names(instances)
+            subfeature_names = [
+                Featurizer.escape_conjoined_name(subfeature_name, sep)
+                for subfeature_name in subfeature_names]
             names_by_extractor[extractor] = subfeature_names
 
         for extractor in self._conjoined_extractors:
