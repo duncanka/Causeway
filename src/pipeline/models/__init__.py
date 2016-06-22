@@ -90,12 +90,12 @@ class FeaturizedModelBase(Model):
                     ' features or a model path')
             self.__set_up_featurizers(selected_features_lists)
 
-    def __set_up_featurizers(self, featurizer_params_by_group):
+    def __set_up_featurizers(self, selected_features_lists):
         extractor_groups = self._get_feature_extractor_groups()
         self.featurizers = [
-            self._make_featurizer(extractors, featurizer_params, i)
-            for i, (featurizer_params, extractors)
-            in enumerate(zip(featurizer_params_by_group, extractor_groups))]
+            self._make_featurizer(extractors, selected_features_list, i)
+            for i, (selected_features_list, extractors)
+            in enumerate(zip(selected_features_lists, extractor_groups))]
 
     def _make_featurizer(self, extractors, featurizer_params, featurizer_index):
         return Featurizer(extractors, featurizer_params, self.save_featurized)
