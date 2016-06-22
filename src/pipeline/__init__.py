@@ -246,13 +246,16 @@ class Pipeline(object):
         if not path.isdir(directory):
             os.makedirs(directory)
         for stage in self.stages:
-            filename = path.join(directory, "%s.model.pickle" % stage.name)
+            filename = path.join(directory, "%s.model" % stage.name)
             stage.model.save(filename)
+        logging.info("All models saved to %s", directory)
 
     def load_models(self, directory):
         for stage in self.stages:
-            filename = path.join(directory, "%s.model.pickle" % stage.name)
+            filename = path.join(directory, "%s.model" % stage.name)
+            logging.info("Loading model %s...", filename)
             stage.model.load(filename)
+        logging.info("Loaded all models.")
 
     def __test_documents(self, documents):
         if self._evaluators_by_stage: # we're evaluating; avoid overwriting
