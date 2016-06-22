@@ -4,6 +4,7 @@ from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
+import cPickle
 from scipy.sparse import lil_matrix, vstack
 from sklearn.base import BaseEstimator
 
@@ -40,21 +41,29 @@ class Model(object):
         raise NotImplementedError
 
     def save(self, filepath):
-        raise NotImplementedError
+        # Default save implementation is to pickle the whole model.
+        with open(filepath, 'w') as pickle_file:
+            cPickle.dump(self, pickle_file)
 
     def load(self, filepath):
         logging.debug("Loading model from %s...", filepath)
-        load_result = self._load_model(filepath)
+        self._load_model(filepath)
         logging.debug("Done loading model.")
-        self._post_model_load(load_result)
+        self._post_model_load()
 
     def _load_model(self, filepath):
-        raise NotImplementedError
+        with open(filepath, 'r') as pickle_file:
+            unpickled = cPickle.load(pickle_file)
+            if type(unpickled) != type(self):
+                raise cPickle.UnpicklingError(
+                    'Attempted to load %s model from pickle of %s object'
+                    % (type(self).__name__, type(unpickled).__name__))
+            self.__dict__.update(unpickled.__dict__)
 
     def _train_model(self, instances):
         raise NotImplementedError
 
-    def _post_model_load(self, load_result):
+    def _post_model_load(self):
         pass
 
     def _post_model_train(self):
@@ -65,12 +74,6 @@ class Model(object):
 
 
 class FeaturizedModelBase(Model):
-    '''
-    Subclasses' _load_model function should return a list of
-    FeatureNameDictionary objects, one per featurizer, or else the
-    _post_model_load hook must be overridden.
-    '''
-
     def __init__(self, selected_features_lists, model_path, save_featurized,
                  *args, **kwargs):
         super(FeaturizedModelBase, self).__init__(
@@ -80,7 +83,7 @@ class FeaturizedModelBase(Model):
 
         if model_path:
             self.load(model_path)
-        else: # Featurizers won't be set up by post-load hook
+        else: # Featurizers won't be set up by loading
             if selected_features_lists is None:
                 raise FeaturizationError(
                     'Featurized model must be initialized with either selected'
@@ -101,11 +104,6 @@ class FeaturizedModelBase(Model):
     def _get_feature_extractor_groups(klass):
         raise NotImplementedError
 
-    def _post_model_load(self, feature_name_dictionaries):
-        super(FeaturizedModelBase,
-              self)._post_model_load(feature_name_dictionaries)
-        self.__set_up_featurizers(feature_name_dictionaries)
-
     def reset(self):
         super(FeaturizedModelBase, self).reset()
         for featurizer in self.featurizers:
@@ -118,10 +116,6 @@ class FeaturizedModel(FeaturizedModelBase):
         super(FeaturizedModel, self).__init__(
             selected_features_lists=[selected_features], model_path=model_path,
             save_featurized=save_featurized, *args, **kwargs)
-        self.featurizer = self.featurizers[0]
-
-    def _post_model_load(self, feature_name_dictionary):
-        super(FeaturizedModel, self)._post_model_load([feature_name_dictionary])
         self.featurizer = self.featurizers[0]
 
     @classmethod

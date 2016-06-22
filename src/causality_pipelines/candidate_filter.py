@@ -437,6 +437,11 @@ class PatternBasedCausationFilter(StructuredModel):
             logging.debug("Set flag filter_diff_correctness to %s"
                           % FLAGS.filter_diff_correctness)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['connective_comparator']
+        return state
+
     @staticmethod
     def _get_selected_features_for_extractors(selected_features, extractors):
         extractor_names = [e.name for e in extractors] + ['all']

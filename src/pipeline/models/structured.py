@@ -63,11 +63,9 @@ class StructuredModel(Model):
 
 class FeaturizedStructuredModel(StructuredModel, MultiplyFeaturizedModel):
     '''
-    If there is more than one part type, the subclass's _load_model() function
-    should return a list of NameDictionary objects and/or selected features
-    lists, one per part type (since each part type will be featurized
-    separately.) self.featurizers will be populated in the order specified by
-    these dictionaries.
+    If there is more than one part type, self.featurizers should contain one
+    featurizer per part type (since each part type will be featurized
+    separately).
     '''
     def __init__(self, decoder, part_types, selected_features=None,
                  part_filters=None, model_path=None, save_featurized=False,
@@ -342,6 +340,9 @@ class CRFModel(FeaturizedStructuredModel):
     def _load_model(self, filepath):
         self.tagger = pycrfsuite.Tagger()
         self.tagger.open(self.model_file_path)
+
+    def save(self, filepath): # Saving is built into CRFSuite
+        pass
 
     def _post_model_train(self):
         super(CRFModel, self)._post_model_train()

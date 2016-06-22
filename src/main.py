@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from gflags import (FLAGS, DEFINE_enum, DEFINE_bool, DEFINE_integer,
-                    DEFINE_float, DuplicateFlagError, FlagsError)
+                    DEFINE_float, DEFINE_string, DuplicateFlagError, FlagsError)
 import logging
 import numpy as np
 import os
@@ -46,6 +46,12 @@ try:
     DEFINE_bool('filter_overlapping', True,
                 'Whether to filter smaller connectives that overlap with larger'
                 ' ones')
+    DEFINE_bool('save_models', False,
+                "Whether to save pipeline models post-train (if not doing CV).")
+    DEFINE_string('models_dir', None,
+                  "Directory in which to save models and from which to load"
+                  " them. Relative to the working directory. Defaults to"
+                  " models/<pipeline type>.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -188,8 +194,16 @@ if __name__ == '__main__':
                 print
         causality_pipeline.print_eval_results(eval_results)
     else:
+        models_dir = FLAGS.models_dir
+        if not models_dir:
+            models_dir = os.path.join('models', FLAGS.pipeline_type)
+
         if FLAGS.train_paths:
             causality_pipeline.train()
+            if FLAGS.save_models:
+                causality_pipeline.save_models(models_dir)
+        else: # We're not training; load models
+            causality_pipeline.load_models(models_dir)
 
         if FLAGS.evaluate:
             eval_results = causality_pipeline.evaluate()

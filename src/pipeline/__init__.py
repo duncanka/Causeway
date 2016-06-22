@@ -5,6 +5,7 @@ from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, Duplicate
 import itertools
 import logging
 import numpy as np
+import os
 from os import path
 import sys
 
@@ -67,6 +68,13 @@ class Pipeline(object):
         testing at *any point* in the pipeline.
         '''
         self.stages = listify(stages)
+        # Disallow duplicate stage names, which would mess with model-saving.
+        all_names = set()
+        for stage in self.stages:
+            if stage.name in all_names:
+                raise ValueError("Duplicate stage name: %s" % stage.name)
+            all_names.add(stage.name)
+
         self.reader = reader
         self.writer = writer
         self._evaluators_by_stage = []
@@ -233,6 +241,18 @@ class Pipeline(object):
 
         self._evaluators_by_stage = []
         return eval_results
+
+    def save_models(self, directory):
+        if not path.isdir(directory):
+            os.makedirs(directory)
+        for stage in self.stages:
+            filename = path.join(directory, "%s.model.pickle" % stage.name)
+            stage.model.save(filename)
+
+    def load_models(self, directory):
+        for stage in self.stages:
+            filename = path.join(directory, "%s.model.pickle" % stage.name)
+            stage.model.load(filename)
 
     def __test_documents(self, documents):
         if self._evaluators_by_stage: # we're evaluating; avoid overwriting

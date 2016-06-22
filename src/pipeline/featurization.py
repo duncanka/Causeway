@@ -351,8 +351,8 @@ class Featurizer(object):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['featurized']
-        del state['all_feature_extractors']
+        for attr_name in ['featurized', 'all_feature_extractors']:
+            del state[attr_name]
         return state
 
     # Support function, useful for debugging featurized results.
