@@ -311,3 +311,29 @@ class MajorityClassClassifier(ClassifierModel):
 
     def test(self, instances):
         return [self.decision for _ in instances]
+
+
+class SimpleModel(Model):
+    '''
+    A model that simply runs an operation on each instance, with the operation
+    encapsulated as a single function. The function should be entirely
+    self-contained; its return value will be ignored.
+    '''
+    def __init__(self, operation):
+        self.operation = operation
+
+    def train(self, instances):
+        pass
+
+    def test(self, instances):
+        for instance in instances:
+            self.operation(instance)
+        # No return value -> no labeling will be done
+
+    def save(self, filepath):
+        # Nothing to save
+        pass
+
+    def _load_model(self, filepath):
+        # Nothing to load
+        pass

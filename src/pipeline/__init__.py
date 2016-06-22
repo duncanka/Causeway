@@ -1,7 +1,8 @@
 """ Define basic pipeline functionality. """
 
 from copy import deepcopy
-from gflags import DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_string, FlagsError
+from gflags import (DEFINE_list, DEFINE_boolean, DEFINE_integer, FLAGS,
+                    DuplicateFlagError, DEFINE_string, FlagsError)
 import itertools
 import logging
 import numpy as np
@@ -10,7 +11,7 @@ from os import path
 import sys
 
 from data import SentencesDocument
-from pipeline.models import Model
+from pipeline.models import SimpleModel
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
 from util.freezer import freeze
@@ -492,19 +493,6 @@ class Stage(object):
 
     def _label_instance(self, document, instance, predicted_output):
         pass
-
-
-class SimpleModel(Model):
-    def __init__(self, operation):
-        self.operation = operation
-
-    def train(self, instances):
-        pass
-
-    def test(self, instances):
-        for instance in instances:
-            self.operation(instance)
-        # No return value -> no labeling will be done
 
 
 class SimpleStage(Stage):
