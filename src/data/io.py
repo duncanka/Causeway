@@ -305,7 +305,7 @@ class CausalityStandoffReader(DocumentReader):
             raise UserWarning(message)
 
     def __process_lines(self, lines, ids_to_annotations, ids_to_instances,
-                        unused_arg_ids, document, previous_line_count=float('inf')):
+                        unused_arg_ids, document, prev_line_count=float('inf')):
         lines_to_reprocess = []
         ids_to_reprocess = set()
         ids_needed_to_reprocess = set()
@@ -349,7 +349,7 @@ class CausalityStandoffReader(DocumentReader):
         # the set of IDs that need to be added.
         recurse = False
         if lines_to_reprocess:
-            if len(lines_to_reprocess) == previous_line_count:
+            if len(lines_to_reprocess) == prev_line_count:
                 logging.warn("Count of lines to process has not changed after"
                              " recursion. Giving up on the following IDs: %s"
                              % ids_needed_to_reprocess)
