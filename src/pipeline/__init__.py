@@ -491,6 +491,19 @@ class Stage(object):
         pass
 
 
+class SimpleModel(Model):
+    def __init__(self, operation):
+        self.operation = operation
+
+    def train(self, instances):
+        pass
+
+    def test(self, instances):
+        for instance in instances:
+            self.operation(instance)
+        # No return value -> no labeling will be done
+
+
 class SimpleStage(Stage):
     '''
     A stage that simply runs an operation on each instance, with the operation
@@ -500,20 +513,8 @@ class SimpleStage(Stage):
     If instances other than the default are required, this stage should be
     overridden with an appropriate _extract_instances function.
     '''
-    class SimpleModel(Model):
-        def __init__(self, operation):
-            self.operation = operation
-
-        def train(self, instances):
-            pass
-
-        def test(self, instances):
-            for instance in instances:
-                self.operation(instance)
-            # No return value -> no labeling will be done
-
     def __init__(self, name, operation, evaluator_fn=lambda: None):
-        super(SimpleStage, self).__init__(name, self.SimpleModel(operation))
+        super(SimpleStage, self).__init__(name, SimpleModel(operation))
         self._evaluator_fn = evaluator_fn
 
     def _make_evaluator(self):

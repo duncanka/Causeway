@@ -412,12 +412,16 @@ class PatternBasedCausationFilter(StructuredModel):
                                          % selected_name)
 
         self.base_per_conn_classifier = make_featurizing_estimator(
-            base_per_conn_classifier, all_extractors,
+            base_per_conn_classifier,
+            'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
+            '.all_feature_extractors',
             self._get_selected_features_for_extractors(FLAGS.filter_features,
                                                        all_extractors),
             'per_conn_classifier')
         self.general_classifier = make_featurizing_estimator(
-            general_classifier, general_extractors,
+            general_classifier,
+            'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
+            '.general_feature_extractors',
             self._get_selected_features_for_extractors(FLAGS.filter_features,
                                                        general_extractors),
             'global_causality_classifier')

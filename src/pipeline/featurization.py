@@ -1,12 +1,13 @@
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
 from copy import copy
+from cPickle import PicklingError
 import itertools
 import logging
 import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, NameDictionary
+from util import Enum, NameDictionary, get_object_by_fqname
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
@@ -142,7 +143,9 @@ class Featurizer(object):
                  default_to_matrix=True):
         """
         feature_extractors is a list of
-            `pipeline.featurization.FeatureExtractor` objects.
+            `pipeline.featurization.FeatureExtractor` objects, or the fully-
+            qualified name of such a list. It MUST be the latter if the
+            Featurizer is to be pickled.
         selected_features_or_name_dict must be one of the following:
             - a list of names of features to extract. Names may be combinations
               of feature names, separated by FLAGS.conjoined_feature_sep. (This
@@ -159,6 +162,12 @@ class Featurizer(object):
         default_to_matrix indicates whether featurize() should by default return
             a matrix, rather than a raw dictionary of feature names and values.
         """
+        if isinstance(feature_extractors, basestring):
+            self.feature_extractors_fqname = feature_extractors
+            feature_extractors = get_object_by_fqname(feature_extractors)
+        else:
+            self.feature_extractors_fqname = None
+
         self.all_feature_extractors = feature_extractors
         self.save_featurized = save_featurized
         self.default_to_matrix = default_to_matrix
@@ -350,10 +359,25 @@ class Featurizer(object):
     # Pickling functions
 
     def __getstate__(self):
+        if not self.feature_extractors_fqname:
+            raise PicklingError("Can't pickle a Featurizer without a fully-"
+                                "qualified name from which to restore"
+                                " extractors")
+
         state = self.__dict__.copy()
-        for attr_name in ['featurized', 'all_feature_extractors']:
+        for attr_name in [
+            'featurized', 'all_feature_extractors', '_selected_base_extractors',
+            '_unselected_base_extractors', '_conjoined_extractors']:
             del state[attr_name]
         return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.featurized = None
+        self.all_feature_extractors = get_object_by_fqname(
+            self.feature_extractors_fqname)
+        self._initialize_feature_extractors(
+            self.get_selected_features(self.feature_name_dictionary))
 
     # Support function, useful for debugging featurized results.
     def matrow2dict(self, features, row_index):
