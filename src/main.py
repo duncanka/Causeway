@@ -123,6 +123,7 @@ if __name__ == '__main__':
     argv = sys.argv
 
     try:
+        FLAGS.Reset()
         FLAGS(argv)  # parse flags
         if not FLAGS.models_dir:
             FLAGS.models_dir = os.path.join('..', 'models', FLAGS.pipeline_type)

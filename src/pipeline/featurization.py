@@ -376,15 +376,17 @@ class Featurizer(object):
             'featurized', 'all_feature_extractors', '_selected_base_extractors',
             '_unselected_base_extractors', '_conjoined_extractors']:
             del state[attr_name]
+        state['selected_features'] = self.get_selected_features(
+            self.feature_name_dictionary)
         return state
 
     def __setstate__(self, state):
+        selected_features = state.pop('selected_features')
         self.__dict__.update(state)
         self.featurized = None
         self.all_feature_extractors = get_object_by_fqname(
             self.feature_extractors_fqname)
-        self._initialize_feature_extractors(
-            self.get_selected_features(self.feature_name_dictionary))
+        self._initialize_feature_extractors(selected_features)
 
     # Support function, useful for debugging featurized results.
     def matrow2dict(self, features, row_index):

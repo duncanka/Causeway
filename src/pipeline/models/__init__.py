@@ -43,7 +43,7 @@ class Model(object):
 
     def save(self, filepath):
         # Default save implementation is to pickle the whole model.
-        with open(filepath, 'w') as pickle_file:
+        with open(filepath, 'wb') as pickle_file:
             cPickle.dump(self, pickle_file)
 
     def load(self, filepath):
