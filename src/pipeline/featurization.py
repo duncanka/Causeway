@@ -294,7 +294,6 @@ class Featurizer(object):
 
     @staticmethod
     def get_selected_features(feature_name_dictionary):
-        logging.info("Finding selected features...")
         selected_features = set()
         sep = FLAGS.conjoined_feature_sep
         for feature_string in feature_name_dictionary.ids_to_names:
@@ -309,7 +308,6 @@ class Featurizer(object):
             conjoined_feature_name = Featurizer.conjoin_feature_names(
                 feature_names, sep)
             selected_features.add(conjoined_feature_name)
-        logging.info("Done finding selected features.")
         return selected_features
 
     def __get_extractor_by_name(self, name):
