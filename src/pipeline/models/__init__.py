@@ -4,7 +4,7 @@ from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
-import pickle as cPickle
+import cPickle
 from scipy.sparse import lil_matrix, vstack
 from sklearn.base import BaseEstimator
 
