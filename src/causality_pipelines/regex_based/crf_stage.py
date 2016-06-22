@@ -1,13 +1,14 @@
-from gflags import DEFINE_list, DEFINE_string, DEFINE_bool, DEFINE_integer, FLAGS, DuplicateFlagError, DEFINE_enum
+from gflags import (DEFINE_list, DEFINE_bool, DEFINE_integer, FLAGS,
+                    DuplicateFlagError, DEFINE_enum)
 from itertools import chain
 import logging
 import numpy as np
+import os
 
 from causality_pipelines import IAAEvaluator, RELATIVE_POSITIONS
 from pipeline.models.structured import CRFModel
 from pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
 from pipeline import Stage
-from util import Enum
 
 try:
     DEFINE_list('arg_label_features',
@@ -16,8 +17,6 @@ try:
                  'pattern', 'pattern+conn_parse_path', 'conn_rel_pos',
                  'is_alnum'],
                 'Features for the argument-labeling CRF')
-    DEFINE_string('arg_label_model_path', '../arg-labeler-crf.model',
-                  'Path to save the argument-labeling CRF model to')
     DEFINE_integer('arg_label_max_dep_path_len', 4,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")
@@ -39,7 +38,6 @@ class ArgumentLabelerModel(CRFModel):
     def __init__(self, training_algorithm, training_params, *args, **kwargs):
         super(ArgumentLabelerModel, self).__init__(
             selected_features=FLAGS.arg_label_features,
-            model_file_path=FLAGS.arg_label_model_path,
             training_algorithm=training_algorithm,
             training_params=training_params, *args, **kwargs)
 
@@ -180,8 +178,12 @@ class ArgumentLabelerStage(Stage):
     def __init__(self, name, training_algorithm=None, training_params={}):
         if training_algorithm is None:
             training_algorithm = FLAGS.arg_label_training_alg
-        super(ArgumentLabelerStage, self).__init__(
-            name, ArgumentLabelerModel(training_algorithm, training_params))
+        if not os.path.isdir(FLAGS.models_dir):
+            os.makedirs(FLAGS.models_dir)
+        model_file_path = os.path.join(FLAGS.models_dir, "%s.model" % name)
+        model = ArgumentLabelerModel(training_algorithm, training_params,
+                                     model_file_path=model_file_path)
+        super(ArgumentLabelerStage, self).__init__(name, model)
 
     def _extract_instances(self, document, is_train, is_original):
         # No possible causations in the gold-standard data. But it doesn't

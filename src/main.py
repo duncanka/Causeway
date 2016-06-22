@@ -51,7 +51,7 @@ try:
     DEFINE_string('models_dir', None,
                   "Directory in which to save models and from which to load"
                   " them. Relative to the working directory. Defaults to"
-                  " models/<pipeline type>.")
+                  " ../models/<pipeline type>.")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -124,6 +124,9 @@ if __name__ == '__main__':
 
     try:
         FLAGS(argv)  # parse flags
+        if not FLAGS.models_dir:
+            FLAGS.models_dir = os.path.join('..', 'models', FLAGS.pipeline_type)
+
         # Print command line in case we ever want to re-run from output file
         print "Flags:"
         print_indented(1, FLAGS.FlagsIntoString())
@@ -194,16 +197,12 @@ if __name__ == '__main__':
                 print
         causality_pipeline.print_eval_results(eval_results)
     else:
-        models_dir = FLAGS.models_dir
-        if not models_dir:
-            models_dir = os.path.join('models', FLAGS.pipeline_type)
-
         if FLAGS.train_paths:
             causality_pipeline.train()
             if FLAGS.save_models:
-                causality_pipeline.save_models(models_dir)
+                causality_pipeline.save_models(FLAGS.models_dir)
         else: # We're not training; load models
-            causality_pipeline.load_models(models_dir)
+            causality_pipeline.load_models(FLAGS.models_dir)
 
         if FLAGS.evaluate:
             eval_results = causality_pipeline.evaluate()
