@@ -6,7 +6,7 @@ import pycrfsuite
 import time
 from types import MethodType
 
-from pipeline.models import Model, FeaturizedModel, MultiplyFeaturizedModel
+from pipeline.models import Model, MultiplyFeaturizedModel
 from pipeline.featurization import DictOnlyFeaturizer, Featurizer
 
 try:

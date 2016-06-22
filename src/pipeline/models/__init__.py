@@ -1,10 +1,10 @@
 """ Define standard machine-learned model framework for pipelines. """
 
+import cPickle
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
-import cPickle
 from scipy.sparse import lil_matrix, vstack
 from sklearn.base import BaseEstimator
 

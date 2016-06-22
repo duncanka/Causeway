@@ -1,6 +1,6 @@
-from gflags import DEFINE_string, FLAGS, DuplicateFlagError
 from copy import copy
 from cPickle import PicklingError
+from gflags import DEFINE_string, FLAGS, DuplicateFlagError
 import itertools
 import logging
 import numpy as np
