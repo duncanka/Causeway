@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import colorama
 import fcntl
+import importlib
 from itertools import tee, izip, izip_longest
 import numpy as np
 import os
@@ -175,6 +176,26 @@ def floats_same_or_nearly_equal(f1, f2):
         return np.isnan(f2)
     else:
         return np.allclose(f1, f2)
+
+def get_object_by_fqname(fqname):
+    '''
+    fqname must be a string starting with a module name.
+    '''
+    splits = fqname.split('.')
+    for i in range(len(splits), 0, -1):
+        module_name = '.'.join(splits[:i])
+        try:
+            module = importlib.import_module(module_name)
+        except:
+            continue
+
+        obj = module
+        for j in range (i, len(splits)):
+            obj = getattr(obj, splits[j])
+        return obj
+
+    raise AttributeError('No such object: %s' % fqname)
+
 
 class Object(object):
     ''' Dummy container class for storing attributes in. '''
