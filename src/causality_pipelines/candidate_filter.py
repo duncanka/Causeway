@@ -29,7 +29,8 @@ try:
     DEFINE_list(
         'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'tenses,cause_case_children,effect_case_children,domination'.split(','),
+        'tenses,cause_case_children,effect_case_children,domination,'
+        'cause_pp_prep,effect_pp_prep'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -263,6 +264,12 @@ class CausalPatternClassifierModel(object):
             return RELATIVE_POSITIONS.After
         else:
             return RELATIVE_POSITIONS.Overlapping
+        
+    @staticmethod
+    def get_pp_preps(argument_head):
+        sentence = argument_head.parent_sentence
+        children = sentence.get_children(argument_head, 'case')
+        return [c.lemma for c in children if c.pos == 'IN']
 
     all_feature_extractors = []
 
@@ -378,7 +385,15 @@ CausalPatternClassifierModel.general_feature_extractors = [
     FeatureExtractor(
         'heads_rel_pos',
         lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
-            [part.cause_head], [part.effect_head]))
+            [part.cause_head], [part.effect_head])),
+    SetValuedFeatureExtractor(
+        'cause_pp_prep',
+        lambda part: CausalPatternClassifierModel.get_pp_preps(
+            part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_pp_prep',
+        lambda part: CausalPatternClassifierModel.get_pp_preps(
+            part.effect_head)),
 ]
 
 CausalPatternClassifierModel.all_feature_extractors = (
