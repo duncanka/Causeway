@@ -18,6 +18,9 @@ try:
     DEFINE_bool('reader_gold_parses', False,
                 'Whether to read .parse.gold files instead of .parse files for'
                 ' sentence parses')
+    DEFINE_bool('gold_parses_fallback', False,
+                'If reader_gold_parses is True, falls back to automated parse'
+                ' files instead of failing if gold parses are not found')
     DEFINE_bool('reader_directory_recurse', False,
                 'Whether DirectoryReaders should recurse into their'
                 ' subdirectories')
@@ -114,9 +117,18 @@ class StanfordParsedSentenceReader(DocumentReader):
         base_path, _ = os.path.splitext(filepath)
         parse_file_name = base_path + '.parse'
         if FLAGS.reader_gold_parses:
+            non_gold_file_name = parse_file_name
             parse_file_name += ".gold"
-        self._parse_file = CharacterTrackingStreamWrapper(
-            io.open(parse_file_name, 'rb'), FLAGS.reader_codec)
+        try:
+            self._parse_file = CharacterTrackingStreamWrapper(
+                io.open(parse_file_name, 'rb'), FLAGS.reader_codec)
+        except:
+            if FLAGS.reader_gold_parses and FLAGS.gold_parses_fallback:
+                logging.info("Falling back to non-gold parse for %s", filepath)
+                self._parse_file = CharacterTrackingStreamWrapper(
+                    io.open(non_gold_file_name, 'rb'), FLAGS.reader_codec)
+            else:
+                raise
 
     def close(self):
         super(StanfordParsedSentenceReader, self).close()
