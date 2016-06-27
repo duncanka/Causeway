@@ -30,7 +30,7 @@ try:
         'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination,'
-        'cause_pp_prep,effect_pp_prep'.split(','),
+        'cause_pp_prep,effect_pp_prep,cause_neg,effect_neg'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -271,6 +271,12 @@ class CausalPatternClassifierModel(object):
         children = sentence.get_children(argument_head, 'case')
         return [c.lemma for c in children if c.pos == 'IN']
 
+    @staticmethod
+    def is_negated(argument_head):
+        sentence = argument_head.parent_sentence
+        children = sentence.get_children(argument_head, 'neg')
+        return bool(children)
+
     all_feature_extractors = []
 
 
@@ -394,6 +400,12 @@ CausalPatternClassifierModel.general_feature_extractors = [
         'effect_pp_prep',
         lambda part: CausalPatternClassifierModel.get_pp_preps(
             part.effect_head)),
+    FeatureExtractor(
+        'cause_neg',
+        lambda part: CausalPatternClassifierModel.is_negated(part.cause_head)),
+    FeatureExtractor(
+        'effect_neg',
+        lambda part: CausalPatternClassifierModel.is_negated(part.effect_head)),
 ]
 
 CausalPatternClassifierModel.all_feature_extractors = (
