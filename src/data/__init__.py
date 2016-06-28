@@ -45,6 +45,9 @@ class SentencesDocument(Document):
     def __iter__(self):
         return iter(self.sentences)
 
+    def __getitem__(self, index):
+        return self.sentences[index]
+
 
 class Annotation(object):
     def __init__(self, sentence_offset, offsets, text, annot_id=''):
