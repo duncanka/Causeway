@@ -30,7 +30,9 @@ try:
         'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination,'
-        'cause_pp_prep,effect_pp_prep,cause_neg,effect_neg'.split(','),
+        'cause_pp_prep,effect_pp_prep,cause_neg,effect_neg,commas_btw,'
+        'cause_comp_start,effect_comp_start,cause_prep_start,'
+        'effect_prep_start'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -277,6 +279,29 @@ class CausalPatternClassifierModel(object):
         children = sentence.get_children(argument_head, 'neg')
         return bool(children)
 
+    @staticmethod
+    def is_comp(argument_head):
+        sentence = argument_head.parent_sentence
+        edge_label, _ = sentence.get_most_direct_parent(argument_head)
+        if edge_label != 'ccomp':
+            return False
+        else:
+            children = sentence.get_children(argument_head, 'mark')
+            return bool(children)
+
+    @staticmethod
+    def starts_w_comp(argument_span):
+        first_token = argument_span[0]
+        return first_token.lemma in ['that', 'for', 'to']
+
+    @staticmethod
+    def initial_prep(argument_span):
+        first_token = argument_span[0]
+        if first_token.pos == 'IN':
+            return first_token.lemma
+        else:
+            return 'None'
+
     all_feature_extractors = []
 
 
@@ -406,6 +431,24 @@ CausalPatternClassifierModel.general_feature_extractors = [
     FeatureExtractor(
         'effect_neg',
         lambda part: CausalPatternClassifierModel.is_negated(part.effect_head)),
+    FeatureExtractor(
+        'cause_comp',
+        lambda part: CausalPatternClassifierModel.is_comp(part.cause_head)),
+    FeatureExtractor(
+        'effect_comp',
+        lambda part: CausalPatternClassifierModel.is_comp(part.effect_head)),
+    FeatureExtractor(
+        'cause_comp_start',
+        lambda part: CausalPatternClassifierModel.starts_w_comp(part.cause)),
+    FeatureExtractor(
+        'effect_comp_start',
+        lambda part: CausalPatternClassifierModel.starts_w_comp(part.effect)),
+    FeatureExtractor(
+        'cause_prep_start',
+        lambda part: CausalPatternClassifierModel.initial_prep(part.cause)),
+    FeatureExtractor(
+        'effect_prep_start',
+        lambda part: CausalPatternClassifierModel.initial_prep(part.effect)),
 ]
 
 CausalPatternClassifierModel.all_feature_extractors = (

@@ -25,6 +25,8 @@ from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
 
 
+# TODO: factor out a generic driver function?
+
 try:
     DEFINE_enum('classifier_model', 'logistic',
                 ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
