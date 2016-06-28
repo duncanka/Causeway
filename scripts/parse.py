@@ -50,10 +50,10 @@ def get_parsed_sentence(sentence_text, parse_text=None):
     from data.io import StanfordParsedSentenceReader
     r = StanfordParsedSentenceReader()
     r.open(txt_path)
-    sentence = r.get_next()
+    doc = r.get_next()
     r.close()
 
     os.remove(parse_path)
     os.remove(txt_path)
 
-    return sentence
+    return doc.sentences[0]
