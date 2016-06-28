@@ -50,6 +50,10 @@ try:
     DEFINE_bool('iaa_check_punct', False,
                 'Whether IAA should compare punctuation tokens to determine'
                 ' argument matches')
+    DEFINE_bool('iaa_log_by_connective', False,
+                "When logging a stage's results, include per-connective stats")
+    DEFINE_bool('iaa_log_by_category', False,
+                "When logging a stage's results, include per-category stats")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -494,7 +498,8 @@ class CausalityMetrics(object):
                 cause_head_metrics, effect_head_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
-           log_agreements=None, indent=0, log_file=sys.stdout):
+           log_agreements=None, log_by_connective=None, log_by_category=None,
+           indent=0, log_file=sys.stdout):
         # Flags aren't available as defaults when the function is created, so
         # set the defaults here.
         if log_confusion is None:
@@ -505,6 +510,10 @@ class CausalityMetrics(object):
             log_differences = FLAGS.iaa_log_differences
         if log_agreements is None:
             log_agreements = FLAGS.iaa_log_agreements
+        if log_by_connective is None:
+            log_by_connective = FLAGS.iaa_log_by_connective
+        if log_by_category is None:
+            log_by_category = FLAGS.iaa_log_by_category
 
         if log_differences:
             colorama.reinit()
@@ -571,11 +580,60 @@ class CausalityMetrics(object):
         if log_differences:
             colorama.deinit()
 
+        if log_by_connective:
+            print(file=log_file)
+            print_indented(indent, 'Metrics by connective:', file=log_file)
+            by_connective = self.metrics_by_connective()
+            self._remap_by_connective(by_connective)
+            print_indented(indent + 1, self._csv_metrics(by_connective),
+                           file=log_file)
+
+        if log_by_category:
+            print(file=log_file)
+            print_indented(indent, 'Metrics by category:', file=log_file)
+            by_category = self.metrics_by_connective_category()
+            print_indented(indent + 1, self._csv_metrics(by_category),
+                           file=log_file)
+
+    @staticmethod
+    def _remap_by_connective(by_connective):
+        to_remap = {'for too to':'too for to', 'for too':'too for',
+                    'reason be':'reason', 'that now':'now that',
+                    'to for':'for to', 'give':'given', 'thank to': 'thanks to',
+                    'result of':'result', 'to need': 'need to'}
+        for connective, metrics in by_connective.items():
+            if connective.startswith('be '):
+                by_connective[connective[3:]] += metrics
+                del by_connective[connective]
+                # print 'Replaced', connective
+            elif connective in to_remap:
+                by_connective[to_remap[connective]] += metrics
+                del by_connective[connective]
+                # print "Replaced", connective
+
+    @staticmethod
+    def _csv_metrics(metrics_dict):
+        lines = []
+        for category, metrics in metrics_dict.iteritems():
+            csv_metrics = (str(x) for x in [
+                category,
+                metrics.connective_metrics.tp,
+                metrics.connective_metrics.fp,
+                metrics.connective_metrics.fn,
+                metrics.cause_span_metrics.accuracy,
+                metrics.cause_head_metrics.accuracy,
+                metrics.cause_jaccard,
+                metrics.effect_span_metrics.accuracy,
+                metrics.effect_head_metrics.accuracy,
+                metrics.effect_jaccard])
+            lines.append(','.join(csv_metrics))
+        return '\n'.join(lines)
+
     def metrics_by_connective(self):
         return self.get_aggregate_metrics(stringify_connective)
 
-    def metrics_by_connective_type(self):
-        return self.get_aggregate_metrics(get_connective_type)
+    def metrics_by_connective_category(self):
+        return self.get_aggregate_metrics(get_connective_category)
 
     def get_aggregate_metrics(self, instance_to_category):
         metrics = defaultdict(lambda: CausalityMetrics([], [], False))
@@ -618,7 +676,7 @@ class CausalityMetrics(object):
         keep copying strings over to concatenate them).
         '''
         string_buffer = StringIO()
-        self.pp(None, None, None, None, 0, string_buffer)
+        self.pp(None, None, None, None, None, None, 0, string_buffer)
         return string_buffer.getvalue()
 
     @staticmethod
@@ -824,7 +882,7 @@ __connective_types = merge_dicts([
     {'RB' + suffix: 'Adverbial' for suffix in ['', 'R', 'S']},
     {'NN' + suffix: 'Nominal' for suffix in ['', 'S', 'P', 'PS']}])
 
-def get_connective_type(instance):
+def get_connective_category(instance):
     connective = instance.connective
     
     # Treat if/thens like normal ifs

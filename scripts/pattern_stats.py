@@ -36,7 +36,7 @@ if __name__ == '__main__':
                         CausalityStandoffReader()))
 
     FLAGS.test_paths = FLAGS.train_paths
-    FLAGS.log_connective_stats = True
+    FLAGS.iaa_log_by_connective = True
 
     pipeline.train()
     eval_results = pipeline.evaluate()[0]

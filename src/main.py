@@ -104,39 +104,6 @@ def get_stages(candidate_classifier):
     return stages
 
 
-def remap_by_connective(by_connective):
-    to_remap = {'for too to':'too for to', 'for too':'too for',
-                'reason be':'reason', 'that now':'now that', 'to for':'for to',
-                'give':'given', 'thank to': 'thanks to', 'result of':'result',
-                'to need': 'need to'}
-    for connective, metrics in by_connective.items():
-        if connective.startswith('be '):
-            by_connective[connective[3:]] += metrics
-            del by_connective[connective]
-            # print 'Replaced', connective
-        elif connective in to_remap:
-            by_connective[to_remap[connective]] += metrics
-            del by_connective[connective]
-            # print "Replaced", connective
-
-def csv_metrics(metrics_dict):
-    lines = []
-    for category, metrics in metrics_dict.iteritems():
-        csv_metrics = (str(x) for x in [
-            category,
-            metrics.connective_metrics.tp,
-            metrics.connective_metrics.fp,
-            metrics.connective_metrics.fn,
-            metrics.cause_span_metrics.accuracy,
-            metrics.cause_head_metrics.accuracy,
-            metrics.cause_jaccard,
-            metrics.effect_span_metrics.accuracy,
-            metrics.effect_head_metrics.accuracy,
-            metrics.effect_jaccard])
-        lines.append(','.join(csv_metrics))
-    return '\n'.join(lines)
-
-
 # def main(argv):
 if __name__ == '__main__':
     argv = sys.argv
@@ -194,21 +161,6 @@ if __name__ == '__main__':
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()
-        if FLAGS.log_connective_stats:
-            print
-            for stage, eval_metrics in zip(causality_pipeline.stages[1:],
-                                           eval_results[1:]):
-                print "Per-connective stats for stage %s:" % stage.name
-                by_connective = eval_metrics.metrics_by_connective()
-                remap_by_connective(by_connective)
-                print csv_metrics(by_connective)
-                print
-                print "Per-category stats for stage %s:" % stage.name
-                by_type = eval_metrics.metrics_by_connective_type()
-                remap_by_connective(by_type)
-                print csv_metrics(by_type)
-                print
-
         causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:

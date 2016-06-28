@@ -29,8 +29,6 @@ try:
     DEFINE_bool('args_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation of'
                 ' argument labelling stage')
-    DEFINE_bool('log_connective_stats', False,
-                "When logging a stage's results, include per-connective stats")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -65,11 +63,15 @@ class IAAEvaluator(Evaluator):
     def __init__(self, compare_degrees, compare_types, log_test_instances,
                  compare_args, pairwise_only,
                  causations_property_name='causation_instances',
-                 log_connective_stats=None):
-        if log_connective_stats is None:
-            log_connective_stats = FLAGS.log_connective_stats
-        self.log_connective_stats = log_connective_stats
-        self.save_differences = bool(log_test_instances or log_connective_stats)
+                 log_by_connective=None, log_by_category=None):
+        if log_by_connective is None:
+            log_by_connective = FLAGS.iaa_log_by_connective
+        if log_by_category is None:
+            log_by_category = FLAGS.iaa_log_by_category
+        self.log_by_connective = log_by_connective
+        self.log_by_category = log_by_category
+        self.save_differences = bool(log_test_instances or log_by_connective
+                                     or log_by_category)
 
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics = CausalityMetrics(
@@ -111,21 +113,16 @@ class IAAEvaluator(Evaluator):
             print 'Differences not allowing partial matches:'
             without_partial.pp(log_stats=False, log_confusion=False,
                                log_differences=True, log_agreements=True,
+                               log_by_connective=False, log_by_category=False,
                                indent=1)
             print
             if FLAGS.iaa_calculate_partial:
                 print 'Differences allowing partial matches:'
                 with_partial.pp(log_stats=False, log_confusion=False,
                                 log_differences=True, log_agreements=True,
+                                log_by_connective=False, log_by_category=False,
                                 indent=1)
                 print
-
-            if self.log_connective_stats:
-                print "Connective stats:"
-                metrics_by_connective = without_partial.metrics_by_connective()
-                for connective, metrics in metrics_by_connective.iteritems():
-                    print ','.join([str(x) for x in connective, metrics.tp,
-                                    metrics.fp, metrics.fn])
 
         if FLAGS.iaa_calculate_partial:
             self._with_partial_metrics += with_partial
