@@ -295,8 +295,12 @@ class StanfordParsedSentence(object):
         # select the one whose directed depth is lowest (i.e., with the shortest
         # directed path to root).
         incoming = self.edge_graph[:, token.index]
+        nonzero = incoming.nonzero()[0]
+        if not nonzero.any():
+            return (None, None)
+
         min_depth = np.inf
-        for edge_start_index in incoming.nonzero()[0]:
+        for edge_start_index in nonzero:
             next_depth = self.__depths[edge_start_index]
             if next_depth < min_depth:
                 min_depth = next_depth
