@@ -119,6 +119,23 @@ def remap_by_connective(by_connective):
             del by_connective[connective]
             # print "Replaced", connective
 
+def csv_metrics(metrics_dict):
+    lines = []
+    for category, metrics in metrics_dict.iteritems():
+        csv_metrics = (str(x) for x in [
+            category,
+            metrics.connective_metrics.tp,
+            metrics.connective_metrics.fp,
+            metrics.connective_metrics.fn,
+            metrics.cause_span_metrics.accuracy,
+            metrics.cause_head_metrics.accuracy,
+            metrics.cause_jaccard,
+            metrics.effect_span_metrics.accuracy,
+            metrics.effect_head_metrics.accuracy,
+            metrics.effect_jaccard])
+        lines.append(','.join(csv_metrics))
+    return '\n'.join(lines)
+
 
 # def main(argv):
 if __name__ == '__main__':
@@ -138,7 +155,7 @@ if __name__ == '__main__':
                        "Modified:", sep='')
         print_indented(2, subprocess.check_output("git ls-files -m".split()))
     except FlagsError, e:
-        print '%s\\nUsage: %s ARGS\\n%s' % (e, sys.argv[0], FLAGS)
+        print '%s\nUsage: %s ARGS\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
 
     logging.basicConfig(
@@ -184,20 +201,14 @@ if __name__ == '__main__':
                 print "Per-connective stats for stage %s:" % stage.name
                 by_connective = eval_metrics.metrics_by_connective()
                 remap_by_connective(by_connective)
-
-                for connective, metrics in by_connective.iteritems():
-                    csv_metrics = [str(x) for x in connective,
-                                   metrics.connective_metrics.tp,
-                                   metrics.connective_metrics.fp,
-                                   metrics.connective_metrics.fn,
-                                   metrics.cause_span_metrics.accuracy,
-                                   metrics.cause_head_metrics.accuracy,
-                                   metrics.cause_jaccard,
-                                   metrics.effect_span_metrics.accuracy,
-                                   metrics.effect_head_metrics.accuracy,
-                                   metrics.effect_jaccard]
-                    print ','.join(csv_metrics)
+                print csv_metrics(by_connective)
                 print
+                print "Per-category stats for stage %s:" % stage.name
+                by_type = eval_metrics.metrics_by_connective_type()
+                remap_by_connective(by_type)
+                print csv_metrics(by_type)
+                print
+
         causality_pipeline.print_eval_results(eval_results)
     else:
         if FLAGS.train_paths:

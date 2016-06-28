@@ -6,7 +6,8 @@ colorama.init()
 colorama.deinit()
 from copy import copy
 from StringIO import StringIO
-from gflags import DEFINE_list, DEFINE_float, DEFINE_bool, DEFINE_string, DuplicateFlagError, FLAGS
+from gflags import (DEFINE_list, DEFINE_float, DEFINE_bool, DEFINE_string,
+                    DuplicateFlagError, FLAGS)
 import logging
 import numpy as np
 import operator
@@ -15,9 +16,11 @@ import sys
 from textwrap import wrap
 
 from data import CausationInstance, StanfordParsedSentence, Token
-from util import Enum, print_indented, truncated_string, get_terminal_size
+from util import (Enum, print_indented, truncated_string, get_terminal_size,
+                  merge_dicts)
 from util.diff import SequenceDiff
-from util.metrics import ClassificationMetrics, ConfusionMatrix, AccuracyMetrics, safe_divide
+from util.metrics import (ClassificationMetrics, ConfusionMatrix,
+                          AccuracyMetrics, safe_divide)
 
 np.seterr(divide='ignore') # Ignore nans in division
 
@@ -290,7 +293,8 @@ class CausalityMetrics(object):
                     predicted_sentence.original_text), (
                         "Can't compare annotations on non-identical sentences")
             gold_causations = self.__get_causations(gold_sentence, True)
-            predicted_causations = self.__get_causations(predicted_sentence, False)
+            predicted_causations = self.__get_causations(predicted_sentence,
+                                                         False)
             
             sentence_matching, sentence_gold_only, sentence_predicted_only = (
                 self.get_connective_matches(
@@ -568,26 +572,32 @@ class CausalityMetrics(object):
             colorama.deinit()
 
     def metrics_by_connective(self):
+        return self.get_aggregate_metrics(stringify_connective)
+
+    def metrics_by_connective_type(self):
+        return self.get_aggregate_metrics(get_connective_type)
+
+    def get_aggregate_metrics(self, instance_to_category):
         metrics = defaultdict(lambda: CausalityMetrics([], [], False))
 
         # Compute connective accuracy metrics by connective.
         for _, instance in self.agreeing_instances:
-            metrics[stringify_connective(instance)].connective_metrics.tp += 1
+            metrics[instance_to_category(instance)].connective_metrics.tp += 1
         for _, instance in self.gold_only_instances:
-            metrics[stringify_connective(instance)].connective_metrics.fn += 1
+            metrics[instance_to_category(instance)].connective_metrics.fn += 1
         for _, instance in self.predicted_only_instances:
-            metrics[stringify_connective(instance)].connective_metrics.fp += 1
+            metrics[instance_to_category(instance)].connective_metrics.fp += 1
 
         for causality_metrics in metrics.values():
             causality_metrics.connective_metrics._finalize_counts()
 
         # Compute arg match metrics by connective.
-        arg_diffs_by_connective = defaultdict(list)
+        arg_diffs_by_category = defaultdict(list)
         for instance_1, instance_2, _ in self.argument_differences:
-            connective = stringify_connective(instance_1)
-            arg_diffs_by_connective[connective].append((instance_1, instance_2))
+            connective = instance_to_category(instance_1)
+            arg_diffs_by_category[connective].append((instance_1, instance_2))
 
-        for connective, conn_matches in arg_diffs_by_connective.iteritems():
+        for connective, conn_matches in arg_diffs_by_category.iteritems():
             conn_metrics = metrics[connective]
             (conn_metrics.cause_span_metrics, conn_metrics.effect_span_metrics,
              conn_metrics.cause_head_metrics,
@@ -747,7 +757,8 @@ class CausalityMetrics(object):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
             cause_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
             cause_end = colorama.Fore.RESET
-            effect_start = getattr(colorama.Fore, FLAGS.iaa_effect_color.upper())
+            effect_start = getattr(colorama.Fore,
+                                   FLAGS.iaa_effect_color.upper())
             effect_end = colorama.Fore.RESET
         else:
             cause_start = '/'
@@ -803,3 +814,58 @@ class CausalityMetrics(object):
 
 def stringify_connective(instance):
     return ' '.join(t.lemma for t in instance.connective)
+
+
+__connective_types = merge_dicts([
+    {'CC': 'Conjunctive (coordinating)', 'IN': 'Prepositional', 'MD': 'Verbal',
+     'TO': 'Prepositional'},
+    {'JJ' + suffix: 'Adjectival' for suffix in ['', 'R', 'S']},
+    {'VB' + suffix: 'Verbal' for suffix in ['', 'D', 'G', 'N', 'P', 'Z']},
+    {'RB' + suffix: 'Adverbial' for suffix in ['', 'R', 'S']},
+    {'NN' + suffix: 'Nominal' for suffix in ['', 'S', 'P', 'PS']}])
+
+def get_connective_type(instance):
+    connective = instance.connective
+    
+    # Treat if/thens like normal ifs
+    if len(connective) == 1 or connective[1].lemma == 'then':
+        connective = connective[0]
+        if connective.pos == 'IN':
+            edge_label, _parent = instance.sentence.get_most_direct_parent(
+                connective)
+            if edge_label == 'mark' and connective.lemma != 'for':
+                return 'Conjunctive (subordinating)'
+        return __connective_types.get(connective.pos, connective.pos)
+
+    connective_head = instance.sentence.get_head(connective)
+    # Special MWE cases: "because of", "thanks to", "now that", "out of"
+    if len(connective) == 2:
+        stringified = stringify_connective(instance)
+        if stringified == 'because of':
+            return 'Adverbial'
+        elif stringified in ['thank to', 'now that']:
+            return 'Conjunctive (subordinating)'
+        elif stringified == 'out of':
+            return 'Prepositional'
+
+    # Anything tagged IN or TO is probably an argument realization word. If
+    # there are non-argument-realization words in there, or if it's a copula,
+    # it's complex.
+    if any(t.lemma == 'be'
+           or (t is not connective_head and (t.pos not in ['IN', 'TO']
+                                             or t.lemma in ['as', 'for']))
+           for t in connective):
+        return 'Complex'
+    # A connective that's headed by a preposition or adverb and is otherwise all
+    # prepositions is complex.
+    elif connective_head.pos in ['IN', 'TO', 'RB', 'RBR', 'RBS']:
+        return 'Complex'
+    elif connective_head.pos.startswith('NN') and len(connective) > 2:
+        return 'Complex'
+    else:
+        conn_type = __connective_types[connective_head.pos]
+        if (conn_type == 'Adjectival'
+            and not StanfordParsedSentence.is_contiguous(connective)):
+            return 'Complex'
+        else:
+            return conn_type
