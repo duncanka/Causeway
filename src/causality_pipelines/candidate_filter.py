@@ -31,8 +31,7 @@ try:
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
         'tenses,cause_case_children,effect_case_children,domination,'
         'cause_pp_prep,effect_pp_prep,cause_neg,effect_neg,commas_btw,'
-        'cause_comp_start,effect_comp_start,cause_prep_start,'
-        'effect_prep_start'.split(','),
+        'cause_prep_start,effect_prep_start'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"

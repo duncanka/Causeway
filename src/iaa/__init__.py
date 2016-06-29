@@ -613,7 +613,7 @@ class CausalityMetrics(object):
 
     @staticmethod
     def _csv_metrics(metrics_dict):
-        lines = []
+        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
         for category, metrics in metrics_dict.iteritems():
             csv_metrics = (str(x) for x in [
                 category,
