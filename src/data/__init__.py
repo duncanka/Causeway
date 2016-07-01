@@ -13,7 +13,8 @@ from scipy.sparse import lil_matrix, csr_matrix, csgraph
 from util import Enum, merge_dicts, listify
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
-from util.streams import *
+from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
+                          is_at_eof, peek_and_revert_unless, read_stream_until)
 from textwrap import TextWrapper
 
 
@@ -189,7 +190,6 @@ class StanfordParsedSentence(object):
          will *not* work.)
         '''
         self.tokens = []
-        self.causation_instances = []
         self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
         try:
             self.source_file_path = document_text.name
@@ -220,6 +220,9 @@ class StanfordParsedSentence(object):
             self.constituency_tree = None
             self.constituency_graph = None
             self.constituent_heads = None
+
+        self.causation_instances = []
+        self.overlapping_rel_instances = []
 
     def get_depth(self, token):
         return self.__depths[token.index]
@@ -272,6 +275,11 @@ class StanfordParsedSentence(object):
     def add_causation_instance(self, *args, **kwargs):
         instance = CausationInstance(self, *args, **kwargs)
         self.causation_instances.append(instance)
+        return instance
+
+    def add_overlapping_instance(self, *args, **kwargs):
+        instance = OverlappingRelationInstance(self, *args, **kwargs)
+        self.overlapping_rel_instances.append(instance)
         return instance
 
     def count_words_between(self, token1, token2):
@@ -919,7 +927,69 @@ StanfordParsedSentence.PTB_UNESCAPE_MAP = {
 }
 
 
-class CausationInstance(object):
+class _BinaryRelationInstance(object):
+    def __init__(self, source_sentence, connective, arg0=None, arg1=None,
+                 rel_type=None, annotation_id=None):
+        assert source_sentence is not None
+        for token in listify(connective) + listify(arg0) + listify(arg1):
+            if token is None:
+                continue
+            assert token.parent_sentence is source_sentence
+
+        self.sentence = source_sentence
+        self.connective = connective
+        self.arg0 = arg0
+        self.arg1 = arg1
+        self.type = rel_type
+        self.id = annotation_id
+
+    def get_argument_heads(self, order_relation=None):
+        """
+        order_relation is a function that takes two arguments and returns
+        whether they are in order. If it is provided, argument heads are
+        returned in order.
+        """
+        if self.arg0:
+            arg0 = self.sentence.get_head(self.arg0)
+        else:
+            arg0 = None
+
+        if self.arg1:
+            arg1 = self.sentence.get_head(self.arg1)
+        else:
+            arg1 = None
+
+        if order_relation and order_relation(arg1, arg0):
+            arg0, arg1 = arg1, arg0
+
+        return (arg0, arg1)
+
+    __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
+
+    @staticmethod
+    def pprint(instance):
+        # TODO: replace with same code as IAA?
+        connective, arg0, arg1 = [
+             ' '.join([t.original_text for t in annotation]
+                      if annotation else ['<None>'])
+             for annotation in [instance.connective, instance.arg0,
+                                instance.arg1]]
+        self_str = (
+            '{typename}(connective={conn}, {arg0_name}={arg0},'
+            '{arg1_name}={arg1})').format(
+                typename=instance.__class__.__name__, conn=connective,
+                arg0_name=instance._arg0_name, arg0=arg0,
+                arg1_name=instance._arg1_name, arg1=arg1)
+        return '\n'.join(_BinaryRelationInstance.__wrapper.wrap(self_str))
+
+    def __repr__(self):
+        return self.pprint(self)
+    
+    _arg0_name = 'arg0'
+    _arg1_name = 'arg1'
+
+
+class CausationInstance(_BinaryRelationInstance):
     Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
     CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
                            'Purpose'])
@@ -931,48 +1001,35 @@ class CausationInstance(object):
         if causation_type is None:
             degree = len(self.CausationTypes)
 
-        assert source_sentence is not None
-        for token in listify(connective) + listify(cause) + listify(effect):
-            if token is None:
-                continue
-            assert token.parent_sentence is source_sentence
-
-        self.sentence = source_sentence
+        super(CausationInstance, self).__init__(source_sentence, connective,
+                                                cause, effect, causation_type,
+                                                annotation_id)
         self.degree = degree
-        self.type = causation_type
-        self.connective = connective
-        self.cause = cause
-        self.effect = effect
-        self.id = annotation_id
 
-    def get_cause_and_effect_heads(self, cause_before_relation=None):
-        if self.cause:
-            cause = self.sentence.get_head(self.cause)
-        else:
-            cause = None
+    # Map cause/effect attributes to arg0/arg1 attributes.
 
-        if self.effect:
-            effect = self.sentence.get_head(self.effect)
-        else:
-            effect = None
+    @property
+    def cause(self):
+        return self.arg0
+    
+    @cause.setter
+    def cause(self, cause):
+        self.arg0 = cause
 
-        if cause_before_relation and cause_before_relation(effect, cause):
-            cause, effect = effect, cause
+    @property
+    def effect(self):
+        return self.arg1
+    
+    @effect.setter
+    def effect(self, effect):
+        self.arg1 = effect
 
-        return (cause, effect)
+    _arg0_name = 'cause'
+    _arg1_name = 'effect'
 
-    __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
-    @staticmethod
-    def pprint(instance):
-        # TODO: replace with same code as IAA?
-        connective, cause, effect = [
-             ' '.join([t.original_text for t in annotation]
-                      if annotation else ['<None>'])
-             for annotation in [instance.connective, instance.cause,
-                                instance.effect]]
-        self_str = 'CausationInstance(connective=%s, cause=%s, effect=%s)' % (
-            connective, cause, effect)
-        return '\n'.join(CausationInstance.__wrapper.wrap(self_str))
 
-    def __repr__(self):
-        return self.pprint(self)
+# TODO: should this have any common object hierarchy with CausationInstance?
+class OverlappingRelationInstance(_BinaryRelationInstance):
+    RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
+                          'Obligation_permission, Creation_termination',
+                          'Extremity_sufficiency', 'Circumstance'])
