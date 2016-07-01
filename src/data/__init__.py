@@ -789,9 +789,9 @@ class StanfordParsedSentence(object):
                     read_stream_until(document_text, token_text_to_find, True))
                 self.original_text += text_until_token
                 assert found_token, (
-                    ('Could not find token "%s" starting at position %d '
-                     '(accumulated: %s)')
-                    % (original, search_start, self.original_text))
+                    (u'Could not find token "%s" starting at position %d '
+                     '(accumulated: %s)') % (
+                    original, search_start, self.original_text)).encode('utf-8')
 
                 if original[-1] == '.':
                     # If it ends in a period, and the next character in the
