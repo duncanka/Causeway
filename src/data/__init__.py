@@ -227,8 +227,8 @@ class StanfordParsedSentence(object):
     def _token_is_preferred_for_head_to(self, old_token, new_token):
         # If the depths are equal, prefer verbs/copulas over nouns, and
         # nouns over others. This helps to get the correct heads for
-        # fragmented arguments, such as arguments that consist of an xcomp
-        # and its subject, as well as a few other edge cases.
+        # fragmented spans, such as spans that consist of an xcomp and its
+        # subject, as well as a few other edge cases.
         if self.is_clause_head(new_token):
             return False
         elif self.is_clause_head(old_token):
