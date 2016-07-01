@@ -162,7 +162,8 @@ class StanfordParsedSentence(object):
     @staticmethod
     def unescape_token_text(token_text):
         token_text = token_text.replace(u'\xa0', ' ')
-        return StanfordParsedSentence.PTB_UNESCAPE_MAP.get(token_text, token_text)
+        return StanfordParsedSentence.PTB_UNESCAPE_MAP.get(token_text,
+                                                           token_text)
 
     @staticmethod
     def escape_token_text(token_text):
@@ -518,8 +519,8 @@ class StanfordParsedSentence(object):
 
     def substitute_dep_ptb_graph(self, ptb_str):
         '''
-        Returns a copy of the StanfordParsedSentence object, whose edge graph has been
-        replaced by the one represented in `ptb_str`. Uses
+        Returns a copy of the StanfordParsedSentence object, whose edge graph
+        has been replaced by the one represented in `ptb_str`. Uses
         `shallow_copy_with_sentences_fixed` to get a mostly shallow copy, but
         with correctly parented CausationInstance and Token objects.
         '''
