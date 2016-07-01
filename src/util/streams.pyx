@@ -1,6 +1,16 @@
+"""
+To compile:
+cython -a streams.pyx
+gcc -shared -pthread -fPIC -fwrapv -O2 -Wall -fno-strict-aliasing \
+    -I/usr/include/python2.7 -o streams.so streams.c
+"""
+
 import io
 import struct
 from types import MethodType
+
+cdef extern from "ctype.h":
+    int tolower( int )
 
 class CharacterTrackingStreamWrapper(io.TextIOWrapper):
     '''
@@ -23,7 +33,7 @@ class CharacterTrackingStreamWrapper(io.TextIOWrapper):
             self.character_position)
         return struct.unpack('=Q', packed)[0]
 
-    def seek(self, offset, whence=io.SEEK_SET):
+    def seek(self, long offset, short whence=io.SEEK_SET):
         if whence == io.SEEK_SET:
             if offset == 0:
                 super(CharacterTrackingStreamWrapper, self).seek(0, whence)
@@ -42,7 +52,7 @@ class CharacterTrackingStreamWrapper(io.TextIOWrapper):
             super(CharacterTrackingStreamWrapper, self).seek(offset, whence)
 
     @classmethod
-    def __add_overriden_read__(cls, method_name):
+    def __add_overriden_read__(cls, str method_name):
         # This should really be using super(), but that doesn't seem to work
         # well with getattr unless we do it in read_fn, where we have access to
         # self. But then it's slow.
@@ -111,32 +121,36 @@ def is_at_eof(stream):
         stream.seek(position)
         return False
 
-def peek_and_revert_unless(stream, condition=lambda char: True):
+def peek_and_revert_unless(stream, condition=None):
     position = stream.tell()
     next_char = stream.read(1)
-    test_result = condition(next_char)
+    test_result = condition is None or condition(next_char)
     if not test_result:
         stream.seek(position)
     return next_char, test_result
 
-def read_stream_until(stream, delimiter, case_insensitive=False):
+def read_stream_until(stream, basestring delimiter,
+                      bint case_insensitive=False):
     ''' NOTE: Does not work for interactive streams. '''
-    accumulator = ''
+    cdef basestring accumulator, lower_delimiter, next_char
+    cdef long found_delimiter_until
 
-    if not delimiter:
-        return (accumulator, True)
+    if len(delimiter) == 0:
+        return (u'', True)
+    lower_delimiter = delimiter.lower()
 
+    accumulator = u''
     found_delimiter_until = 0  # index *after* last delim character found
     while True:
         next_char = stream.read(1)
-        if next_char == '': # we've hit EOF
+        if len(next_char) == 0: # we've hit EOF
             break
 
         accumulator += next_char
         # found_delimiter_until < len(delimiter), so what follows is safe.
         if next_char == delimiter[found_delimiter_until] or (
-                case_insensitive and next_char.lower() ==
-                delimiter[found_delimiter_until].lower()):
+                case_insensitive and tolower(ord(next_char[0])) ==
+                lower_delimiter[found_delimiter_until]):
             found_delimiter_until += 1
             if found_delimiter_until == len(delimiter):
                 return (accumulator, True)

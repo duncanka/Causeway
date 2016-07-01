@@ -1,8 +1,8 @@
 from io import StringIO, BytesIO, SEEK_END
 import unittest
 
-from util.streams import CharacterTrackingStreamWrapper, eat_whitespace, \
-    is_at_eof
+from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
+                          is_at_eof, read_stream_until)
 
 
 class CharacterTrackingStreamWrapperTest(unittest.TestCase):
@@ -117,6 +117,26 @@ class StreamFunctionsTest(unittest.TestCase):
         self.stream.seek(end_position)
         self.assertTrue(is_at_eof(self.stream))
 
+    def test_read_stream_until_success(self):
+        FIRST_WORD = self.data_str[:5]
+        data, result = read_stream_until(self.stream, FIRST_WORD)
+        self.assertEqual(data, FIRST_WORD)
+        self.assertTrue(result)
+        self.assertEqual(self.stream.tell(), len(data))
+
+        remaining_1st_line = self.data_str.split('\n')[0]
+        remaining_1st_line = remaining_1st_line[len(data):] + '\n'
+        data, result = read_stream_until(self.stream, '\n')
+        self.assertEqual(data, remaining_1st_line)
+        self.assertTrue(result)
+        self.assertEqual(self.stream.tell(),
+                         len(remaining_1st_line) + len(FIRST_WORD))
+
+    def test_read_stream_until_failure(self):
+        data, result = read_stream_until(self.stream, 'q')
+        self.assertEqual(data, self.data_str)
+        self.assertFalse(result)
+        self.assertEqual(self.stream.tell(), len(self.data_str))
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
