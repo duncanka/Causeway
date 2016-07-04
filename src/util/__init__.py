@@ -69,11 +69,16 @@ class Enum(list): # based on http://stackoverflow.com/a/9201329 (but faster)
         for i, name in enumerate(names):
             setattr(self, name, i)
 
+    def __repr__(self, *args, **kwargs):
+        return 'Enum(%s)' % list.__repr__(self, *args, **kwargs)
+
+
 def listify(arg):
     """Wraps arg in a list if it's not already a list or tuple."""
     if isinstance(arg, list) or isinstance(arg, tuple):
         return arg
     return [arg]
+
 
 def merge_dicts(dictionaries):
     if not dictionaries:
@@ -84,11 +89,13 @@ def merge_dicts(dictionaries):
         d.update(next_dict)
     return d
 
+
 def truncated_string(string, truncate_to=25):
     truncated = string[:truncate_to]
     if len(truncated) < len(string):
         truncated += '...'
     return truncated
+
 
 def partition(list_to_partition, num_partitions, item_weights=None,
               allow_empty_partitions=False):
@@ -132,6 +139,7 @@ def partition(list_to_partition, num_partitions, item_weights=None,
                       for i in xrange(num_partitions)]
     return partitions
 
+
 def print_indented(indent_level, *args, **kwargs):
     single_indent_str = kwargs.pop('single_indent_str', '    ')
 
@@ -148,12 +156,14 @@ def print_indented(indent_level, *args, **kwargs):
             print(prefix, **prefix_kwargs)
             print(line, **kwargs)
 
+
 # From https://docs.python.org/2/library/itertools.html
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     a, b = tee(iterable)
     next(b, None)
     return izip(a, b)
+
 
 # From http://stackoverflow.com/a/3010495/4044809
 def get_terminal_size():
@@ -162,10 +172,12 @@ def get_terminal_size():
         struct.pack('HHHH', 0, 0, 0, 0)))
     return w, h
 
+
 # From http://stackoverflow.com/a/434411
 def igroup(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return izip_longest(*args, fillvalue=fillvalue)
+
 
 def floats_same_or_nearly_equal(f1, f2):
     '''
@@ -176,6 +188,7 @@ def floats_same_or_nearly_equal(f1, f2):
         return np.isnan(f2)
     else:
         return np.allclose(f1, f2)
+
 
 def get_object_by_fqname(fqname):
     '''
