@@ -2,6 +2,7 @@
 Define basic causality datatypes
 '''
 
+from bidict import bidict
 from copy import copy, deepcopy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
@@ -978,17 +979,15 @@ class _BinaryRelationInstance(object):
             '{typename}(connective={conn}, {arg0_name}={arg0},'
             ' {arg1_name}={arg1}, type={type})').format(
                 typename=instance.__class__.__name__, conn=connective,
-                arg0_name=instance._arg0_name, arg0=arg0,
-                arg1_name=instance._arg1_name, arg1=arg1,
+                arg0_name=instance.arg_names['arg0'], arg0=arg0,
+                arg1_name=instance.arg_names['arg1'], arg1=arg1,
                 type=instance._types[instance.type])
         return '\n'.join(_BinaryRelationInstance.__wrapper.wrap(self_str))
 
     def __repr__(self):
         return self.pprint(self)
     
-    _arg0_name = 'arg0'
-    _arg1_name = 'arg1'
-    _types = None
+    arg_names = bidict({'arg0': 'arg0', 'arg1': 'arg1'})
 
 
 class CausationInstance(_BinaryRelationInstance):
@@ -1027,8 +1026,7 @@ class CausationInstance(_BinaryRelationInstance):
     def effect(self, effect):
         self.arg1 = effect
 
-    _arg0_name = 'cause'
-    _arg1_name = 'effect'
+    arg_names = bidict({'arg0': 'cause', 'arg1': 'effect'})
 
 # TODO: should this have any common object hierarchy with CausationInstance?
 class OverlappingRelationInstance(_BinaryRelationInstance):
