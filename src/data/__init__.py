@@ -976,10 +976,11 @@ class _BinaryRelationInstance(object):
                                 instance.arg1]]
         self_str = (
             '{typename}(connective={conn}, {arg0_name}={arg0},'
-            '{arg1_name}={arg1})').format(
+            ' {arg1_name}={arg1}, type={type})').format(
                 typename=instance.__class__.__name__, conn=connective,
                 arg0_name=instance._arg0_name, arg0=arg0,
-                arg1_name=instance._arg1_name, arg1=arg1)
+                arg1_name=instance._arg1_name, arg1=arg1,
+                type=instance._types[instance.type])
         return '\n'.join(_BinaryRelationInstance.__wrapper.wrap(self_str))
 
     def __repr__(self):
@@ -987,12 +988,14 @@ class _BinaryRelationInstance(object):
     
     _arg0_name = 'arg0'
     _arg1_name = 'arg1'
+    _types = None
 
 
 class CausationInstance(_BinaryRelationInstance):
     Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
     CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
                            'Purpose'])
+    _types = CausationTypes
 
     def __init__(self, source_sentence, degree=None, causation_type=None,
                  connective=None, cause=None, effect=None, annotation_id=None):
@@ -1027,9 +1030,9 @@ class CausationInstance(_BinaryRelationInstance):
     _arg0_name = 'cause'
     _arg1_name = 'effect'
 
-
 # TODO: should this have any common object hierarchy with CausationInstance?
 class OverlappingRelationInstance(_BinaryRelationInstance):
     RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
                           'Obligation_permission', 'Creation_termination',
                           'Extremity_sufficiency', 'Circumstance'])
+    _types = RelationTypes
