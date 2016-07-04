@@ -305,7 +305,7 @@ class AutoWeightedVotingClassifierTest(NumpyAwareTestCase):
         base_c1.fit([[], [], []], [0, 1, 1])
         base_classifiers = [('c0', base_c0), ('c1', base_c1)]
         self.classifier = AutoWeightedVotingClassifier(
-            accuracy_score, base_classifiers, voting='soft')
+            base_classifiers, voting='soft', score_fn=accuracy_score)
         self.X = np.array([[0, 0, 0, 2],
                            [0, 0, 0, 4],
                            [1, 1, 1, 3]])
