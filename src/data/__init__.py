@@ -1031,5 +1031,5 @@ class CausationInstance(_BinaryRelationInstance):
 # TODO: should this have any common object hierarchy with CausationInstance?
 class OverlappingRelationInstance(_BinaryRelationInstance):
     RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
-                          'Obligation_permission, Creation_termination',
+                          'Obligation_permission', 'Creation_termination',
                           'Extremity_sufficiency', 'Circumstance'])
