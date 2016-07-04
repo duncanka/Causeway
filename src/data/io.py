@@ -8,7 +8,8 @@ import re
 
 from util import recursively_list_files
 from util.streams import read_stream_until, CharacterTrackingStreamWrapper
-from data import StanfordParsedSentence, Annotation, CausationInstance, SentencesDocument
+from data import (StanfordParsedSentence, Annotation, CausationInstance,
+                  SentencesDocument, OverlappingRelationInstance)
 
 try:
     DEFINE_bool('reader_binarize_degrees', False,
@@ -336,7 +337,7 @@ class CausalityStandoffReader(DocumentReader):
                         line, line_parts, ids_to_annotations, ids_to_instances,
                         lines_to_reprocess, ids_to_reprocess,
                         ids_needed_to_reprocess, unused_arg_ids, document)
-                elif line_id[0] == 'A': # it's an event attribute (degree)
+                elif line_id[0] == 'A': # it's an event attribute
                     self.__process_attribute(
                         line, line_parts, ids_to_annotations, ids_to_instances,
                         lines_to_reprocess, ids_to_reprocess,
@@ -427,14 +428,20 @@ class CausalityStandoffReader(DocumentReader):
         # Create the instance if necessary.
         annotation_type = type_and_indices_str[:first_space_idx]
         if annotation_type != 'Argument' and annotation_type != 'Note':
+            is_noncausal = annotation_type == 'NonCausal'
             self.__raise_warning_if(
-                annotation_type not in CausationInstance.CausationTypes,
+                annotation_type not in CausationInstance.CausationTypes
+                and not is_noncausal,
                 "Skipping text annotation with invalid causation type")
             try:
                 connective = containing_sentence.find_tokens_for_annotation(
                     annotation)
-                instance = containing_sentence.add_causation_instance(
-                    connective=connective)
+                if is_noncausal:
+                    instance = containing_sentence.add_overlapping_instance(
+                        connective=connective)
+                else:
+                    instance = containing_sentence.add_causation_instance(
+                        connective=connective)
                 ids_to_instances[line_id] = instance
             except ValueError as e: # No tokens found for annotation
                 raise UserWarning(e.message)
@@ -444,33 +451,54 @@ class CausalityStandoffReader(DocumentReader):
     def __process_attribute(self, line, line_parts, ids_to_annotations,
                             ids_to_instances, lines_to_reprocess,
                             ids_to_reprocess, ids_needed_to_reprocess):
+
         self.__raise_warning_if(
             len(line_parts) != 2,
             "Skipping attribute line lacking 2 tab-separated entries")
         line_id = line_parts[0]
         attr_parts = line_parts[1].split(' ')
-        self.__raise_warning_if(
-            len(attr_parts) != 3,
-            "Skipping attribute line lacking 3 space-separated components")
-        self.__raise_warning_if(
-            attr_parts[0] != "Degree",
-            "Skipping attribute line with unrecognized attribute")
 
-        _, id_to_modify, degree = attr_parts
-        try:
-            if FLAGS.reader_binarize_degrees:
-                if degree == 'Enable':
-                    degree = 'Facilitate'
-                elif degree == 'Disentail':
-                    degree = 'Inhibit'
-            degree_index = CausationInstance.Degrees.index(degree)
-            ids_to_instances[id_to_modify].degree = degree_index
-        except ValueError:
-            raise UserWarning('Skipping attribute line with invalid degree')
-        except KeyError:
-            lines_to_reprocess.append(line)
-            ids_to_reprocess.add(line_id)
-            ids_needed_to_reprocess.add(id_to_modify)
+        attr_type = attr_parts[0]
+        if attr_type == 'Degree':
+            self.__raise_warning_if(
+                len(attr_parts) != 3,
+                "Skipping attribute line lacking 3 space-separated components")
+
+            _, id_to_modify, degree = attr_parts
+            try:
+                if FLAGS.reader_binarize_degrees:
+                    if degree == 'Enable':
+                        degree = 'Facilitate'
+                    elif degree == 'Disentail':
+                        degree = 'Inhibit'
+                degree_index = getattr(CausationInstance.Degrees, degree)
+                ids_to_instances[id_to_modify].degree = degree_index
+            except ValueError:
+                raise UserWarning('Skipping attribute line with invalid degree')
+            except KeyError:
+                lines_to_reprocess.append(line)
+                ids_to_reprocess.add(line_id)
+                ids_needed_to_reprocess.add(id_to_modify)
+        else:
+            self.__raise_warning_if(
+                len(attr_parts) != 2,
+                "Skipping attribute line lacking 2 space-separated components")
+
+            id_to_modify = attr_parts[1]
+            attr_type = attr_type.replace('-', '_')
+            try:
+                overlapping_type = getattr(
+                    OverlappingRelationInstance.RelationTypes, attr_type)
+                ids_to_instances[id_to_modify].type = overlapping_type
+            except AttributeError:
+                raise UserWarning(
+                    "Skipping attribute line with unrecognized attribute: %s"
+                    % attr_type)
+            except KeyError:
+                lines_to_reprocess.append(line)
+                ids_to_reprocess.add(line_id)
+                ids_needed_to_reprocess.add(id_to_modify)
+
 
     def __process_event(self, line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess,
@@ -480,6 +508,7 @@ class CausalityStandoffReader(DocumentReader):
             "Skipping event line that does not have 2 tab-separated entries")
         line_id = line_parts[0]
         args = line_parts[1].split(' ')
+        # TODO: update this to handle zero-arg instances?
         self.__raise_warning_if(
             len(args) < 2,
             'Skipping event line that does not have at least 1 arg')
@@ -495,8 +524,11 @@ class CausalityStandoffReader(DocumentReader):
             causation_type_index = CausationInstance.CausationTypes.index(
                 causation_type)
         except ValueError:
-            raise UserWarning('Skipping invalid causation type: %s'
-                              % causation_type)
+            if causation_type == 'NonCausal':
+                causation_type_index = -1
+            else:
+                raise UserWarning('Skipping invalid causation type: %s'
+                                  % causation_type)
 
         id_needed = None
         try:
@@ -522,13 +554,15 @@ class CausalityStandoffReader(DocumentReader):
                 annotation = ids_to_annotations[arg_id]
                 try:
                     annotation_tokens = (
-                        instance.sentence.find_tokens_for_annotation(annotation))
+                        instance.sentence.find_tokens_for_annotation(
+                            annotation))
                 except ValueError as e:
                     raise UserWarning(e.message)
-                if arg_type.startswith('Cause'):
-                    instance.cause = annotation_tokens
-                elif arg_type.startswith('Effect'):
-                    instance.effect = annotation_tokens
+                if arg_type.startswith('Cause') or arg_type.startswith('Arg0'):
+                    instance.arg0 = annotation_tokens
+                elif (arg_type.startswith('Effect')
+                      or arg_type.startswith('Arg1')):
+                    instance.arg1 = annotation_tokens
                 else:
                     raise UserWarning('Skipping event with invalid arg types')
 
@@ -539,7 +573,8 @@ class CausalityStandoffReader(DocumentReader):
                     # used twice, so it already got removed.
                     pass
 
-            instance.type = causation_type_index
+            if causation_type_index != -1: # it's not a NonCausal instance
+                instance.type = causation_type_index
             instance.id = line_id
             # Add the event ID as an alias of the instance.
             ids_to_instances[line_id] = instance
