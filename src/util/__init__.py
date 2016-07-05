@@ -213,3 +213,15 @@ def get_object_by_fqname(fqname):
 class Object(object):
     ''' Dummy container class for storing attributes in. '''
     pass
+
+
+def make_getter(underlying_attr_name):
+    def getter(self):
+        return getattr(self, underlying_attr_name)
+    return getter
+
+
+def make_setter(underlying_attr_name):
+    def setter(self, value):
+        return setattr(self, underlying_attr_name, value)
+    return setter

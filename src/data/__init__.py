@@ -11,7 +11,7 @@ import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 
-from util import Enum, merge_dicts, listify
+from util import Enum, merge_dicts, listify, make_getter, make_setter
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
 from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
@@ -1009,24 +1009,14 @@ class CausationInstance(_BinaryRelationInstance):
         self.degree = degree
 
     # Map cause/effect attributes to arg0/arg1 attributes.
-
-    @property
-    def cause(self):
-        return self.arg0
-    
-    @cause.setter
-    def cause(self, cause):
-        self.arg0 = cause
-
-    @property
-    def effect(self):
-        return self.arg1
-    
-    @effect.setter
-    def effect(self, effect):
-        self.arg1 = effect
-
     arg_names = bidict({'arg0': 'cause', 'arg1': 'effect'})
+
+for arg_attr_name in ['cause', 'effect']:
+    underlying_property_name = CausationInstance.arg_names.inv[arg_attr_name]
+    getter = make_getter(underlying_property_name)
+    setter = make_setter(underlying_property_name)
+    setattr(CausationInstance, arg_attr_name, property(getter, setter))
+
 
 # TODO: should this have any common object hierarchy with CausationInstance?
 class OverlappingRelationInstance(_BinaryRelationInstance):
