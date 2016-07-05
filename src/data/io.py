@@ -4,6 +4,7 @@ from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
 import io
 import logging
 import os
+import numpy as np
 import re
 
 from util import recursively_list_files
@@ -306,9 +307,17 @@ class CausalityStandoffReader(DocumentReader):
         else:
             ids_to_annotations = {}
             ids_to_instances = {}
+            instances_also_overlapping = []
             unused_arg_ids = set()
             self.__process_lines(lines, ids_to_annotations, ids_to_instances,
-                                 unused_arg_ids, document)
+                                 instances_also_overlapping, unused_arg_ids,
+                                 document)
+
+            for to_duplicate, instance_type in instances_also_overlapping:
+                ovl_instance = to_duplicate.sentence.add_overlapping_instance(
+                    to_duplicate.connective, to_duplicate.arg0,
+                    to_duplicate.arg1, to_duplicate.id)
+                ovl_instance.type = instance_type
 
         return document
 
@@ -318,7 +327,8 @@ class CausalityStandoffReader(DocumentReader):
             raise UserWarning(message)
 
     def __process_lines(self, lines, ids_to_annotations, ids_to_instances,
-                        unused_arg_ids, document, prev_line_count=float('inf')):
+                        instances_also_overlapping, unused_arg_ids, document,
+                        prev_line_count=np.inf):
         lines_to_reprocess = []
         ids_to_reprocess = set()
         ids_needed_to_reprocess = set()
@@ -340,8 +350,8 @@ class CausalityStandoffReader(DocumentReader):
                 elif line_id[0] == 'A': # it's an event attribute
                     self.__process_attribute(
                         line, line_parts, ids_to_annotations, ids_to_instances,
-                        lines_to_reprocess, ids_to_reprocess,
-                        ids_needed_to_reprocess)
+                        instances_also_overlapping, lines_to_reprocess,
+                        ids_to_reprocess, ids_needed_to_reprocess)
                 elif line_id[0] == 'E': # it's an event
                     self.__process_event(
                         line, line_parts, ids_to_annotations,
@@ -383,8 +393,8 @@ class CausalityStandoffReader(DocumentReader):
                         % (id_needed, self._file_stream.name))
         if recurse:
             self.__process_lines(lines_to_reprocess, ids_to_annotations,
-                                 ids_to_instances, unused_arg_ids, document,
-                                 len(lines))
+                                 ids_to_instances, instances_also_overlapping,
+                                 unused_arg_ids, document, len(lines))
         else:
             for arg_id in unused_arg_ids:
                 logging.warn('Unused argument: %s: "%s" (file: %s)'
@@ -449,8 +459,9 @@ class CausalityStandoffReader(DocumentReader):
             unused_arg_ids.add(line_id)
 
     def __process_attribute(self, line, line_parts, ids_to_annotations,
-                            ids_to_instances, lines_to_reprocess,
-                            ids_to_reprocess, ids_needed_to_reprocess):
+                            ids_to_instances, instances_also_overlapping,
+                            lines_to_reprocess, ids_to_reprocess,
+                            ids_needed_to_reprocess):
 
         self.__raise_warning_if(
             len(line_parts) != 2,
@@ -489,7 +500,12 @@ class CausalityStandoffReader(DocumentReader):
             try:
                 overlapping_type = getattr(
                     OverlappingRelationInstance.RelationTypes, attr_type)
-                ids_to_instances[id_to_modify].type = overlapping_type
+                instance = ids_to_instances[id_to_modify]
+                if isinstance(instance, OverlappingRelationInstance):
+                    instance.type = overlapping_type
+                else:
+                    instances_also_overlapping.append((instance,
+                                                       overlapping_type))
             except AttributeError:
                 raise UserWarning(
                     "Skipping attribute line with unrecognized attribute: %s"
@@ -563,6 +579,8 @@ class CausalityStandoffReader(DocumentReader):
                 elif (arg_type.startswith('Effect')
                       or arg_type.startswith('Arg1')):
                     instance.arg1 = annotation_tokens
+                elif (arg_type.startswith('Means')):
+                    logging.warn('Ignoring Means argument (%s)', line.rstrip())
                 else:
                     raise UserWarning('Skipping event with invalid arg types')
 
