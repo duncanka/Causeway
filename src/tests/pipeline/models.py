@@ -187,6 +187,11 @@ class ClassifierTest(unittest.TestCase):
             all_feature_extractors = [FeatureExtractor("test1", test1, Num),
                                       FeatureExtractor("test2", test2, Num)]
 
+            @classmethod
+            def _get_feature_extractor_groups(klass):
+                return [klass.all_feature_extractors]
+
+
         c = CheckingClassifier()
         m = TestClassifierModel(classifier=c,
                                 selected_features=["test1", "test2"])
