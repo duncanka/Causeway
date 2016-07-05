@@ -10,7 +10,7 @@ from os import path
 from data import StanfordParsedSentence, CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
-from util import listify, print_indented, Enum
+from util import listify, print_indented, Enum, make_getter, make_setter
 
 try:
     DEFINE_bool("iaa_calculate_partial", False,
@@ -56,6 +56,12 @@ class PossibleCausation(object):
     def __repr__(self):
         return CausationInstance.pprint(self)
 
+for underlying_property_name in ['cause', 'effect']:
+    arg_attr_name = CausationInstance.arg_names.inv[underlying_property_name]
+    getter = make_getter(underlying_property_name)
+    setter = make_setter(underlying_property_name)
+    setattr(PossibleCausation, arg_attr_name, property(getter, setter))
+
 
 class IAAEvaluator(Evaluator):
     # TODO: refactor arguments
@@ -82,7 +88,7 @@ class IAAEvaluator(Evaluator):
         self._without_partial_metrics = CausalityMetrics(
             [], [], False, self.save_differences, None, compare_degrees,
             compare_types, True, True, log_test_instances)
-        self.causations_property_name = causations_property_name
+        self.instances_property_name = causations_property_name
         self.compare_degrees = compare_degrees
         self.compare_types = compare_types
         self.log_test_instances = log_test_instances
@@ -99,7 +105,7 @@ class IAAEvaluator(Evaluator):
                 compare_degrees=self.compare_degrees,
                 pairwise_only=self.pairwise_only,
                 save_agreements=self.save_differences,
-                causations_property_name=self.causations_property_name)
+                causations_property_name=self.instances_property_name)
         without_partial = CausalityMetrics(
             original_document.sentences, document.sentences, False,
             self.save_differences, compare_types=self.compare_types,
@@ -107,7 +113,7 @@ class IAAEvaluator(Evaluator):
             compare_degrees=self.compare_degrees,
             pairwise_only=self.pairwise_only,
             save_agreements=self.save_differences,
-            causations_property_name=self.causations_property_name)
+            causations_property_name=self.instances_property_name)
 
         if self.log_test_instances:
             print 'Differences not allowing partial matches:'

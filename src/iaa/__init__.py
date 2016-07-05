@@ -17,7 +17,7 @@ from textwrap import wrap
 
 from data import CausationInstance, StanfordParsedSentence, Token
 from util import (Enum, print_indented, truncated_string, get_terminal_size,
-                  merge_dicts)
+                  merge_dicts, make_setter, make_getter)
 from util.diff import SequenceDiff
 from util.metrics import (ClassificationMetrics, ConfusionMatrix,
                           AccuracyMetrics, safe_divide)
@@ -108,11 +108,13 @@ def make_annotation_comparator(allow_partial):
 compare_annotations_partial = make_annotation_comparator(True)
 compare_annotations_exact = make_annotation_comparator(False)
 
+
 def _get_printable_connective_word(word):
     if sys.stdout.isatty() or FLAGS.iaa_force_color:
         return colorama.Style.BRIGHT + word.upper() + colorama.Style.RESET_ALL
     else:
         return word.upper()
+
 
 def _wrapped_sentence_highlighting_instance(instance):
     # TODO: use GFlags wrapping machinery?
@@ -124,35 +126,35 @@ def _wrapped_sentence_highlighting_instance(instance):
                  break_long_words=False)
     return '\n'.join(lines)
 
-class CausalityMetrics(object):
+
+class _BinaryRelationMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
-    _ARG_ATTR_NAMES = ['cause_span_metrics', 'effect_span_metrics',
-                       'cause_head_metrics', 'effect_head_metrics',
-                       'cause_jaccard', 'effect_jaccard']
-    _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
-                          'agreeing_instances', 'property_differences',
-                          'argument_differences']
+    # To be overridden by subclasses
+    _ARG_ATTR_NAMES = []
+    _SAVED_ATTR_NAMES = []
+    _GOLD_INSTANCES_PROPERTY_NAME = None
+    _INSTANCE_CLASS = None
 
     # TODO: Refactor order of parameters
     # TODO: provide both pairwise and non-pairwise stats
-    def __init__(
-        self, gold, predicted, allow_partial, save_differences=False,
-        ids_considered=None, compare_degrees=True, compare_types=True,
-        compare_args=True, pairwise_only=False, save_agreements=False,
-        causations_property_name='causation_instances'):
-
+    def __init__(self, gold, predicted, allow_partial, save_differences,
+                 ids_considered, compare_args, properties_to_compare,
+                 pairwise_only, save_agreements, instances_property_name):
+        # properties_to_compare is a list of (property_name,
+        # property_values_enum, should_compare_property) tuples.
         assert len(gold) == len(predicted), (
             "Cannot compute IAA for different-sized datasets")
 
         if ids_considered is None:
-            ids_considered = CausalityMetrics.IDsConsidered.Both
+            ids_considered = _BinaryRelationMetrics.IDsConsidered.Both
         self.allow_partial = allow_partial
         self._annotation_comparator = make_annotation_comparator(allow_partial)
         self.ids_considered = ids_considered
         self.save_differences = save_differences
         self.save_agreements = save_agreements
         self.pairwise_only = pairwise_only
-        self.causations_property_name = causations_property_name
+        self.instances_property_name = instances_property_name
+        self.properties_to_compare = properties_to_compare
 
         self.gold_only_instances = []
         self.predicted_only_instances = []
@@ -163,38 +165,35 @@ class CausalityMetrics(object):
         # Compute attributes that take a little more work.
         self.connective_metrics, matches = self._match_connectives(
             gold, predicted)
-        if compare_degrees:
-            self.degree_matrix = self._compute_agreement_matrix(
-                matches, CausationInstance.Degrees, 'degree', gold)
-        else:
-            self.degree_matrix = None
 
-        if compare_types:
-            self.causation_type_matrix = self._compute_agreement_matrix(
-                matches, CausationInstance.CausationTypes, 'type', gold)
-        else:
-            self.causation_type_matrix = None
+        for property_name, property_enum, compare_property in (
+                properties_to_compare):
+            matrix_attr_name = '%s_matrix' % property_name
+            if compare_property:
+                matrix = self._compute_agreement_matrix(matches, property_enum,
+                                                        property_name, gold)
+                setattr(self, matrix_attr_name, matrix)
+            else:
+                setattr(self, matrix_attr_name, None)
 
         # TODO: add back metrics that account for the possibility of null args
         # (i.e., P/R/F1).
         if compare_args:
-            (self.cause_span_metrics, self.effect_span_metrics,
-             self.cause_head_metrics, self.effect_head_metrics) = (
+            (self.arg0_span_metrics, self.arg1_span_metrics,
+             self.arg0_head_metrics, self.arg1_head_metrics) = (
                 self._match_arguments(matches, gold))
     
-            self.cause_jaccard = self._get_jaccard(matches, 'cause')
-            self.effect_jaccard = self._get_jaccard(matches, 'effect')
+            self.arg0_jaccard = self._get_jaccard(matches, 'arg0')
+            self.arg1_jaccard = self._get_jaccard(matches, 'arg1')
         else:
             for attr_name in self._ARG_ATTR_NAMES:
                 setattr(self, attr_name, None)
 
     def __add__(self, other):
         if (self.allow_partial != other.allow_partial or
-            [self.degree_matrix, other.degree_matrix].count(None) == 1 or
-            [self.causation_type_matrix,
-             other.causation_type_matrix].count(None) == 1):
-            raise ValueError("Can't add causality metrics with different"
-                             " comparison criteria")
+            self.properties_to_compare != other.properties_to_compare):
+            raise ValueError("Can't add binary relation annotation metrics with"
+                             " different comparison criteria")
 
         sum_metrics = copy(self)
         # Add recorded instances/differences.
@@ -203,8 +202,10 @@ class CausalityMetrics(object):
 
         # Add together submetrics, if they exist
         sum_metrics.connective_metrics += other.connective_metrics
-        for attr_name in (['degree_matrix', 'causation_type_matrix']
-                          + self._ARG_ATTR_NAMES):
+        submetric_names = (['_'.join([property_name, 'matrix']) for
+                            (property_name, _, _) in self.properties_to_compare]
+                           + self._ARG_ATTR_NAMES)
+        for attr_name in submetric_names:
             self_attr = getattr(self, attr_name)
             other_attr = getattr(other, attr_name)
             if self_attr is not None and other_attr is not None:
@@ -224,10 +225,10 @@ class CausalityMetrics(object):
 
         return sum_metrics
 
-    def __get_causations(self, sentence, is_gold):
-        causations = []
-        property_name = [self.causations_property_name,
-                         'causation_instances'][is_gold]
+    def __get_instances(self, sentence, is_gold):
+        instances = []
+        property_name = [self.instances_property_name,
+                         self._GOLD_INSTANCES_PROPERTY_NAME][is_gold]
         for instance in getattr(sentence, property_name):
             if (# First set of conditions: matches givenness specified
                 (self.ids_considered == self.IDsConsidered.Both or
@@ -237,12 +238,12 @@ class CausalityMetrics(object):
                   self.ids_considered == self.IDsConsidered.NonGivenOnly))
                 # Second set of conditions: is pairwise if necessary
                 and (not is_gold or not self.pairwise_only or
-                     (instance.cause != None and instance.effect != None))):
-                causations.append(instance)
-        return causations
+                     (instance.arg0 != None and instance.arg1 != None))):
+                instances.append(instance)
+        return instances
 
     @staticmethod
-    def get_connective_matches(gold_causations, predicted_causations,
+    def get_connective_matches(gold_instances, predicted_instances,
                                allow_partial):
         def compare_connectives_exact(instance_1, instance_2):
             return compare_annotations_exact(
@@ -256,11 +257,11 @@ class CausalityMetrics(object):
         # Sort instances in case they're somehow out of order, or there are
         # multiple annotations with the same connective that may be unordered.
         # TODO: is this sufficient? Do we need to worry about, e.g., ordering by
-        # head, or what happens if the cause is None?
+        # head, or what happens if arg0 is None?
         sort_key = lambda inst: (
             inst.connective[0].start_offset,
-            inst.cause[0].start_offset if inst.cause else 0,
-            inst.effect[0].start_offset if inst.effect else 0)
+            inst.arg0[0].start_offset if inst.arg0 else 0,
+            inst.arg1[0].start_offset if inst.arg1 else 0)
 
         matching_instances = []
         gold_only_instances = []
@@ -270,16 +271,16 @@ class CausalityMetrics(object):
         # matches to override full matches. So we first do an exact match,
         # and remove the ones that matched from the partial matching.
         if allow_partial:
-            diff = SequenceDiff(gold_causations, predicted_causations,
+            diff = SequenceDiff(gold_instances, predicted_instances,
                                 compare_connectives_exact, sort_key)
             matching_pairs = diff.get_matching_pairs()
             matching_instances.extend(matching_pairs)
             # Instances that were gold-only or predicted-only may still generate
             # partial matches.
-            gold_causations = diff.get_a_only_elements()
-            predicted_causations = diff.get_b_only_elements()
+            gold_instances = diff.get_a_only_elements()
+            predicted_instances = diff.get_b_only_elements()
 
-        diff = SequenceDiff(gold_causations, predicted_causations,
+        diff = SequenceDiff(gold_instances, predicted_instances,
                             compare_connectives, sort_key)
         matching_instances.extend(diff.get_matching_pairs())
         gold_only_instances.extend(diff.get_a_only_elements())
@@ -296,18 +297,19 @@ class CausalityMetrics(object):
             assert (gold_sentence.original_text ==
                     predicted_sentence.original_text), (
                         "Can't compare annotations on non-identical sentences")
-            gold_causations = self.__get_causations(gold_sentence, True)
-            predicted_causations = self.__get_causations(predicted_sentence,
-                                                         False)
-            
+            gold_instances = self.__get_instances(gold_sentence, True)
+            predicted_instances = self.__get_instances(predicted_sentence,
+                                                       False)
+
             sentence_matching, sentence_gold_only, sentence_predicted_only = (
                 self.get_connective_matches(
-                    gold_causations, predicted_causations, self.allow_partial))
+                    gold_instances, predicted_instances, self.allow_partial))
             matching_instances.extend(sentence_matching)
             gold_only_instances.extend(sentence_gold_only)
             predicted_only_instances.extend(sentence_predicted_only)
 
-        if self.ids_considered == CausalityMetrics.IDsConsidered.GivenOnly:
+        if (self.ids_considered == 
+            _BinaryRelationMetrics.IDsConsidered.GivenOnly):
             assert len(matching_instances) == len(
                 FLAGS.iaa_given_connective_ids), (
                     "Didn't find all expected given connectives! Perhaps"
@@ -317,7 +319,7 @@ class CausalityMetrics(object):
             connective_metrics = None
         # "Both" will only affect the connective stats if there are actually
         # some given connectives.
-        elif (self.ids_considered == CausalityMetrics.IDsConsidered.Both
+        elif (self.ids_considered == _BinaryRelationMetrics.IDsConsidered.Both
               and FLAGS.iaa_given_connective_ids):
             connective_metrics = None
         else:
@@ -358,7 +360,7 @@ class CausalityMetrics(object):
     def _get_jaccard(self, matches, arg_property_name):
         '''
         Returns average Jaccard index across `matches` for property
-        `arg_property_name` (cause or effect).
+        `arg_property_name`.
         '''
         jaccard_avg_numerator = 0
         def get_arg_indices(instance):
@@ -391,7 +393,7 @@ class CausalityMetrics(object):
         labels_2 = []
 
         def log_missing(instance, number):
-            print(property_type_name,
+            print(property_name,
                   ('property not set in Annotation %d;' % number),
                   'not including in analysis (sentence: "',
                   _wrapped_sentence_highlighting_instance(instance_1).encode(
@@ -402,8 +404,6 @@ class CausalityMetrics(object):
             property_1 = getattr(instance_1, property_name)
             property_2 = getattr(instance_2, property_name)
 
-            property_type_name = (["Degree", "Causation type"]
-                                  [property_name == 'type'])
             if property_1 >= len(labels_enum):
                 log_missing(instance_1, 1)
             elif property_2 >= len(labels_enum):
@@ -445,11 +445,11 @@ class CausalityMetrics(object):
         return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
 
     def _match_arguments(self, matches, gold=None): 
-        correct_causes = 0
-        correct_effects = 0
+        correct_arg0s = 0
+        correct_arg1s = 0
 
-        correct_cause_heads = 0
-        correct_effect_heads = 0
+        correct_arg0_heads = 0
+        correct_arg1_heads = 0
 
         for instance_1, instance_2 in matches:
             if gold is not None:
@@ -458,48 +458,48 @@ class CausalityMetrics(object):
                 sentence_num = -1 # No valid sentence number
 
             if FLAGS.iaa_check_punct:
-                cause_1, cause_2 = [i.cause for i in [instance_1, instance_2]]
-                effect_1, effect_2 = [i.effect for i
-                                      in [instance_1, instance_2]]
+                arg0_1, arg0_2 = [i.arg0 for i in [instance_1, instance_2]]
+                arg1_1, arg1_2 = [i.arg1 for i
+                                  in [instance_1, instance_2]]
             else:
-                cause_1, cause_2 = [self._filter_punct_tokens(i.cause)
-                                    if i.cause else None
-                                    for i in [instance_1, instance_2]]
-                effect_1, effect_2 = [self._filter_punct_tokens(i.effect)
-                                      if i.effect else None
-                                      for i in [instance_1, instance_2]]
+                arg0_1, arg0_2 = [self._filter_punct_tokens(i.arg0)
+                                  if i.arg0 else None
+                                  for i in [instance_1, instance_2]]
+                arg1_1, arg1_2 = [self._filter_punct_tokens(i.arg1)
+                                  if i.arg1 else None
+                                  for i in [instance_1, instance_2]]
 
-            causes_match, cause_heads_match = self._match_instance_args(
-                cause_1, cause_2)
-            effects_match, effect_heads_match = self._match_instance_args(
-                effect_1, effect_2)
-            correct_causes += causes_match
-            correct_effects += effects_match
-            correct_cause_heads += cause_heads_match
-            correct_effect_heads += effect_heads_match
+            arg0s_match, arg0_heads_match = self._match_instance_args(
+                arg0_1, arg0_2)
+            arg1s_match, arg1_heads_match = self._match_instance_args(
+                arg1_1, arg1_2)
+            correct_arg0s += arg0s_match
+            correct_arg1s += arg1s_match
+            correct_arg0_heads += arg0_heads_match
+            correct_arg1_heads += arg1_heads_match
 
             # If there's any difference, record it.
             if (self.save_differences and
-                not (causes_match and effects_match and
-                     cause_heads_match and effect_heads_match)):
+                not (arg0s_match and arg1s_match and
+                     arg0_heads_match and arg1_heads_match)):
                 self.argument_differences.append((instance_1, instance_2,
                                                   sentence_num))
 
-        cause_span_metrics = AccuracyMetrics(correct_causes,
-                                             len(matches) - correct_causes)
-        effect_span_metrics = AccuracyMetrics(correct_effects,
-                                              len(matches) - correct_effects)
-        cause_head_metrics = AccuracyMetrics(
-            correct_cause_heads, len(matches) - correct_cause_heads)
-        effect_head_metrics = AccuracyMetrics(
-            correct_effect_heads, len(matches) - correct_effect_heads)
+        arg0_span_metrics = AccuracyMetrics(correct_arg0s,
+                                             len(matches) - correct_arg0s)
+        arg1_span_metrics = AccuracyMetrics(correct_arg1s,
+                                              len(matches) - correct_arg1s)
+        arg0_head_metrics = AccuracyMetrics(
+            correct_arg0_heads, len(matches) - correct_arg0_heads)
+        arg1_head_metrics = AccuracyMetrics(
+            correct_arg1_heads, len(matches) - correct_arg1_heads)
 
-        return (cause_span_metrics, effect_span_metrics,
-                cause_head_metrics, effect_head_metrics)
+        return (arg0_span_metrics, arg1_span_metrics,
+                arg0_head_metrics, arg1_head_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
-           log_agreements=None, log_by_connective=None, log_by_category=None,
-           indent=0, log_file=sys.stdout):
+           log_agreements=None, log_by_connective=None, indent=0,
+           log_file=sys.stdout):
         # Flags aren't available as defaults when the function is created, so
         # set the defaults here.
         if log_confusion is None:
@@ -512,8 +512,6 @@ class CausalityMetrics(object):
             log_agreements = FLAGS.iaa_log_agreements
         if log_by_connective is None:
             log_by_connective = FLAGS.iaa_log_by_connective
-        if log_by_category is None:
-            log_by_category = FLAGS.iaa_log_by_category
 
         if log_differences:
             colorama.reinit()
@@ -536,10 +534,13 @@ class CausalityMetrics(object):
                 self._log_instance_for_connective(
                     instance, sentence_num, "Annotator 2 only:", indent + 1,
                     log_file)
-            self._log_property_differences(CausationInstance.CausationTypes,
-                                           indent + 1, log_file)
-            self._log_property_differences(CausationInstance.Degrees,
-                                           indent + 1, log_file)
+
+            for property_name, property_enum, comparing_property in (
+                self.properties_to_compare):
+                if comparing_property:
+                    self._log_property_differences(property_name, property_enum,
+                                                   indent + 1, log_file)
+
             self._log_arg_label_differences(indent + 1, log_file)
 
         # Ignore connective-related metrics if we have nothing interesting to
@@ -550,20 +551,20 @@ class CausalityMetrics(object):
         if printing_connective_metrics:
             print_indented(indent + 1, self.connective_metrics, file=log_file)
         if log_stats or log_confusion:
-            if self.degree_matrix is not None:
-                self._log_property_metrics(
-                    'Degrees', self.degree_matrix, indent + 1, log_confusion,
-                    log_stats, log_file)
-            if self.causation_type_matrix is not None:
-                self._log_property_metrics(
-                    'Causation types', self.causation_type_matrix, indent + 1,
-                    log_confusion, log_stats, log_file)
+            for property_name, property_enum, comparing_property in (
+                self.properties_to_compare):
+                if comparing_property:
+                    matrix_attr_name = '%s_matrix' % property_name
+                    self._log_property_metrics(
+                        property_name, getattr(self, matrix_attr_name),
+                        indent + 1, log_confusion, log_stats, log_file)
 
         # If any argument properties are set, all should be.
-        if log_stats and self.cause_span_metrics is not None:
+        if log_stats and self.arg0_span_metrics is not None:
             print_indented(indent, 'Arguments:', file=log_file)
-            for arg_type in ['cause', 'effect']:
-                print_indented(indent + 1, arg_type.title(), 's:', sep='',
+            for arg_type in ['arg0', 'arg1']:
+                arg_name = self._INSTANCE_CLASS.arg_names[arg_type]
+                print_indented(indent + 1, arg_name.title(), 's:', sep='',
                                file=log_file)
                 print_indented(indent + 2, 'Spans:', file=log_file)
                 print_indented(indent + 3, getattr(self,
@@ -580,65 +581,21 @@ class CausalityMetrics(object):
         if log_differences:
             colorama.deinit()
 
-        if log_by_connective:
+        if log_by_connective and any(getattr(self, attr_name)
+                                     for attr_name in self._SAVED_ATTR_NAMES):
             print(file=log_file)
             print_indented(indent, 'Metrics by connective:', file=log_file)
             by_connective = self.metrics_by_connective()
-            self._remap_by_connective(by_connective)
             print_indented(indent + 1, self._csv_metrics(by_connective),
                            file=log_file)
-
-        if log_by_category:
-            print(file=log_file)
-            print_indented(indent, 'Metrics by category:', file=log_file)
-            by_category = self.metrics_by_connective_category()
-            print_indented(indent + 1, self._csv_metrics(by_category),
-                           file=log_file)
-
-    @staticmethod
-    def _remap_by_connective(by_connective):
-        to_remap = {'for too to':'too for to', 'for too':'too for',
-                    'reason be':'reason', 'that now':'now that',
-                    'to for':'for to', 'give':'given', 'thank to': 'thanks to',
-                    'result of':'result', 'to need': 'need to'}
-        for connective, metrics in by_connective.items():
-            if connective.startswith('be '):
-                by_connective[connective[3:]] += metrics
-                del by_connective[connective]
-                # print 'Replaced', connective
-            elif connective in to_remap:
-                by_connective[to_remap[connective]] += metrics
-                del by_connective[connective]
-                # print "Replaced", connective
-
-    @staticmethod
-    def _csv_metrics(metrics_dict):
-        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
-        for category, metrics in metrics_dict.iteritems():
-            csv_metrics = (str(x) for x in [
-                category,
-                metrics.connective_metrics.tp,
-                metrics.connective_metrics.fp,
-                metrics.connective_metrics.fn,
-                metrics.cause_span_metrics.accuracy,
-                metrics.cause_head_metrics.accuracy,
-                metrics.cause_jaccard,
-                metrics.effect_span_metrics.accuracy,
-                metrics.effect_head_metrics.accuracy,
-                metrics.effect_jaccard])
-            lines.append(','.join(csv_metrics))
-        return '\n'.join(lines)
 
     def metrics_by_connective(self):
         return self.get_aggregate_metrics(stringify_connective)
 
-    def metrics_by_connective_category(self):
-        return self.get_aggregate_metrics(get_connective_category)
-
     def get_aggregate_metrics(self, instance_to_category):
-        metrics = defaultdict(lambda: CausalityMetrics([], [], False))
+        metrics = defaultdict(lambda: type(self)([], [], False))
 
-        # Compute connective accuracy metrics by connective.
+        # Compute connective accuracy metrics by category.
         for _, instance in self.agreeing_instances:
             metrics[instance_to_category(instance)].connective_metrics.tp += 1
         for _, instance in self.gold_only_instances:
@@ -646,8 +603,8 @@ class CausalityMetrics(object):
         for _, instance in self.predicted_only_instances:
             metrics[instance_to_category(instance)].connective_metrics.fp += 1
 
-        for causality_metrics in metrics.values():
-            causality_metrics.connective_metrics._finalize_counts()
+        for category_metrics in metrics.values():
+            category_metrics.connective_metrics._finalize_counts()
 
         # Compute arg match metrics by connective.
         arg_diffs_by_category = defaultdict(list)
@@ -657,15 +614,14 @@ class CausalityMetrics(object):
 
         for connective, conn_matches in arg_diffs_by_category.iteritems():
             conn_metrics = metrics[connective]
-            (conn_metrics.cause_span_metrics, conn_metrics.effect_span_metrics,
-             conn_metrics.cause_head_metrics,
-             conn_metrics.effect_head_metrics) = (
+            (conn_metrics.arg0_span_metrics, conn_metrics.arg1_span_metrics,
+             conn_metrics.arg0_head_metrics, conn_metrics.arg1_head_metrics) = (
                 conn_metrics._match_arguments(conn_matches))
 
-            conn_metrics.cause_jaccard = self._get_jaccard(conn_matches,
-                                                           'cause')
-            conn_metrics.effect_jaccard = self._get_jaccard(conn_matches,
-                                                            'effect')
+            conn_metrics.arg0_jaccard = self._get_jaccard(conn_matches,
+                                                          'arg0')
+            conn_metrics.arg1_jaccard = self._get_jaccard(conn_matches,
+                                                          'arg1')
 
         return metrics
 
@@ -676,7 +632,7 @@ class CausalityMetrics(object):
         keep copying strings over to concatenate them).
         '''
         string_buffer = StringIO()
-        self.pp(None, None, None, None, None, None, 0, string_buffer)
+        self.pp(indent=0, log_file=string_buffer)
         return string_buffer.getvalue()
 
     @staticmethod
@@ -686,13 +642,16 @@ class CausalityMetrics(object):
         averaged; confusion matrices are summed.
         '''
         assert metrics_list, "Can't aggregate empty list of causality metrics!"
-        aggregated = object.__new__(CausalityMetrics)
+        metrics_type = type(metrics_list[0])
+        aggregated = object.__new__(metrics_type)
 
         aggregated.ids_considered = None
         aggregated.save_differences = any(m.save_differences
                                           for m in metrics_list)
+        # TODO: confirm that all properties_to_compare lists are the same?
+        aggregated.properties_to_compare = metrics_list[0].properties_to_compare
         # Save lists of instances needed for metrics_by_connective.
-        for attr_name in CausalityMetrics._SAVED_ATTR_NAMES:
+        for attr_name in metrics_type._SAVED_ATTR_NAMES:
             if aggregated.save_differences:
                 all_relevant_instances = itertools.chain.from_iterable(
                     getattr(m, attr_name) for m in metrics_list)
@@ -702,20 +661,28 @@ class CausalityMetrics(object):
 
         aggregated.connective_metrics = ClassificationMetrics.average(
             [m.connective_metrics for m in metrics_list])
-        degrees = [m.degree_matrix for m in metrics_list]
-        if None not in degrees:
-            aggregated.degree_matrix = reduce(operator.add, degrees)
-        else:
-            aggregated.degree_matrix = None
-        causation_types = [m.causation_type_matrix for m in metrics_list]
-        if None not in causation_types:
-            aggregated.causation_type_matrix = reduce(operator.add,
-                                                      causation_types)
-        else:
-            aggregated.causation_type_matrix = None
 
-        for attr_name in ['cause_span_metrics', 'effect_span_metrics',
-                          'cause_head_metrics', 'effect_head_metrics']:
+        property_matrices = defaultdict(list)
+        for m in metrics_list:
+            for property_name, property_enum, compare_property in (
+                m.properties_to_compare):
+                matrix_attr_name = '%s_matrix' % property_name
+                if not compare_property:
+                    property_matrices[matrix_attr_name] = None
+                else:
+                    matrices = property_matrices[matrix_attr_name]
+                    if matrices is not None:
+                        matrices.append(getattr(m, matrix_attr_name))
+        
+        for matrix_name, matrices in property_matrices.iteritems():
+            try:
+                aggregated_matrix = reduce(operator.add, matrices)
+            except TypeError: # happens if matrices is None
+                aggregated_matrix = None
+            setattr(aggregated, matrix_name, aggregated_matrix)
+
+        for attr_name in ['arg0_span_metrics', 'arg1_span_metrics',
+                          'arg0_head_metrics', 'arg1_head_metrics']:
             attr_values = [getattr(m, attr_name) for m in metrics_list]
             attr_values = [v for v in attr_values if v is not None]
             if attr_values:
@@ -724,7 +691,7 @@ class CausalityMetrics(object):
             else:
                 setattr(aggregated, attr_name, None)
 
-        for attr_name in ['cause_jaccard', 'effect_jaccard']:
+        for attr_name in ['arg0_jaccard', 'arg1_jaccard']:
             attr_values = [getattr(m, attr_name) for m in metrics_list]
             attr_values = [v for v in attr_values if v is not None]
             if attr_values: # At least some are not None
@@ -742,7 +709,8 @@ class CausalityMetrics(object):
 
     def _log_property_metrics(self, name, matrix, indent, log_confusion,
                               log_stats, log_file):
-        print_indented(indent, name, ':', sep='', file=log_file)
+        print_name = name.title() + 's'
+        print_indented(indent, print_name, ':', sep='', file=log_file)
         if log_confusion:
             print_indented(indent + 1, matrix.pretty_format(metrics=log_stats),
                            file=log_file)
@@ -761,23 +729,23 @@ class CausalityMetrics(object):
             file=log_file)
 
     @staticmethod
-    def _print_with_labeled_args(instance, indent, out_file, cause_start,
-                                 cause_end, effect_start, effect_end):
+    def _print_with_labeled_args(instance, indent, out_file, arg0_start,
+                                 arg0_end, arg1_start, arg1_end):
         '''
-        Prints sentences annotated according to a particular CausationInstance.
+        Prints sentences annotated according to a particular instance.
         Connectives are printed in ALL CAPS. If run from a TTY, arguments are
-        printed in color; otherwise, they're indicated as '/cause/' and
-        '*effect*'. 
+        printed in color; otherwise, they're indicated as '/arg0/' and
+        '*arg1*'. 
         '''
         def get_printable_word(token):
             word = token.original_text
             if token in instance.connective:
                 word = _get_printable_connective_word(word)
 
-            if instance.cause and token in instance.cause:
-                word = cause_start + word + cause_end
+            if instance.arg0 and token in instance.arg0:
+                word = arg0_start + word + arg0_end
             elif instance.effect and token in instance.effect:
-                word = effect_start + word + effect_end
+                word = arg1_start + word + arg1_end
             return word
             
         tokens = instance.sentence.tokens[1:] # skip ROOT
@@ -813,52 +781,43 @@ class CausalityMetrics(object):
 
     def _log_arg_label_differences(self, indent, log_file):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
-            cause_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
-            cause_end = colorama.Fore.RESET
-            effect_start = getattr(colorama.Fore,
-                                   FLAGS.iaa_effect_color.upper())
-            effect_end = colorama.Fore.RESET
+            arg0_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
+            arg0_end = colorama.Fore.RESET
+            arg1_start = getattr(colorama.Fore,
+                                 FLAGS.iaa_effect_color.upper())
+            arg1_end = colorama.Fore.RESET
         else:
-            cause_start = '/'
-            cause_end = '/'
-            effect_start = '*'
-            effect_end = '*'
+            arg0_start = '/'
+            arg0_end = '/'
+            arg1_start = '*'
+            arg1_end = '*'
         
         for instance_1, instance_2, sentence_num in self.argument_differences:
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             connective_text = StanfordParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)')
             print_indented(
-                indent,
-                'Arguments differ for connective "', connective_text,
+                indent, 'Arguments differ for connective "', connective_text,
                 '" (', filename, ':', sentence_num, ')',
-                ' with ', cause_start, 'cause', cause_end, ' and ',
-                effect_start, 'effect', effect_end, ':',
-                sep='', file=log_file)
+                ' with ', arg0_start, self._INSTANCE_CLASS.arg_names['arg0'],
+                arg0_end, ' and ', arg1_start, 'effect',
+                self._INSTANCE_CLASS.arg_names['arg1'], ':', sep='',
+                file=log_file)
             self._print_with_labeled_args(
-                instance_1, indent + 1, log_file, cause_start, cause_end,
-                effect_start, effect_end)
+                instance_1, indent + 1, log_file, arg0_start, arg0_end,
+                arg1_start, arg1_end)
             # print_indented(indent + 1, "vs.", file=log_file)
             self._print_with_labeled_args(
-                instance_2, indent + 1, log_file, cause_start, cause_end,
-                effect_start, effect_end)
+                instance_2, indent + 1, log_file, arg0_start, arg0_end,
+                arg1_start, arg1_end)
 
-    def _log_property_differences(self, property_enum, indent, log_file):
+    def _log_property_differences(self, property_name, property_enum, indent,
+                                  log_file):
         filtered_differences = [x for x in self.property_differences
                                 if x[2] is property_enum]
-
-        if property_enum is CausationInstance.Degrees:
-            property_name = 'Degree'
-            value_extractor = lambda instance: instance.Degrees[instance.degree]
-        elif property_enum is CausationInstance.CausationTypes:
-            property_name = 'Causation type'
-            value_extractor = lambda instance: (
-                instance.CausationTypes[instance.type])
-
         for instance_1, instance_2, _, sentence_num in filtered_differences:
-            if value_extractor:
-                values = (value_extractor(instance_1),
-                          value_extractor(instance_2))
+            values = [property_enum[getattr(instance, property_name)]
+                      for instance in [instance_1, instance_2]]
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             print_indented(
                 indent, property_name, 's for connective "',
@@ -870,60 +829,156 @@ class CausalityMetrics(object):
                 sep='', file=log_file)
 
 
+class CausalityMetrics(_BinaryRelationMetrics):
+    _ARG_ATTR_NAMES = ['cause_span_metrics', 'effect_span_metrics',
+                       'cause_head_metrics', 'effect_head_metrics',
+                       'cause_jaccard', 'effect_jaccard']
+    _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
+                          'agreeing_instances', 'property_differences',
+                          'argument_differences']
+    _GOLD_INSTANCES_PROPERTY_NAME = 'causation_instances'
+    _INSTANCE_CLASS = CausationInstance
+
+    # TODO: Refactor order of parameters
+    # TODO: provide both pairwise and non-pairwise stats
+    def __init__(self, gold, predicted, allow_partial, save_differences=False,
+                 ids_considered=None, compare_degrees=True, compare_types=True,
+                 compare_args=True, pairwise_only=False, save_agreements=False,
+                 causations_property_name=_GOLD_INSTANCES_PROPERTY_NAME):
+        properties_to_compare = [
+            ('degree', CausationInstance.Degrees, compare_degrees),
+            ('type', CausationInstance.CausationTypes, compare_types)]
+        super(CausalityMetrics, self).__init__(
+            gold, predicted, allow_partial, save_differences, ids_considered,
+            compare_args, properties_to_compare, pairwise_only, save_agreements,
+            causations_property_name)
+
+    def metrics_by_connective(self):
+        by_connective = super(CausalityMetrics, self).metrics_by_connective()
+        self._remap_by_connective(by_connective)
+        return by_connective
+
+    @staticmethod
+    def _remap_by_connective(by_connective):
+        to_remap = {'for too to':'too for to', 'for too':'too for',
+                    'reason be':'reason', 'that now':'now that',
+                    'to for':'for to', 'give':'given', 'thank to': 'thanks to',
+                    'result of':'result', 'to need': 'need to'}
+        for connective, metrics in by_connective.items():
+            if connective.startswith('be '):
+                by_connective[connective[3:]] += metrics
+                del by_connective[connective]
+                # print 'Replaced', connective
+            elif connective in to_remap:
+                by_connective[to_remap[connective]] += metrics
+                del by_connective[connective]
+                # print "Replaced", connective
+
+    @staticmethod
+    def _csv_metrics(metrics_dict):
+        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
+        for category, metrics in metrics_dict.iteritems():
+            csv_metrics = (str(x) for x in [
+                category,
+                metrics.connective_metrics.tp,
+                metrics.connective_metrics.fp,
+                metrics.connective_metrics.fn,
+                metrics.cause_span_metrics.accuracy,
+                metrics.cause_head_metrics.accuracy,
+                metrics.cause_jaccard,
+                metrics.effect_span_metrics.accuracy,
+                metrics.effect_head_metrics.accuracy,
+                metrics.effect_jaccard])
+            lines.append(','.join(csv_metrics))
+        return '\n'.join(lines)
+
+    def metrics_by_connective_category(self):
+        return self.get_aggregate_metrics(self.get_connective_category)
+
+    def pp(self, log_confusion=None, log_stats=None, log_differences=None,
+           log_agreements=None, log_by_connective=None, log_by_category=None,
+           indent=0, log_file=sys.stdout):
+        super(CausalityMetrics, self).pp(
+            log_confusion, log_stats, log_differences, log_agreements,
+            log_by_connective, indent, log_file)
+
+        if log_by_category is None:
+            log_by_category = FLAGS.iaa_log_by_category
+
+        if log_by_category:
+            print(file=log_file)
+            print_indented(indent, 'Metrics by category:', file=log_file)
+            by_category = self.metrics_by_connective_category()
+            print_indented(indent + 1, self._csv_metrics(by_category),
+                           file=log_file)
+
+    __connective_types = merge_dicts([
+        {'CC': 'Conjunctive (coordinating)', 'IN': 'Prepositional',
+         'MD': 'Verbal', 'TO': 'Prepositional'},
+        {'JJ' + suffix: 'Adjectival' for suffix in ['', 'R', 'S']},
+        {'VB' + suffix: 'Verbal' for suffix in ['', 'D', 'G', 'N', 'P', 'Z']},
+        {'RB' + suffix: 'Adverbial' for suffix in ['', 'R', 'S']},
+        {'NN' + suffix: 'Nominal' for suffix in ['', 'S', 'P', 'PS']}])
+
+    @staticmethod
+    def get_connective_category(instance):
+        connective = instance.connective
+
+        # Treat if/thens like normal ifs
+        if len(connective) == 1 or connective[1].lemma == 'then':
+            connective = connective[0]
+            if connective.pos == 'IN':
+                edge_label, _parent = instance.sentence.get_most_direct_parent(
+                    connective)
+                if edge_label == 'mark' and connective.lemma != 'for':
+                    return 'Conjunctive (subordinating)'
+            return CausalityMetrics.__connective_types.get(connective.pos,
+                                                           connective.pos)
+
+        connective_head = instance.sentence.get_head(connective)
+        # Special MWE cases: "because of", "thanks to", "now that", "out of"
+        if len(connective) == 2:
+            stringified = stringify_connective(instance)
+            if stringified == 'because of':
+                return 'Adverbial'
+            elif stringified in ['thank to', 'now that']:
+                return 'Conjunctive (subordinating)'
+            elif stringified == 'out of':
+                return 'Prepositional'
+
+        # Anything tagged IN or TO is probably an argument realization word. If
+        # there are non-argument-realization words in there, or if it's a
+        # copula, it's complex.
+        if any(t.lemma == 'be'
+               or (t is not connective_head and (t.pos not in ['IN', 'TO']
+                                                 or t.lemma in ['as', 'for']))
+               for t in connective):
+            return 'Complex'
+        # A connective that's headed by a preposition or adverb and is otherwise
+        # all prepositions is complex.
+        elif connective_head.pos in ['IN', 'TO', 'RB', 'RBR', 'RBS']:
+            return 'Complex'
+        elif connective_head.pos.startswith('NN') and len(connective) > 2:
+            return 'Complex'
+        else:
+            conn_type = CausalityMetrics.__connective_types[connective_head.pos]
+            if (conn_type == 'Adjectival'
+                and not StanfordParsedSentence.is_contiguous(connective)):
+                return 'Complex'
+            else:
+                return conn_type
+
+
+# Map all the arg0_* and arg1_* metrics to cause_* and effect_*.
+for arg_attr_name in CausalityMetrics._ARG_ATTR_NAMES:
+    arg_name, attr_type = arg_attr_name.split('_', 1)
+    underlying_property_name = '_'.join(
+        [CausationInstance.arg_names.inv[arg_name], attr_type])
+    getter = make_getter(underlying_property_name)
+    setter = make_setter(underlying_property_name)
+    setattr(CausalityMetrics, arg_attr_name, property(getter, setter))
+
+
 def stringify_connective(instance):
     return ' '.join(t.lemma for t in instance.connective)
 
-
-__connective_types = merge_dicts([
-    {'CC': 'Conjunctive (coordinating)', 'IN': 'Prepositional', 'MD': 'Verbal',
-     'TO': 'Prepositional'},
-    {'JJ' + suffix: 'Adjectival' for suffix in ['', 'R', 'S']},
-    {'VB' + suffix: 'Verbal' for suffix in ['', 'D', 'G', 'N', 'P', 'Z']},
-    {'RB' + suffix: 'Adverbial' for suffix in ['', 'R', 'S']},
-    {'NN' + suffix: 'Nominal' for suffix in ['', 'S', 'P', 'PS']}])
-
-def get_connective_category(instance):
-    connective = instance.connective
-    
-    # Treat if/thens like normal ifs
-    if len(connective) == 1 or connective[1].lemma == 'then':
-        connective = connective[0]
-        if connective.pos == 'IN':
-            edge_label, _parent = instance.sentence.get_most_direct_parent(
-                connective)
-            if edge_label == 'mark' and connective.lemma != 'for':
-                return 'Conjunctive (subordinating)'
-        return __connective_types.get(connective.pos, connective.pos)
-
-    connective_head = instance.sentence.get_head(connective)
-    # Special MWE cases: "because of", "thanks to", "now that", "out of"
-    if len(connective) == 2:
-        stringified = stringify_connective(instance)
-        if stringified == 'because of':
-            return 'Adverbial'
-        elif stringified in ['thank to', 'now that']:
-            return 'Conjunctive (subordinating)'
-        elif stringified == 'out of':
-            return 'Prepositional'
-
-    # Anything tagged IN or TO is probably an argument realization word. If
-    # there are non-argument-realization words in there, or if it's a copula,
-    # it's complex.
-    if any(t.lemma == 'be'
-           or (t is not connective_head and (t.pos not in ['IN', 'TO']
-                                             or t.lemma in ['as', 'for']))
-           for t in connective):
-        return 'Complex'
-    # A connective that's headed by a preposition or adverb and is otherwise all
-    # prepositions is complex.
-    elif connective_head.pos in ['IN', 'TO', 'RB', 'RBR', 'RBS']:
-        return 'Complex'
-    elif connective_head.pos.startswith('NN') and len(connective) > 2:
-        return 'Complex'
-    else:
-        conn_type = __connective_types[connective_head.pos]
-        if (conn_type == 'Adjectival'
-            and not StanfordParsedSentence.is_contiguous(connective)):
-            return 'Complex'
-        else:
-            return conn_type
