@@ -15,7 +15,8 @@ import os
 import sys
 from textwrap import wrap
 
-from data import CausationInstance, StanfordParsedSentence, Token
+from data import (CausationInstance, StanfordParsedSentence, Token,
+                  OverlappingRelationInstance)
 from util import (Enum, print_indented, truncated_string, get_terminal_size,
                   merge_dicts, make_setter, make_getter)
 from util.diff import SequenceDiff
@@ -54,6 +55,8 @@ try:
                 "When logging a stage's results, include per-connective stats")
     DEFINE_bool('iaa_log_by_category', False,
                 "When logging a stage's results, include per-category stats")
+    DEFINE_bool('iaa_compute_overlapping', True,
+                "Compute overlapping relations as part of causality IAA stats")
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -129,9 +132,11 @@ def _wrapped_sentence_highlighting_instance(instance):
 
 class _BinaryRelationMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
+    _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
+                          'agreeing_instances', 'property_differences',
+                          'argument_differences']
     # To be overridden by subclasses
-    _ARG_ATTR_NAMES = []
-    _SAVED_ATTR_NAMES = []
+    _ARG_ATTR_NAMES = ['_span_metrics', '_head_metrics', '_jaccard']
     _GOLD_INSTANCES_PROPERTY_NAME = None
     _INSTANCE_CLASS = None
 
@@ -827,23 +832,27 @@ class _BinaryRelationMetrics(object):
                 ' (', filename, ':', sentence_num, ': "',
                 _wrapped_sentence_highlighting_instance(instance_1), '")',
                 sep='', file=log_file)
+            
+    @staticmethod
+    def _get_arg_attr_names(instance_class):
+        return list(itertools.chain.from_iterable(
+            [arg_name + attr_base_name for attr_base_name
+             in _BinaryRelationMetrics._ARG_ATTR_NAMES]
+            for arg_name in instance_class.arg_names.values()))
 
 
 class CausalityMetrics(_BinaryRelationMetrics):
-    _ARG_ATTR_NAMES = ['cause_span_metrics', 'effect_span_metrics',
-                       'cause_head_metrics', 'effect_head_metrics',
-                       'cause_jaccard', 'effect_jaccard']
-    _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
-                          'agreeing_instances', 'property_differences',
-                          'argument_differences']
     _GOLD_INSTANCES_PROPERTY_NAME = 'causation_instances'
     _INSTANCE_CLASS = CausationInstance
+    _ARG_ATTR_NAMES = _BinaryRelationMetrics._get_arg_attr_names(
+        _INSTANCE_CLASS)
 
     # TODO: Refactor order of parameters
     # TODO: provide both pairwise and non-pairwise stats
     def __init__(self, gold, predicted, allow_partial, save_differences=False,
                  ids_considered=None, compare_degrees=True, compare_types=True,
                  compare_args=True, pairwise_only=False, save_agreements=False,
+                 compute_overlapping=None,
                  causations_property_name=_GOLD_INSTANCES_PROPERTY_NAME):
         properties_to_compare = [
             ('degree', CausationInstance.Degrees, compare_degrees),
@@ -852,6 +861,17 @@ class CausalityMetrics(_BinaryRelationMetrics):
             gold, predicted, allow_partial, save_differences, ids_considered,
             compare_args, properties_to_compare, pairwise_only, save_agreements,
             causations_property_name)
+
+        if compute_overlapping is None:
+            compute_overlapping = FLAGS.iaa_compute_overlapping
+
+        if compute_overlapping:
+            self.overlapping = OverlappingRelMetrics(
+                gold, predicted, allow_partial, save_differences,
+                ids_considered, compare_types, compare_args, pairwise_only,
+                save_agreements)
+        else:
+            self.overlapping = None
 
     def metrics_by_connective(self):
         by_connective = super(CausalityMetrics, self).metrics_by_connective()
@@ -912,6 +932,13 @@ class CausalityMetrics(_BinaryRelationMetrics):
             print_indented(indent + 1, self._csv_metrics(by_category),
                            file=log_file)
 
+        if self.overlapping:
+            print(file=log_file)
+            print_indented(indent, 'Overlapping:', file=log_file)
+            self.overlapping.pp(log_confusion, log_stats, log_differences,
+                                log_agreements, log_by_connective, indent + 1,
+                                log_file)
+
     __connective_types = merge_dicts([
         {'CC': 'Conjunctive (coordinating)', 'IN': 'Prepositional',
          'MD': 'Verbal', 'TO': 'Prepositional'},
@@ -968,6 +995,23 @@ class CausalityMetrics(_BinaryRelationMetrics):
             else:
                 return conn_type
 
+    def __add__(self, other):
+        summed = super(CausalityMetrics, self).__add__(other)
+        if self.overlapping and other.overlapping:
+            summed.overlapping = self.overlapping + other.overlapping
+        else:
+            summed.overlapping = None
+        return summed
+
+    @staticmethod
+    def aggregate(metrics_list):
+        aggregated = _BinaryRelationMetrics.aggregate(metrics_list)
+        all_overlapping = [m.overlapping for m in metrics_list]
+        if None in all_overlapping:
+            aggregated.overlapping = None
+        else:
+            aggregated.overlapping = reduce(operator.add, all_overlapping)
+        return aggregated
 
 # Map all the arg0_* and arg1_* metrics to cause_* and effect_*.
 for arg_attr_name in CausalityMetrics._ARG_ATTR_NAMES:
@@ -977,6 +1021,24 @@ for arg_attr_name in CausalityMetrics._ARG_ATTR_NAMES:
     getter = make_getter(underlying_property_name)
     setter = make_setter(underlying_property_name)
     setattr(CausalityMetrics, arg_attr_name, property(getter, setter))
+
+
+class OverlappingRelMetrics(_BinaryRelationMetrics):
+    _INSTANCE_CLASS = OverlappingRelationInstance
+    _ARG_ATTR_NAMES = _BinaryRelationMetrics._get_arg_attr_names(
+        _INSTANCE_CLASS)
+    _GOLD_INSTANCES_PROPERTY_NAME = 'overlapping_rel_instances'
+
+    def __init__(self, gold, predicted, allow_partial, save_differences=False,
+                 ids_considered=None, compare_types=True, compare_args=True,
+                 pairwise_only=False, save_agreements=False,
+                 causations_property_name=_GOLD_INSTANCES_PROPERTY_NAME):
+        properties_to_compare = [
+            ('type', OverlappingRelationInstance.RelationTypes, compare_types)]
+        super(OverlappingRelMetrics, self).__init__(
+            gold, predicted, allow_partial, save_differences, ids_considered,
+            compare_args, properties_to_compare, pairwise_only, save_agreements,
+            causations_property_name)
 
 
 def stringify_connective(instance):
