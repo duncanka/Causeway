@@ -49,6 +49,10 @@ class DocumentStream(object):
 
 
 class DocumentWriter(DocumentStream):
+    # TODO: change write and instance_complete to start_writing(doc),
+    # incremental_write(instance), and finish_writing(doc). Will also eliminate
+    # the write_all_instances thing.
+
     def open(self, filepath, mode='w'):
         self.close()
         self._file_stream = io.open(filepath, mode)
@@ -211,8 +215,8 @@ class StanfordParsedSentenceReader(DocumentReader):
             self._file_stream)
         assert (len(sentence.original_text) ==
                 self._file_stream.character_position
-                  - sentence.document_char_offset), \
-            ('Sentence length != offset difference: %s'
+                  - sentence.document_char_offset), (
+            'Sentence length != offset difference: %s'
              % sentence.original_text).encode('ascii', 'replace')
         return sentence
 
@@ -286,9 +290,9 @@ class CausalityStandoffReader(DocumentReader):
     '''
     FILE_PATTERN = r'.*\.ann$'
 
-    def __init__(self):
-        super(CausalityStandoffReader, self).__init__()
+    def __init__(self, filepath=None):
         self.sentence_reader = StanfordParsedSentenceReader()
+        super(CausalityStandoffReader, self).__init__(filepath)
 
     def open(self, filepath):
         super(CausalityStandoffReader, self).open(filepath)
@@ -622,9 +626,10 @@ class CausalityStandoffReader(DocumentReader):
 
 
 class CausalityStandoffWriter(InstancesDocumentWriter):
-    def __init__(self, filepath=None):
+    def __init__(self, filepath=None, initial_char_offset=0):
         super(CausalityStandoffWriter, self).__init__(filepath)
         self._reset()
+        self.initial_char_offset = initial_char_offset
 
     def write(self, document):
         # The real work was already done in instance_complete.
@@ -675,14 +680,13 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         
         return bounds
 
-    @staticmethod
-    def _get_bounds_and_text_strings(tokens, annotation_type_str):
+    def _get_bounds_and_text_strings(self, tokens, annotation_type_str):
         sentence = tokens[0].parent_sentence
         bounds = CausalityStandoffWriter._get_annotation_bounds(tokens)
         bounds_str = ';'.join(
-            ['%d %d' % (sentence.document_char_offset + span_start,
-                        sentence.document_char_offset + span_end)
-             for span_start, span_end in bounds])
+            ['%d %d' % tuple(sentence.document_char_offset + index
+                             - self.initial_char_offset for index in bound_pair)
+             for bound_pair in bounds])
         bounds_str = ' '.join([annotation_type_str, bounds_str])
         text_str = ' '.join(
             [sentence.original_text[span_start:span_end]
@@ -781,6 +785,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
 
         ovl_attr_id = self._make_attribute_id()
         relation_type = OverlappingRelationInstance.RelationTypes[instance.type]
+        relation_type = relation_type.replace('_', '-')
         ovl_attr_string = ' '.join([relation_type, event_id])
         self._write_line(ovl_attr_id, ovl_attr_string)
 
