@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+from bidict._bidict import bidict
 from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
 import io
 import logging
@@ -70,6 +71,11 @@ class InstancesDocumentWriter(DocumentWriter):
     def instance_complete(self, document, instance):
         self._write_instance(document, instance)
         self._file_stream.flush()
+
+    def write_all_instances(self, document, instances_getter):
+        all_instances = instances_getter(document)
+        for instance in all_instances:
+            self.instance_complete(document, instance)
 
     def _write_instance(self, document, instance):
         '''
@@ -314,10 +320,9 @@ class CausalityStandoffReader(DocumentReader):
                                  document)
 
             for to_duplicate, instance_type in instances_also_overlapping:
-                ovl_instance = to_duplicate.sentence.add_overlapping_instance(
-                    to_duplicate.connective, to_duplicate.arg0,
-                    to_duplicate.arg1, to_duplicate.id)
-                ovl_instance.type = instance_type
+                to_duplicate.sentence.add_overlapping_instance(
+                    instance_type, to_duplicate.connective, to_duplicate.arg0,
+                    to_duplicate.arg1, to_duplicate.id, to_duplicate)
 
         return document
 
@@ -515,7 +520,6 @@ class CausalityStandoffReader(DocumentReader):
                 ids_to_reprocess.add(line_id)
                 ids_needed_to_reprocess.add(id_to_modify)
 
-
     def __process_event(self, line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess,
                         ids_to_reprocess, ids_needed_to_reprocess,
@@ -615,3 +619,174 @@ class CausalityStandoffReader(DocumentReader):
                 result = last_sentence
 
         return result
+
+
+class CausalityStandoffWriter(InstancesDocumentWriter):
+    def __init__(self, filepath=None):
+        super(CausalityStandoffWriter, self).__init__(filepath)
+        self._reset()
+
+    def write(self, document):
+        # The real work was already done in instance_complete.
+        # Now reset internals.
+        self.reset()
+        
+    def _reset(self):
+        self._next_event_id = 1
+        self._next_annotation_id = 1
+        self._next_attribute_id = 1
+        self._objects_to_ids = bidict()
+        
+    @staticmethod
+    def _get_annotation_bounds(tokens):
+        sentence = tokens[0].parent_sentence
+        token_iterator = iter(sorted(tokens, key=lambda t: t.index))
+        bounds = []
+        next_token = next(token_iterator)
+
+        try:
+            span_start = next_token.start_offset
+            span_end = next_token.end_offset
+            prev_token = next_token
+            next_token = next(token_iterator)
+
+            while True:
+                while next_token.index == prev_token.index + 1:
+                    # If there's a line break in between the previous token and
+                    # the upcoming one, create an artificial fragment like brat.
+                    if '\n' in sentence.original_text[prev_token.end_offset:
+                                                      next_token.start_offset]:
+                        break
+                    span_end = next_token.end_offset # extend span
+                    prev_token = next_token
+                    next_token = next(token_iterator)
+
+                # Now we've reached the end of a contiguous span. Append bounds
+                # and start off another span.
+                bounds.append((span_start, span_end))
+
+                span_start = next_token.start_offset
+                span_end = next_token.end_offset
+                prev_token = next_token
+                next_token = next(token_iterator)
+
+        except StopIteration:
+            bounds.append((span_start, span_end))
+        
+        return bounds
+
+    @staticmethod
+    def _get_bounds_and_text_strings(tokens, annotation_type_str):
+        sentence = tokens[0].parent_sentence
+        bounds = CausalityStandoffWriter._get_annotation_bounds(tokens)
+        bounds_str = ';'.join(
+            ['%d %d' % (sentence.document_char_offset + span_start,
+                        sentence.document_char_offset + span_end)
+             for span_start, span_end in bounds])
+        bounds_str = ' '.join([annotation_type_str, bounds_str])
+        text_str = ' '.join(
+            [sentence.original_text[span_start:span_end]
+             for span_start, span_end in bounds])
+        return (bounds_str, text_str)
+    
+    def _make_id_for(self, obj, next_id_attr_name, id_prefix):
+        if id(obj) in self._objects_to_ids:
+            raise KeyError('Attempted to write object %s twice' % obj)
+
+        try:
+            if obj.id is not None:
+                self._objects_to_ids[id(obj)] = obj.id
+                return obj.id
+        except AttributeError: # No id attribute
+            pass
+        
+        # No saved ID; make up a new one, making sure not to clash with any that
+        # have already been assigned.
+        next_id_num = getattr(self, next_id_attr_name)
+        new_id = '%s%d' % (id_prefix, next_id_num)
+        while new_id in self._objects_to_ids.inv:
+            next_id_num += 1
+            new_id = '%s%d' % (id_prefix, next_id_num)
+        # We're now using this ID. Next valid one is this one + 1.
+        setattr(self, next_id_attr_name, next_id_num + 1)
+
+        self._objects_to_ids[id(obj)] = new_id
+        try:
+            obj.id = new_id
+        except AttributeError: # this wasn't an instance object with an ID
+            pass
+        return new_id
+    
+    def _make_attribute_id(self):
+        # Attributes can never be shared, so don't worry about reuse with
+        # self._objects_to_ids.
+        attr_id = 'A%d' % self._next_attribute_id
+        self._next_attribute_id += 1
+        return attr_id
+
+    def _write_line(self, *line_components):
+        self._file_stream.write(u'\t'.join(line_components))
+        self._file_stream.write(u'\n')
+
+    def _write_argument(self, arg_tokens):
+        try:
+            arg_id = self._make_id_for(arg_tokens, '_next_annotation_id', 'T')
+            bounds_str, text_str = self._get_bounds_and_text_strings(arg_tokens,
+                                                                     'Argument')
+        except KeyError: # Already written. Not a problem; args are often shared
+            return
+
+        self._write_line(arg_id, bounds_str, text_str)
+
+    def _write_event(self, instance, instance_type_name):
+        event_id = self._make_id_for(instance, '_next_event_id', 'E')
+        connective_id = self._make_id_for(instance.connective,
+                                          '_next_annotation_id', 'T')
+
+        bounds_str, text_str = self._get_bounds_and_text_strings(
+            instance.connective, instance_type_name)
+        self._write_line(connective_id, bounds_str, text_str)
+
+        # TODO: update for Means arguments
+        cause_id, effect_id = [self._objects_to_ids[id(arg)]
+                               for arg in instance.arg0, instance.arg1]
+        event_component_strings = [':'.join([instance_type_name,
+                                             connective_id]),
+                                   ':'.join(['Cause', cause_id]),
+                                   ':'.join(['Effect', effect_id])]
+        self._write_line(event_id, ' '.join(event_component_strings))
+        return event_id
+
+    def _write_causation(self, instance):
+        self._write_argument(instance.cause)
+        self._write_argument(instance.effect)
+
+        instance_type = CausationInstance.CausationTypes[instance.type]
+        event_id = self._write_event(instance, instance_type)
+
+        # Write degree if it's set.
+        if instance.degree is not None:
+            degree_attr_id = self._make_attribute_id()
+            degree_string = ' '.join(['Degree', event_id,
+                                    CausationInstance.Degrees[instance.degree]])
+            self._write_line(degree_attr_id, degree_string)
+
+    def _write_overlapping(self, instance):
+        if instance.attached_causation is not None:
+            event_id = self._objects_to_ids[id(instance.attached_causation)]
+        else:
+            self._write_argument(instance.arg0)
+            self._write_argument(instance.arg1)
+            event_id = self._write_event(instance, 'NonCausal')
+
+        ovl_attr_id = self._make_attribute_id()
+        relation_type = OverlappingRelationInstance.RelationTypes[instance.type]
+        ovl_attr_string = ' '.join([relation_type, event_id])
+        self._write_line(ovl_attr_id, ovl_attr_string)
+
+    def _write_instance(self, document, sentence):
+        for causation_instance in sentence.causation_instances:
+            self._write_causation(causation_instance)
+
+        for overlapping_instance in sentence.overlapping_rel_instances:
+            self._write_overlapping(overlapping_instance)
