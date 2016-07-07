@@ -1024,3 +1024,13 @@ class OverlappingRelationInstance(_BinaryRelationInstance):
                           'Obligation_permission', 'Creation_termination',
                           'Extremity_sufficiency', 'Circumstance'])
     _types = RelationTypes
+
+    def __init__(self, source_sentence, rel_type=None, connective=None,
+                 arg0=None, arg1=None, annotation_id=None,
+                 attached_causation=None):
+        all_args = locals().copy()
+        del all_args['self']
+        del all_args['attached_causation']
+        super(OverlappingRelationInstance, self).__init__(**all_args)
+
+        self.attached_causation = attached_causation
