@@ -478,7 +478,7 @@ class VectorValuedFeatureExtractor(FeatureExtractor):
             name, extractor_fn, self.FeatureTypes.Numerical)
 
     def extract_subfeature_names(self, instances):
-        # NOTE: Assumes at least one part.
+        # NOTE: Assumes at least one instance.
         vector_size = len(self._extractor_fn(instances[0]))
         return ['%s[%d]' % (self.name, i) for i in range(vector_size)]
 
