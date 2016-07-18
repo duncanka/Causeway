@@ -172,7 +172,10 @@ class CausalPatternClassifierModel(object):
 
     @staticmethod
     def extract_parent_pos(part):
-        parent = part.sentence.get_most_direct_parent(part.connective_head)[1]
+        _edge_label, parent = part.sentence.get_most_direct_parent(
+            part.connective_head)
+        if parent is None:
+            return None
         return CausalPatternClassifierModel.get_pos_with_copulas(parent)
 
     _ALL_POS_PAIRS = ['/'.join(tags) for tags in product(
@@ -426,22 +429,28 @@ CausalPatternClassifierModel.general_feature_extractors = [
             part.effect_head)),
     FeatureExtractor(
         'cause_neg',
-        lambda part: CausalPatternClassifierModel.is_negated(part.cause_head)),
+        lambda part: CausalPatternClassifierModel.is_negated(part.cause_head),
+        Numerical),
     FeatureExtractor(
         'effect_neg',
-        lambda part: CausalPatternClassifierModel.is_negated(part.effect_head)),
+        lambda part: CausalPatternClassifierModel.is_negated(part.effect_head),
+        Numerical),
     FeatureExtractor(
         'cause_comp',
-        lambda part: CausalPatternClassifierModel.is_comp(part.cause_head)),
+        lambda part: CausalPatternClassifierModel.is_comp(part.cause_head),
+        Numerical),
     FeatureExtractor(
         'effect_comp',
-        lambda part: CausalPatternClassifierModel.is_comp(part.effect_head)),
+        lambda part: CausalPatternClassifierModel.is_comp(part.effect_head),
+        Numerical),
     FeatureExtractor(
         'cause_comp_start',
-        lambda part: CausalPatternClassifierModel.starts_w_comp(part.cause)),
+        lambda part: CausalPatternClassifierModel.starts_w_comp(part.cause),
+        Numerical),
     FeatureExtractor(
         'effect_comp_start',
-        lambda part: CausalPatternClassifierModel.starts_w_comp(part.effect)),
+        lambda part: CausalPatternClassifierModel.starts_w_comp(part.effect),
+        Numerical),
     FeatureExtractor(
         'cause_prep_start',
         lambda part: CausalPatternClassifierModel.initial_prep(part.cause)),
