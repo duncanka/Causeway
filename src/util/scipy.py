@@ -7,6 +7,7 @@ from scipy.sparse import lil_matrix
 from scipy.sparse.csgraph import shortest_path, breadth_first_order
 from sklearn.ensemble.voting_classifier import VotingClassifier
 from sklearn.preprocessing.label import LabelEncoder
+from sklearn.preprocessing import normalize
 
 from util import pairwise, Enum
 
@@ -575,10 +576,11 @@ class AutoWeightedVotingClassifier(VotingClassifier):
         self.le_ = DummyLabelEncoder()
 
     def fit_weights(self, X, y):
-        self.weights = []
+        weights = []
         for estimator in self.estimators_:
             predicted = estimator.predict(X)
-            self.weights.append(self.score_fn(y, predicted))
+            weights.append(self.score_fn(y, predicted))
+        self.weights = normalize([weights], 'l1')
         return self.weights
 
     def fit(self, X, y):
