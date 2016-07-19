@@ -30,9 +30,10 @@ try:
     DEFINE_list(
         'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'tenses,cause_case_children,effect_case_children,domination,'
-        'cause_pp_prep,effect_pp_prep,cause_neg,effect_neg,commas_btw,'
-        'cause_prep_start,effect_prep_start'.split(','),
+        'cause_tense,effect_tense,cause_tense:effect_tense,cause_case_children,'
+        'effect_case_children,domination,cause_pp_prep,effect_pp_prep,'
+        'cause_neg,effect_neg,commas_btw,cause_prep_start,'
+        'effect_prep_start'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -351,13 +352,19 @@ CausalPatternClassifierModel.general_feature_extractors = [
     FeatureExtractor('wordsbtw', CausalPatternClassifierModel.words_btw_heads,
                      Numerical),
     FeatureExtractor('deppath', CausalPatternClassifierModel.extract_dep_path),
+    SetValuedFeatureExtractor(
+        'deps_on_path',
+        lambda part: part.sentence.extract_dependency_path(
+            part.cause_head, part.effect_head, False)),
     FeatureExtractor('deplen',
                      lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)), Numerical),
-    FeatureExtractor('tenses',
-                     lambda part: '/'.join(
-                        [CausalPatternClassifierModel.extract_tense(head)
-                         for head in part.cause_head, part.effect_head])),
+    FeatureExtractor('cause_tense',
+                     lambda part: CausalPatternClassifierModel.extract_tense(
+                        part.cause_head)),
+    FeatureExtractor('effect_tense',
+                     lambda part: CausalPatternClassifierModel.extract_tense(
+                        part.effect_head)),
     SetValuedFeatureExtractor(
         'cn_daughter_deps',
         CausalPatternClassifierModel.extract_daughter_deps),
@@ -473,8 +480,8 @@ class PatternBasedCausationFilter(StructuredModel):
             PatternBasedFilterDecoder())
         
         if FLAGS.filter_feature_select_k == -1:
-            base_per_conn_classifier = classifier
-            general_classifier = classifier
+            base_per_conn_classifier = sklearn.clone(classifier)
+            general_classifier = sklearn.clone(classifier)
         else:
             k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
             base_per_conn_classifier = SKLPipeline([
@@ -483,31 +490,29 @@ class PatternBasedCausationFilter(StructuredModel):
             ])
             general_classifier = sklearn.clone(base_per_conn_classifier)
 
-        all_extractors = CausalPatternClassifierModel.all_feature_extractors
-        general_extractors = (
-            CausalPatternClassifierModel.general_feature_extractors)
-        all_extractor_names = set([e.name for e in all_extractors] + ['all'])
-        for selected_name in FLAGS.filter_features:
-            if selected_name not in all_extractor_names:
-                raise FeaturizationError('Invalid feature name: %s'
-                                         % selected_name)
-
+        self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
+            'most_freq_classifier')
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
             '.all_feature_extractors',
-            self._get_selected_features_for_extractors(FLAGS.filter_features,
-                                                       all_extractors),
+            FLAGS.filter_features,
             'per_conn_classifier')
+
+        # TODO: provide this filtering as a general-purpose function somewhere?
+        general_extractor_names = [
+            e.name for e in
+            CausalPatternClassifierModel.general_feature_extractors]
+        conjoined_sep = FLAGS.conjoined_feature_sep
+        general_selected_features = [
+            feature for feature in FLAGS.filter_features
+            if feature == 'all' or all(name in general_extractor_names for name
+                                       in feature.split(conjoined_sep))]
         self.general_classifier = make_featurizing_estimator(
             general_classifier,
             'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
-            '.general_feature_extractors',
-            self._get_selected_features_for_extractors(FLAGS.filter_features,
-                                                       general_extractors),
+            '.general_feature_extractors', general_selected_features,
             'global_causality_classifier')
-        self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
-            'most_freq_classifier')
 
         self.classifiers = {}
         comparator = make_annotation_comparator(
@@ -526,11 +531,6 @@ class PatternBasedCausationFilter(StructuredModel):
         state = self.__dict__.copy()
         del state['connective_comparator']
         return state
-
-    @staticmethod
-    def _get_selected_features_for_extractors(selected_features, extractors):
-        extractor_names = [e.name for e in extractors] + ['all']
-        return [name for name in selected_features if name in extractor_names]
 
     def _make_parts(self, sentence, is_train):
         if is_train:
