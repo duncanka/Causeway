@@ -44,9 +44,9 @@ def print_ordered_dict(d, indent=0, file=sys.stdout):
 
 def print_per_connective_weights(pipeline, file=sys.stdout):
     weight_dicts = get_per_connective_weights(pipeline)
-    for connective, weights in weight_dicts.iteritems():
+    for connective, weights in sorted(weight_dicts.iteritems()):
         if weights is None:
             print(connective, ': None,', sep='', file=file)
         else:
-            print(connective, ':', sep='', file=file, end='')
+            print(connective, ':', sep='', file=file)
             print_ordered_dict(weights, 1, file=file)
