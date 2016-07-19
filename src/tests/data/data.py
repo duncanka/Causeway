@@ -151,6 +151,7 @@ class DependencyPathTests(unittest.TestCase):
         # Test unrelated
         domination = sentence.get_domination_relation(sentence.tokens[4],
                                                       sentence.tokens[14])
-        self.assertEqual(domination,
-                         StanfordParsedSentence.DOMINATION_DIRECTION.Independent)
+        self.assertEqual(
+            domination,
+            StanfordParsedSentence.DOMINATION_DIRECTION.Independent)
 

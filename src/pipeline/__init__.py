@@ -11,7 +11,7 @@ from os import path
 import sys
 
 from data import SentencesDocument
-from pipeline.models import SimpleModel
+from pipeline.models import SimpleModel, Model
 from util import listify, partition, print_indented
 from util.metrics import ClassificationMetrics
 from util.freezer import freeze
@@ -79,6 +79,22 @@ class Pipeline(object):
         self.reader = reader
         self.writer = writer
         self._evaluators_by_stage = []
+
+        # During training, test all stages whose successors might need realistic
+        # training inputs. That means we can exclude the final stage, as well as
+        # any stages after which the only training operation is the default,
+        # i.e., a no-op.
+        self.test_stages_during_training_mask = np.full((len(stages)), True,
+                                                        bool)
+        self.test_stages_during_training_mask[-1] = False
+        for i in range(len(stages) - 2, -1, -1): # iterate from penultimate
+            next_stage = stages[i + 1]
+            if (next_stage.model.__class__._train_model == Model._train_model
+                and next_stage.__class__.train == Stage.train):
+                self.test_stages_during_training_mask[i] = False
+            else:
+                # This stage and all before it should test during training.
+                break
 
     def _read_documents(self, doc_paths=None):
         documents = []
@@ -201,7 +217,7 @@ class Pipeline(object):
             documents = [deepcopy(document) for document in documents]
             logging.info("Training on %d documents" % len(documents))
 
-        for stage in self.stages:
+        for i, stage in enumerate(self.stages):
             logging.info('Training stage "%s"...' % stage.name)
             instances_by_document = [
                 stage._extract_instances(doc, True, False) for doc in documents]
@@ -209,10 +225,12 @@ class Pipeline(object):
             logging.info('Finished training stage "%s"' % stage.name)
             # For training, each stage needs a realistic view of what its inputs
             # will look like. So now that we've trained the stage, if there is
-            # another stage after it we run the trained stage as though we were
-            # in testing mode.
-            # TODO: Should we allow disabling this somehow?
-            if stage is not self.stages[-1]:
+            # another trainable stage after it we run the trained stage as
+            # though we were in testing mode.
+            # ...or at least that's the default behavior. This can be overridden
+            # for particular pipelines by changing
+            # test_stages_during_training_mask.
+            if self.test_stages_during_training_mask[i]:
                 logging.info('Testing stage "%s" for input to next stage...'
                              % stage.name)
                 instances_by_document = [

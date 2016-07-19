@@ -62,7 +62,7 @@ class Model(object):
             self.__dict__.update(unpickled.__dict__)
 
     def _train_model(self, instances):
-        raise NotImplementedError
+        pass
 
     def _post_model_load(self):
         pass
@@ -321,9 +321,6 @@ class SimpleModel(Model):
     '''
     def __init__(self, operation):
         self.operation = operation
-
-    def train(self, instances):
-        pass
 
     def test(self, instances):
         for instance in instances:
