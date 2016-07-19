@@ -1,5 +1,6 @@
 from collections import defaultdict
-from gflags import DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS, DuplicateFlagError
+from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
+                    DuplicateFlagError)
 from itertools import chain, product
 import logging
 from nltk.corpus import wordnet
@@ -36,7 +37,7 @@ try:
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max")
-    DEFINE_integer('filter_max_dep_path_len', 3,
+    DEFINE_integer('filter_max_dep_path_len', 4,
                    "Maximum number of dependency path steps to allow before"
                    " just making the value 'LONG-RANGE'")
     DEFINE_bool('filter_print_test_instances', False,
@@ -168,7 +169,7 @@ class CausalPatternClassifierModel(object):
             child_deps = [dep for dep, _ in sentence.get_children(child)]
             verb_children_deps.update(child_deps)
 
-        return tuple(verb_children_deps)
+        return ','.join(sorted(verb_children_deps))
 
     @staticmethod
     def extract_parent_pos(part):
@@ -357,22 +358,24 @@ CausalPatternClassifierModel.general_feature_extractors = [
                      lambda part: '/'.join(
                         [CausalPatternClassifierModel.extract_tense(head)
                          for head in part.cause_head, part.effect_head])),
-    FeatureExtractor('cn_daughter_deps',
-                     CausalPatternClassifierModel.extract_daughter_deps),
-    FeatureExtractor('cn_incoming_dep',
-                     CausalPatternClassifierModel.extract_incoming_dep),
+    SetValuedFeatureExtractor(
+        'cn_daughter_deps',
+        CausalPatternClassifierModel.extract_daughter_deps),
+    FeatureExtractor(
+        'cn_incoming_dep',
+        CausalPatternClassifierModel.extract_incoming_dep),
     FeatureExtractor('verb_children_deps',
                      CausalPatternClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
                      CausalPatternClassifierModel.extract_parent_pos),
-    SetValuedFeatureExtractor(
-        'cause_hypernyms',
-        lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
-            part.cause_head)),
-    SetValuedFeatureExtractor(
-        'effect_hypernyms',
-        lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
-            part.effect_head)),
+#     SetValuedFeatureExtractor(
+#         'cause_hypernyms',
+#         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
+#             part.cause_head)),
+#     SetValuedFeatureExtractor(
+#         'effect_hypernyms',
+#         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
+#             part.effect_head)),
     FeatureExtractor(
         'cause_case_children',
         lambda part: CausalPatternClassifierModel.extract_case_children(
@@ -384,22 +387,22 @@ CausalPatternClassifierModel.general_feature_extractors = [
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
-    VectorValuedFeatureExtractor(
-        'cause_vector',
-        lambda part: CausalPatternClassifierModel.extract_vector(
-                        part.cause_head)),
-    VectorValuedFeatureExtractor(
-        'effect_vector',
-        lambda part: CausalPatternClassifierModel.extract_vector(
-                        part.cause_head)),
-    FeatureExtractor(
-        'vector_dist',
-        lambda part: CausalPatternClassifierModel.extract_vector_dist(
-                         part.cause_head, part.effect_head), Numerical),
-    FeatureExtractor(
-        'vector_cos_dist',
-        lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
-                        part.cause_head, part.effect_head), Numerical),
+#     VectorValuedFeatureExtractor(
+#         'cause_vector',
+#         lambda part: CausalPatternClassifierModel.extract_vector(
+#                         part.cause_head)),
+#     VectorValuedFeatureExtractor(
+#         'effect_vector',
+#         lambda part: CausalPatternClassifierModel.extract_vector(
+#                         part.cause_head)),
+#     FeatureExtractor(
+#         'vector_dist',
+#         lambda part: CausalPatternClassifierModel.extract_vector_dist(
+#                          part.cause_head, part.effect_head), Numerical),
+#     FeatureExtractor(
+#         'vector_cos_dist',
+#         lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
+#                         part.cause_head, part.effect_head), Numerical),
     KnownValuesFeatureExtractor(
         'ners', lambda part: '/'.join(
                     StanfordNERStage.NER_TYPES[arg_head.ner_tag]
