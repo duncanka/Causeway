@@ -810,12 +810,14 @@ class _RelationMetrics(object):
                 indent, 'Arguments differ for connective "', connective_text,
                 '" (', filename, ':', sentence_num, ')',
                 ' with ', sep='', end='', file=log_file)
+            arg_types = self._INSTANCE_CLASS.get_arg_types()
             for arg_type, arg_token_start, arg_token_end in zip(
-                self._INSTANCE_CLASS.get_arg_types(), arg_token_starts,
-                arg_token_ends):
+                arg_types, arg_token_starts, arg_token_ends):
                 print(arg_token_start, self._INSTANCE_CLASS.arg_names[arg_type],
                       arg_token_end, sep='', end='', file=log_file)
+                if arg_type != arg_types[-1]: print(', ', end='', file=log_file)
             print(':', file=log_file)
+
             self._print_with_labeled_args(
                 instance_1, indent + 1, log_file, arg_token_starts,
                 arg_token_ends)
