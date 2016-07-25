@@ -766,9 +766,9 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         self._write_line(connective_id, bounds_str, text_str)
 
         arg_strings = [
-            self._get_arg_string(instance.arg_names[arg_name].title(),
-                                 getattr(instance, arg_name))
-            for arg_name in instance.get_arg_names()]
+            self._get_arg_string(instance.arg_names[arg_type].title(),
+                                 getattr(instance, arg_type))
+            for arg_type in instance.get_arg_types()]
         event_component_strings = [':'.join([instance_type_name,
                                              connective_id])] + arg_strings
         self._write_line(event_id, ' '.join(event_component_strings))

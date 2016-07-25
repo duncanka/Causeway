@@ -45,6 +45,9 @@ try:
     DEFINE_string('iaa_effect_color', 'Red',
                   'ANSI color to use for formatting cause words in IAA'
                   ' comparison output')
+    DEFINE_string('iaa_means_color', 'Magenta',
+                  'ANSI color to use for formatting means words in IAA'
+                  ' comparison output')
     DEFINE_bool('iaa_force_color', False,
                 "Force ANSI color in IAA comparisons even when we're not"
                 " outputting to a TTY")
@@ -130,13 +133,32 @@ def _wrapped_sentence_highlighting_instance(instance):
     return '\n'.join(lines)
 
 
-class _BinaryRelationMetrics(object):
+class ArgumentMetrics(object):
+    def __init__(self, span_metrics, head_metrics, jaccard):
+        self.span_metrics = span_metrics
+        self.head_metrics = head_metrics
+        self.jaccard = jaccard
+
+    def __add__(self, other):
+        added_span_metrics = self.span_metrics + other.span_metrics
+        added_head_metrics = self.head_metrics + other.head_metrics
+        # Ignore NaNs.
+        if np.isnan(self.jaccard):
+            added_jaccard = other.jaccard
+        elif np.isnan(other.jaccard):
+            added_jaccard = self.jaccard
+        else:
+            added_jaccard = (self.jaccard + other.jaccard) / 2.0
+        return ArgumentMetrics(added_span_metrics, added_head_metrics,
+                               added_jaccard)
+
+
+class _RelationMetrics(object):
     IDsConsidered = Enum(['GivenOnly', 'NonGivenOnly', 'Both'])
     _SAVED_ATTR_NAMES = ['gold_only_instances', 'predicted_only_instances',
                           'agreeing_instances', 'property_differences',
                           'argument_differences']
     # To be overridden by subclasses
-    _ARG_ATTR_NAMES = ['_span_metrics', '_head_metrics', '_jaccard']
     _GOLD_INSTANCES_PROPERTY_NAME = None
     _INSTANCE_CLASS = None
 
@@ -151,7 +173,7 @@ class _BinaryRelationMetrics(object):
             "Cannot compute IAA for different-sized datasets")
 
         if ids_considered is None:
-            ids_considered = _BinaryRelationMetrics.IDsConsidered.Both
+            ids_considered = _RelationMetrics.IDsConsidered.Both
         self.allow_partial = allow_partial
         self._annotation_comparator = make_annotation_comparator(allow_partial)
         self.ids_considered = ids_considered
@@ -184,15 +206,11 @@ class _BinaryRelationMetrics(object):
         # TODO: add back metrics that account for the possibility of null args
         # (i.e., P/R/F1).
         if compare_args:
-            (self.arg0_span_metrics, self.arg1_span_metrics,
-             self.arg0_head_metrics, self.arg1_head_metrics) = (
-                self._match_arguments(matches, gold))
-    
-            self.arg0_jaccard = self._get_jaccard(matches, 'arg0')
-            self.arg1_jaccard = self._get_jaccard(matches, 'arg1')
+            self._match_arguments(matches, gold)
         else:
-            for attr_name in self._ARG_ATTR_NAMES:
-                setattr(self, attr_name, None)
+            null_metrics = ArgumentMetrics(None, None, None)
+            for arg_num in range(self._INSTANCE_CLASS._num_args):
+                setattr(self, 'arg%d_metrics', null_metrics)
 
     def __add__(self, other):
         if (self.allow_partial != other.allow_partial or
@@ -207,23 +225,15 @@ class _BinaryRelationMetrics(object):
 
         # Add together submetrics, if they exist
         sum_metrics.connective_metrics += other.connective_metrics
-        submetric_names = (['_'.join([property_name, 'matrix']) for
-                            (property_name, _, _) in self.properties_to_compare]
-                           + self._ARG_ATTR_NAMES)
+        submetric_names = ['_'.join([property_name, 'matrix']) for
+                           (property_name, _, _) in self.properties_to_compare]
+        submetric_names += ['%s_metrics' % arg_type for arg_type
+                            in self._INSTANCE_CLASS.get_arg_types()]
         for attr_name in submetric_names:
             self_attr = getattr(self, attr_name)
             other_attr = getattr(other, attr_name)
             if self_attr is not None and other_attr is not None:
-                # Ignore all NaNs -- just pretend they're not even there.
-                if isinstance(self_attr, float) and np.isnan(self_attr):
-                    attr_value = other_attr
-                elif isinstance(other_attr, float) and np.isnan(other_attr):
-                    attr_value = self_attr
-                else:
-                    if attr_name.endswith('jaccard'):
-                        attr_value = (self_attr + other_attr) / 2.0
-                    else:
-                        attr_value = self_attr + other_attr
+                attr_value = self_attr + other_attr
             else:
                 attr_value = None
             setattr(sum_metrics, attr_name, attr_value)
@@ -314,7 +324,7 @@ class _BinaryRelationMetrics(object):
             predicted_only_instances.extend(sentence_predicted_only)
 
         if (self.ids_considered == 
-            _BinaryRelationMetrics.IDsConsidered.GivenOnly):
+            _RelationMetrics.IDsConsidered.GivenOnly):
             assert len(matching_instances) == len(
                 FLAGS.iaa_given_connective_ids), (
                     "Didn't find all expected given connectives! Perhaps"
@@ -324,7 +334,7 @@ class _BinaryRelationMetrics(object):
             connective_metrics = None
         # "Both" will only affect the connective stats if there are actually
         # some given connectives.
-        elif (self.ids_considered == _BinaryRelationMetrics.IDsConsidered.Both
+        elif (self.ids_considered == _RelationMetrics.IDsConsidered.Both
               and FLAGS.iaa_given_connective_ids):
             connective_metrics = None
         else:
@@ -367,13 +377,14 @@ class _BinaryRelationMetrics(object):
         Returns average Jaccard index across `matches` for property
         `arg_property_name`.
         '''
+        iaa_check_punct = FLAGS.iaa_check_punct
         jaccard_avg_numerator = 0
         def get_arg_indices(instance):
             arg = getattr(instance, arg_property_name)
             if arg is None:
                 return []
             else:
-                if not FLAGS.iaa_check_punct:
+                if not iaa_check_punct:
                     arg = self._filter_punct_tokens(arg)
                 return [token.index for token in arg]
 
@@ -386,8 +397,8 @@ class _BinaryRelationMetrics(object):
                 num_matching = len(diff.get_matching_pairs())
                 match_jaccard = num_matching / float(
                     len(i1_indices) + len(i2_indices) - num_matching)
-            else:
-                match_jaccard = 1.0
+            else: # both null; overlap is undefined
+                match_jaccard = np.NaN
             jaccard_avg_numerator += match_jaccard
 
         return safe_divide(jaccard_avg_numerator, len(matches))
@@ -449,12 +460,10 @@ class _BinaryRelationMetrics(object):
     def _filter_punct_tokens(tokens):
         return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
 
-    def _match_arguments(self, matches, gold=None): 
-        correct_arg0s = 0
-        correct_arg1s = 0
-
-        correct_arg0_heads = 0
-        correct_arg1_heads = 0
+    def _match_arguments(self, matches, gold=None):
+        iaa_check_punct = FLAGS.iaa_check_punct
+        correct_args = [0] * self._INSTANCE_CLASS._num_args
+        correct_heads = [0] * self._INSTANCE_CLASS._num_args
 
         for instance_1, instance_2 in matches:
             if gold is not None:
@@ -462,45 +471,38 @@ class _BinaryRelationMetrics(object):
             else:
                 sentence_num = -1 # No valid sentence number
 
-            if FLAGS.iaa_check_punct:
-                arg0_1, arg0_2 = [i.arg0 for i in [instance_1, instance_2]]
-                arg1_1, arg1_2 = [i.arg1 for i
-                                  in [instance_1, instance_2]]
-            else:
-                arg0_1, arg0_2 = [self._filter_punct_tokens(i.arg0)
-                                  if i.arg0 else None
-                                  for i in [instance_1, instance_2]]
-                arg1_1, arg1_2 = [self._filter_punct_tokens(i.arg1)
-                                  if i.arg1 else None
-                                  for i in [instance_1, instance_2]]
-
-            arg0s_match, arg0_heads_match = self._match_instance_args(
-                arg0_1, arg0_2)
-            arg1s_match, arg1_heads_match = self._match_instance_args(
-                arg1_1, arg1_2)
-            correct_arg0s += arg0s_match
-            correct_arg1s += arg1s_match
-            correct_arg0_heads += arg0_heads_match
-            correct_arg1_heads += arg1_heads_match
+            i1_args = instance_1.get_args()
+            i2_args = instance_2.get_args()
+            all_args_match = True
+            for arg_num in range(self._INSTANCE_CLASS._num_args):
+                if iaa_check_punct:
+                    first_arg, second_arg = i1_args[arg_num], i2_args[arg_num]
+                else:
+                    first_arg, second_arg = [
+                        self._filter_punct_tokens(arg) if arg else None
+                        for arg in [i1_args[arg_num], i2_args[arg_num]]]
+    
+                args_match, arg_heads_match = self._match_instance_args(
+                    first_arg, second_arg)
+                correct_args[arg_num] += args_match
+                correct_heads[arg_num] += arg_heads_match
+                all_args_match = all_args_match and args_match
 
             # If there's any difference, record it.
-            if (self.save_differences and
-                not (arg0s_match and arg1s_match and
-                     arg0_heads_match and arg1_heads_match)):
+            if self.save_differences and not all_args_match:
                 self.argument_differences.append((instance_1, instance_2,
                                                   sentence_num))
 
-        arg0_span_metrics = AccuracyMetrics(correct_arg0s,
-                                             len(matches) - correct_arg0s)
-        arg1_span_metrics = AccuracyMetrics(correct_arg1s,
-                                              len(matches) - correct_arg1s)
-        arg0_head_metrics = AccuracyMetrics(
-            correct_arg0_heads, len(matches) - correct_arg0_heads)
-        arg1_head_metrics = AccuracyMetrics(
-            correct_arg1_heads, len(matches) - correct_arg1_heads)
-
-        return (arg0_span_metrics, arg1_span_metrics,
-                arg0_head_metrics, arg1_head_metrics)
+        for arg_num in range(self._INSTANCE_CLASS._num_args):
+            arg_name = 'arg%d' % arg_num
+            arg_jaccard = self._get_jaccard(matches, arg_name)
+            arg_span_metrics = AccuracyMetrics(
+                correct_args[arg_num], len(matches) - correct_args[arg_num])
+            arg_head_metrics = AccuracyMetrics(
+                correct_heads[arg_num], len(matches) - correct_heads[arg_num])
+            arg_metrics = ArgumentMetrics(arg_span_metrics, arg_head_metrics,
+                                          arg_jaccard)
+            setattr(self, arg_name + '_metrics', arg_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
            log_agreements=None, log_by_connective=None, indent=0,
@@ -565,22 +567,25 @@ class _BinaryRelationMetrics(object):
                         indent + 1, log_confusion, log_stats, log_file)
 
         # If any argument properties are set, all should be.
-        if log_stats and self.arg0_span_metrics is not None:
+        if log_stats and self.arg0_metrics is not None:
             print_indented(indent, 'Arguments:', file=log_file)
-            for arg_type in ['arg0', 'arg1']:
+            for arg_type in self._INSTANCE_CLASS.get_arg_types():
                 arg_name = self._INSTANCE_CLASS.arg_names[arg_type]
-                print_indented(indent + 1, arg_name.title(), 's:', sep='',
-                               file=log_file)
+                print_indented(indent + 1, arg_name.title(),
+                               's:' if arg_name[-1] != 's' else ':',
+                               sep='', file=log_file)
                 print_indented(indent + 2, 'Spans:', file=log_file)
-                print_indented(indent + 3, getattr(self,
-                                                   arg_type + '_span_metrics'),
-                               file=log_file)
+                print_indented(
+                    indent + 3,
+                    getattr(self, arg_type + '_metrics').span_metrics,
+                    file=log_file)
                 print_indented(indent + 2, 'Heads:', file=log_file)
-                print_indented(indent + 3, getattr(self,
-                                                   arg_type + '_head_metrics'),
-                               file=log_file)
+                print_indented(
+                    indent + 3,
+                    getattr(self, arg_type + '_metrics').head_metrics,
+                    file=log_file)
                 print_indented(indent + 2, 'Jaccard index: ',
-                               getattr(self, arg_type + '_jaccard'),
+                               getattr(self, arg_type + '_metrics').jaccard,
                                file=log_file)
 
         if log_differences:
@@ -619,14 +624,13 @@ class _BinaryRelationMetrics(object):
 
         for connective, conn_matches in arg_diffs_by_category.iteritems():
             conn_metrics = metrics[connective]
-            (conn_metrics.arg0_span_metrics, conn_metrics.arg1_span_metrics,
-             conn_metrics.arg0_head_metrics, conn_metrics.arg1_head_metrics) = (
-                conn_metrics._match_arguments(conn_matches))
-
-            conn_metrics.arg0_jaccard = self._get_jaccard(conn_matches,
-                                                          'arg0')
-            conn_metrics.arg1_jaccard = self._get_jaccard(conn_matches,
-                                                          'arg1')
+            if self.arg0_metrics is not None: # we're matching arguments
+                conn_metrics._match_arguments(conn_matches)
+            else:
+                null_metrics = ArgumentMetrics(None, None, None)
+                for arg_num in range(self._INSTANCE_CLASS._num_args):
+                    setattr(conn_metrics, 'arg%d_metrics' % arg_num,
+                            null_metrics)
 
         return metrics
 
@@ -646,7 +650,7 @@ class _BinaryRelationMetrics(object):
         Aggregates IAA statistics. Classification and accuracy metrics are
         averaged; confusion matrices are summed.
         '''
-        assert metrics_list, "Can't aggregate empty list of causality metrics!"
+        assert metrics_list, "Can't aggregate empty list of metrics!"
         metrics_type = type(metrics_list[0])
         aggregated = object.__new__(metrics_type)
 
@@ -686,29 +690,32 @@ class _BinaryRelationMetrics(object):
                 aggregated_matrix = None
             setattr(aggregated, matrix_name, aggregated_matrix)
 
-        for attr_name in ['arg0_span_metrics', 'arg1_span_metrics',
-                          'arg0_head_metrics', 'arg1_head_metrics']:
-            attr_values = [getattr(m, attr_name) for m in metrics_list]
-            attr_values = [v for v in attr_values if v is not None]
-            if attr_values:
-                setattr(aggregated, attr_name,
-                        AccuracyMetrics.average(attr_values))
-            else:
-                setattr(aggregated, attr_name, None)
+        for arg_type in metrics_type._INSTANCE_CLASS.get_arg_types():
+            arg_metrics_attr_name = arg_type + '_metrics'
+            arg_metrics = object.__new__(ArgumentMetrics)
+            setattr(aggregated, arg_metrics_attr_name, arg_metrics)
 
-        for attr_name in ['arg0_jaccard', 'arg1_jaccard']:
-            attr_values = [getattr(m, attr_name) for m in metrics_list]
-            attr_values = [v for v in attr_values if v is not None]
-            if attr_values: # At least some are not None
-                attr_values = [v for v in attr_values if not np.isnan(v)]
-                if attr_values:
-                    aggregate_value = np.mean(attr_values)
+            for sub_attr_name in ['span_metrics', 'head_metrics']:
+                sub_attr_values = [getattr(getattr(m, arg_metrics_attr_name),
+                                       sub_attr_name) for m in metrics_list]
+                sub_attr_values = [v for v in sub_attr_values if v is not None]
+                if sub_attr_values:
+                    setattr(arg_metrics, sub_attr_name,
+                            AccuracyMetrics.average(sub_attr_values))
                 else:
-                    aggregate_value = np.nan
-            else:
-                aggregate_value = None
+                    setattr(arg_metrics, sub_attr_name, None)
 
-            setattr(aggregated, attr_name, aggregate_value)
+            jaccard_values = [getattr(m, arg_metrics_attr_name).jaccard
+                              for m in metrics_list]
+            jaccard_values = [v for v in jaccard_values if v is not None]
+            if jaccard_values: # At least some are not None
+                jaccard_values = [v for v in jaccard_values if not np.isnan(v)]
+                if jaccard_values:
+                    arg_metrics.jaccard = np.mean(jaccard_values)
+                else:
+                    arg_metrics.jaccard = np.nan
+            else:
+                arg_metrics.jaccard = None
 
         return aggregated
 
@@ -734,23 +741,23 @@ class _BinaryRelationMetrics(object):
             file=log_file)
 
     @staticmethod
-    def _print_with_labeled_args(instance, indent, out_file, arg0_start,
-                                 arg0_end, arg1_start, arg1_end):
+    def _print_with_labeled_args(instance, indent, out_file, arg_token_starts,
+                                 arg_token_ends):
         '''
         Prints sentences annotated according to a particular instance.
         Connectives are printed in ALL CAPS. If run from a TTY, arguments are
         printed in color; otherwise, they're indicated as '/arg0/' and
-        '*arg1*'. 
+        '*arg1*' (and _arg2_, if applicable). 
         '''
         def get_printable_word(token):
             word = token.original_text
             if token in instance.connective:
                 word = _get_printable_connective_word(word)
-
-            if instance.arg0 and token in instance.arg0:
-                word = arg0_start + word + arg0_end
-            elif instance.effect and token in instance.effect:
-                word = arg1_start + word + arg1_end
+            for arg, token_start, token_end in zip(
+                instance.get_args(), arg_token_starts, arg_token_ends):
+                if arg and token in arg:
+                    word = token_start + word + token_end
+                    break
             return word
             
         tokens = instance.sentence.tokens[1:] # skip ROOT
@@ -786,17 +793,15 @@ class _BinaryRelationMetrics(object):
 
     def _log_arg_label_differences(self, indent, log_file):
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
-            arg0_start = getattr(colorama.Fore, FLAGS.iaa_cause_color.upper())
-            arg0_end = colorama.Fore.RESET
-            arg1_start = getattr(colorama.Fore,
-                                 FLAGS.iaa_effect_color.upper())
-            arg1_end = colorama.Fore.RESET
+            arg_token_starts = [
+                getattr(colorama.Fore, FLAGS.iaa_cause_color.upper()),
+                getattr(colorama.Fore,FLAGS.iaa_effect_color.upper()),
+                getattr(colorama.Fore, FLAGS.iaa_means_color.upper())]
+            arg_token_ends = [colorama.Fore.RESET] * 3
         else:
-            arg0_start = '/'
-            arg0_end = '/'
-            arg1_start = '*'
-            arg1_end = '*'
-        
+            arg_token_starts = ['/', '*', '_']
+            arg_token_ends = arg_token_starts
+
         for instance_1, instance_2, sentence_num in self.argument_differences:
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
             connective_text = StanfordParsedSentence.get_annotation_text(
@@ -804,17 +809,20 @@ class _BinaryRelationMetrics(object):
             print_indented(
                 indent, 'Arguments differ for connective "', connective_text,
                 '" (', filename, ':', sentence_num, ')',
-                ' with ', arg0_start, self._INSTANCE_CLASS.arg_names['arg0'],
-                arg0_end, ' and ', arg1_start, 'effect',
-                self._INSTANCE_CLASS.arg_names['arg1'], ':', sep='',
-                file=log_file)
+                ' with ', sep='', end='', file=log_file)
+            for arg_type, arg_token_start, arg_token_end in zip(
+                self._INSTANCE_CLASS.get_arg_types(), arg_token_starts,
+                arg_token_ends):
+                print(arg_token_start, self._INSTANCE_CLASS.arg_names[arg_type],
+                      arg_token_end, sep='', end='', file=log_file)
+            print(':', file=log_file)
             self._print_with_labeled_args(
-                instance_1, indent + 1, log_file, arg0_start, arg0_end,
-                arg1_start, arg1_end)
+                instance_1, indent + 1, log_file, arg_token_starts,
+                arg_token_ends)
             # print_indented(indent + 1, "vs.", file=log_file)
             self._print_with_labeled_args(
-                instance_2, indent + 1, log_file, arg0_start, arg0_end,
-                arg1_start, arg1_end)
+                instance_2, indent + 1, log_file, arg_token_starts,
+                arg_token_ends)
 
     def _log_property_differences(self, property_name, property_enum, indent,
                                   log_file):
@@ -832,20 +840,11 @@ class _BinaryRelationMetrics(object):
                 ' (', filename, ':', sentence_num, ': "',
                 _wrapped_sentence_highlighting_instance(instance_1), '")',
                 sep='', file=log_file)
-            
-    @staticmethod
-    def _get_arg_attr_names(instance_class):
-        return list(itertools.chain.from_iterable(
-            [arg_name + attr_base_name for attr_base_name
-             in _BinaryRelationMetrics._ARG_ATTR_NAMES]
-            for arg_name in instance_class.arg_names.values()))
 
 
-class CausalityMetrics(_BinaryRelationMetrics):
+class CausalityMetrics(_RelationMetrics):
     _GOLD_INSTANCES_PROPERTY_NAME = 'causation_instances'
     _INSTANCE_CLASS = CausationInstance
-    _ARG_ATTR_NAMES = _BinaryRelationMetrics._get_arg_attr_names(
-        _INSTANCE_CLASS)
 
     # TODO: Refactor order of parameters
     # TODO: provide both pairwise and non-pairwise stats
@@ -903,12 +902,12 @@ class CausalityMetrics(_BinaryRelationMetrics):
                 metrics.connective_metrics.tp,
                 metrics.connective_metrics.fp,
                 metrics.connective_metrics.fn,
-                metrics.cause_span_metrics.accuracy,
-                metrics.cause_head_metrics.accuracy,
-                metrics.cause_jaccard,
-                metrics.effect_span_metrics.accuracy,
-                metrics.effect_head_metrics.accuracy,
-                metrics.effect_jaccard])
+                metrics.cause_metrics.span_metrics.accuracy,
+                metrics.cause_metrics.head_metrics.accuracy,
+                metrics.cause_metrics.jaccard,
+                metrics.effect_metrics.span_metrics.accuracy,
+                metrics.effect_metrics.head_metrics.accuracy,
+                metrics.effect_metrics.jaccard])
             lines.append(','.join(csv_metrics))
         return '\n'.join(lines)
 
@@ -1005,7 +1004,7 @@ class CausalityMetrics(_BinaryRelationMetrics):
 
     @staticmethod
     def aggregate(metrics_list):
-        aggregated = _BinaryRelationMetrics.aggregate(metrics_list)
+        aggregated = _RelationMetrics.aggregate(metrics_list)
         all_overlapping = [m.overlapping for m in metrics_list]
         if None in all_overlapping:
             aggregated.overlapping = None
@@ -1013,20 +1012,16 @@ class CausalityMetrics(_BinaryRelationMetrics):
             aggregated.overlapping = reduce(operator.add, all_overlapping)
         return aggregated
 
-# Map all the arg0_* and arg1_* metrics to cause_* and effect_*.
-for arg_attr_name in CausalityMetrics._ARG_ATTR_NAMES:
-    arg_name, attr_type = arg_attr_name.split('_', 1)
-    underlying_property_name = '_'.join(
-        [CausationInstance.arg_names.inv[arg_name], attr_type])
-    getter = make_getter(underlying_property_name)
-    setter = make_setter(underlying_property_name)
-    setattr(CausalityMetrics, arg_attr_name, property(getter, setter))
+# Map (cause|effect|means)_metrics to argi_metrics.
+for underlying_name, arg_name in CausationInstance.arg_names.iteritems():
+    underlying_name = underlying_name + '_metrics'
+    getter = make_getter(underlying_name)
+    setter = make_setter(underlying_name)
+    setattr(CausalityMetrics, arg_name + '_metrics', property(getter, setter))
 
 
-class OverlappingRelMetrics(_BinaryRelationMetrics):
+class OverlappingRelMetrics(_RelationMetrics):
     _INSTANCE_CLASS = OverlappingRelationInstance
-    _ARG_ATTR_NAMES = _BinaryRelationMetrics._get_arg_attr_names(
-        _INSTANCE_CLASS)
     _GOLD_INSTANCES_PROPERTY_NAME = 'overlapping_rel_instances'
 
     def __init__(self, gold, predicted, allow_partial, save_differences=False,

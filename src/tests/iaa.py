@@ -35,16 +35,18 @@ class CausalityMetricsTest(unittest.TestCase):
                          metrics.connective_metrics)
 
         self.assertEqual(correct_cause_span_metrics,
-                         metrics.cause_span_metrics)
+                         metrics.cause_metrics.span_metrics)
         self.assertEqual(correct_effect_span_metrics,
-                         metrics.effect_span_metrics)
+                         metrics.effect_metrics.span_metrics)
         self.assertEqual(correct_cause_head_metrics,
-                         metrics.cause_head_metrics)
+                         metrics.cause_metrics.head_metrics)
         self.assertEqual(correct_effect_head_metrics,
-                         metrics.effect_head_metrics)
+                         metrics.effect_metrics.head_metrics)
 
-        self.assertAlmostEqual(correct_cause_jaccard, metrics.cause_jaccard)
-        self.assertAlmostEqual(correct_effect_jaccard, metrics.effect_jaccard)
+        self.assertAlmostEqual(correct_cause_jaccard,
+                               metrics.cause_metrics.jaccard)
+        self.assertAlmostEqual(correct_effect_jaccard,
+                               metrics.effect_metrics.jaccard)
 
         # TODO: verify type and degree matrices (may require editing data)
 
@@ -104,9 +106,9 @@ class CausalityMetricsTest(unittest.TestCase):
     def test_add_metrics(self):
         metrics = CausalityMetrics(self.sentences,
                                    self.modified_sentences, False)
-        modified_metrics = copy(metrics)
-        modified_metrics.cause_jaccard = 0.3
-        modified_metrics.effect_jaccard = 1.0
+        modified_metrics = deepcopy(metrics)
+        modified_metrics.cause_metrics.jaccard = 0.3
+        modified_metrics.effect_metrics.jaccard = 1.0
         summed_metrics = metrics + modified_metrics
 
         correct_connective_metrics = ClassificationMetrics(10, 4, 4)
@@ -128,9 +130,11 @@ class CausalityMetricsTest(unittest.TestCase):
         aggregated = CausalityMetrics.aggregate([metrics] * 3)
         self._test_metrics(
             aggregated, metrics.connective_metrics,
-            metrics.cause_span_metrics, metrics.effect_span_metrics,
-            metrics.cause_head_metrics, metrics.effect_head_metrics,
-            metrics.cause_jaccard, metrics.effect_jaccard)
+            metrics.cause_metrics.span_metrics,
+            metrics.effect_metrics.span_metrics,
+            metrics.cause_metrics.head_metrics,
+            metrics.effect_metrics.head_metrics,
+            metrics.cause_metrics.jaccard, metrics.effect_metrics.jaccard)
 
         self_metrics = CausalityMetrics(self.sentences, self.sentences, False)
         aggregated = CausalityMetrics.aggregate([metrics, self_metrics])

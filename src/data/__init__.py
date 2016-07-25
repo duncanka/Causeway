@@ -946,14 +946,20 @@ class _RelationInstance(object):
         self.type = rel_type
         self.id = annotation_id
 
-    def get_arg_names(self, convert=False):
-        arg_names = ['arg%d' % i for i in range(self._num_args)]
+    @classmethod
+    def get_arg_types(klass, convert=False):
+        arg_types = ['arg%d' % i for i in range(klass._num_args)]
         if convert:
-            arg_names = [self.arg_names[name] for name in arg_names]
-        return arg_names
+            return [klass.arg_names[name] for name in arg_types]
+        else:
+            return arg_types
 
     def get_args(self):
-        return [getattr(self, arg_name) for arg_name in self.get_arg_names()]
+        return [getattr(self, arg_name) for arg_name in self.get_arg_types()]
+
+    def get_named_args(self, convert=False):
+        return {arg_name: getattr(self, arg_name)
+                for arg_name in self.get_arg_types(convert)}
 
     def get_argument_heads(self, head_sort_key=None):
         """
@@ -965,7 +971,7 @@ class _RelationInstance(object):
                      for arg in self.get_args()]
         if head_sort_key:
             arg_heads.sort(key=head_sort_key)
-        return tuple(arg_heads)
+        return arg_heads
 
     __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
 
@@ -973,14 +979,13 @@ class _RelationInstance(object):
     def pprint(instance):
         # TODO: replace with same code as IAA?
         connective = ' '.join([t.original_text for t in instance.connective])
-        args = instance.get_args()
-        arg_names = instance.get_arg_names(convert=True)
+        named_args = instance.get_named_args(convert=True)
         arg_strings = [
              '{arg_name}={txt}'.format(
                 arg_name=arg_name,
                 txt=' '.join([t.original_text for t in annotation]
                              if annotation else ['<None>']))
-             for arg_name, annotation in zip(arg_names, args)]
+             for arg_name, annotation in sorted(named_args.iteritems())]
         self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
             typename=instance.__class__.__name__, conn=connective,
             args=', '.join(arg_strings), type=instance._types[instance.type])
