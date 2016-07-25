@@ -366,8 +366,10 @@ class CausalityStandoffReader(DocumentReader):
                         line, line_parts, ids_to_annotations,
                         ids_to_instances, lines_to_reprocess, ids_to_reprocess,
                         ids_needed_to_reprocess, unused_arg_ids)
-                # skip annotator notes and coref lines silently
-                elif line_id[0] == '#' or line_parts[1].startswith('Coref'):
+                elif line_parts[1].startswith('Coref'):
+                    self.__process_coref_line(line, line_parts, unused_arg_ids)
+                # skip annotator notes silently
+                elif line_id[0] == '#':
                     continue
                 else:
                     raise UserWarning("Ignoring unrecognized annotation line")
@@ -409,6 +411,17 @@ class CausalityStandoffReader(DocumentReader):
                 logging.warn('Unused argument: %s: "%s" (file: %s)'
                              % (arg_id, ids_to_annotations[arg_id].text,
                                 self._file_stream.name))
+
+    def __process_coref_line(self, line, line_parts, unused_arg_ids):
+        try:
+            _line_id, coref_str = line_parts
+            coref_args = coref_str.split(' ')[1:]
+            arg_ids = [arg_str.split(':')[1] for arg_str in coref_args]
+            for arg_id in arg_ids:
+                unused_arg_ids.remove(arg_id)
+        except Exception:
+            logging.warn('Skipping incorrectly formatted coref line.'
+                         ' (Line: %s)' % line)
 
     def __process_text_annotation(self, line, line_parts, ids_to_annotations,
                                   ids_to_instances, lines_to_reprocess,
