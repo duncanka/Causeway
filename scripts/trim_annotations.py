@@ -1,4 +1,4 @@
-from gflags import FLAGS, DEFINE_integer
+from gflags import FLAGS, DEFINE_integer, DuplicateFlagError
 import io
 from os import path
 import shutil
@@ -7,9 +7,11 @@ import sys
 from data.io import CausalityStandoffReader, CausalityStandoffWriter
 from util.streams import CharacterTrackingStreamWrapper
 
-
-DEFINE_integer('start_sentence', 0, 'Sentence at which to start copying')
-DEFINE_integer('end_sentence', -1, 'Sentence at which to stop copying')
+try:
+    DEFINE_integer('start_sentence', 0, 'Sentence at which to start copying')
+    DEFINE_integer('end_sentence', -1, 'Sentence at which to stop copying')
+except DuplicateFlagError:
+    pass
 
 
 if __name__ == '__main__':
@@ -45,6 +47,6 @@ if __name__ == '__main__':
             sentences_to_write = document.sentences[FLAGS.start_sentence:]
         else:
             sentences_to_write = document.sentences[FLAGS.start_sentence:
-                                                    FLAGS.end_sentence]
+                                                    FLAGS.end_sentence + 1]
         return sentences_to_write
     writer.write_all_instances(doc, instances_getter)
