@@ -580,7 +580,7 @@ class AutoWeightedVotingClassifier(VotingClassifier):
         for estimator in self.estimators_:
             predicted = estimator.predict(X)
             weights.append(self.score_fn(y, predicted))
-        self.weights = normalize([weights], 'l1')
+        self.weights = normalize([weights], 'l1')[0]
         return self.weights
 
     def fit(self, X, y):

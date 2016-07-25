@@ -313,7 +313,8 @@ class AutoWeightedVotingClassifierTest(NumpyAwareTestCase):
 
     def test_fit_weights(self):
         self.classifier.fit_weights(self.X, self.y)
-        self.assertEqual([1 / 3., 2 / 3.], self.classifier.weights)
+        self.assertArraysEqual(np.array([1 / 3., 2 / 3.]),
+                               self.classifier.weights)
 
     def test_predict_before_fit(self):
         probs = self.classifier.predict_proba(self.X)
