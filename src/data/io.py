@@ -733,6 +733,9 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         self._file_stream.write(u'\n')
 
     def _write_argument(self, arg_tokens):
+        if not arg_tokens:
+            return
+
         try:
             arg_id = self._make_id_for(arg_tokens, '_next_annotation_id', 'T')
             bounds_str, text_str = self._get_bounds_and_text_strings(arg_tokens,
@@ -741,6 +744,12 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
             return
 
         self._write_line(arg_id, bounds_str, text_str)
+
+    def _get_arg_string(self, arg_name, arg):
+        if arg is None:
+            return ''
+        arg_id = self._objects_to_ids[id(arg)]
+        return ':'.join([arg_name, arg_id])
 
     def _write_event(self, instance, instance_type_name):
         event_id = self._make_id_for(instance, '_next_event_id', 'E')
@@ -752,12 +761,12 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         self._write_line(connective_id, bounds_str, text_str)
 
         # TODO: update for Means arguments
-        cause_id, effect_id = [self._objects_to_ids[id(arg)]
-                               for arg in instance.arg0, instance.arg1]
+        arg_strings = [
+            self._get_arg_string(instance.arg_names[arg_name].title(),
+                                 getattr(instance, arg_name))
+            for arg_name in 'arg0', 'arg1']
         event_component_strings = [':'.join([instance_type_name,
-                                             connective_id]),
-                                   ':'.join(['Cause', cause_id]),
-                                   ':'.join(['Effect', effect_id])]
+                                             connective_id])] + arg_strings
         self._write_line(event_id, ' '.join(event_component_strings))
         return event_id
 
