@@ -928,7 +928,9 @@ StanfordParsedSentence.PTB_UNESCAPE_MAP = {
 }
 
 
-class _BinaryRelationInstance(object):
+class _RelationInstance(object):
+    _num_args = 2
+
     def __init__(self, source_sentence, connective, arg0=None, arg1=None,
                  rel_type=None, annotation_id=None):
         assert source_sentence is not None
@@ -944,45 +946,45 @@ class _BinaryRelationInstance(object):
         self.type = rel_type
         self.id = annotation_id
 
-    def get_argument_heads(self, order_relation=None):
+    def get_arg_names(self, convert=False):
+        arg_names = ['arg%d' % i for i in range(self._num_args)]
+        if convert:
+            arg_names = [self.arg_names[name] for name in arg_names]
+        return arg_names
+
+    def get_args(self):
+        return [getattr(self, arg_name) for arg_name in self.get_arg_names()]
+
+    def get_argument_heads(self, head_sort_key=None):
         """
-        order_relation is a function that takes two arguments and returns
-        whether they are in order. If it is provided, argument heads are
-        returned in order.
+        head_sort_key is a function that takes an argument and returns a key by
+        which to sort it. If this parameter is provided, argument heads are
+        returned in the resulting order.
         """
-        if self.arg0:
-            arg0 = self.sentence.get_head(self.arg0)
-        else:
-            arg0 = None
-
-        if self.arg1:
-            arg1 = self.sentence.get_head(self.arg1)
-        else:
-            arg1 = None
-
-        if order_relation and order_relation(arg1, arg0):
-            arg0, arg1 = arg1, arg0
-
-        return (arg0, arg1)
+        arg_heads = [self.sentence.get_head(arg) if arg else None
+                     for arg in self.get_args()]
+        if head_sort_key:
+            arg_heads.sort(key=head_sort_key)
+        return tuple(arg_heads)
 
     __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
 
     @staticmethod
     def pprint(instance):
         # TODO: replace with same code as IAA?
-        connective, arg0, arg1 = [
-             ' '.join([t.original_text for t in annotation]
-                      if annotation else ['<None>'])
-             for annotation in [instance.connective, instance.arg0,
-                                instance.arg1]]
-        self_str = (
-            '{typename}(connective={conn}, {arg0_name}={arg0},'
-            ' {arg1_name}={arg1}, type={type})').format(
-                typename=instance.__class__.__name__, conn=connective,
-                arg0_name=instance.arg_names['arg0'], arg0=arg0,
-                arg1_name=instance.arg_names['arg1'], arg1=arg1,
-                type=instance._types[instance.type])
-        return '\n'.join(_BinaryRelationInstance.__wrapper.wrap(self_str))
+        connective = ' '.join([t.original_text for t in instance.connective])
+        args = instance.get_args()
+        arg_names = instance.get_arg_names(convert=True)
+        arg_strings = [
+             '{arg_name}={txt}'.format(
+                arg_name=arg_name,
+                txt=' '.join([t.original_text for t in annotation]
+                             if annotation else ['<None>']))
+             for arg_name, annotation in zip(arg_names, args)]
+        self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
+            typename=instance.__class__.__name__, conn=connective,
+            args=', '.join(arg_strings), type=instance._types[instance.type])
+        return '\n'.join(_RelationInstance.__wrapper.wrap(self_str))
 
     def __repr__(self):
         return self.pprint(self)
@@ -990,14 +992,16 @@ class _BinaryRelationInstance(object):
     arg_names = bidict({'arg0': 'arg0', 'arg1': 'arg1'})
 
 
-class CausationInstance(_BinaryRelationInstance):
+class CausationInstance(_RelationInstance):
     Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
     CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
                            'Purpose'])
     _types = CausationTypes
+    _num_args = 3
 
     def __init__(self, source_sentence, degree=None, causation_type=None,
-                 connective=None, cause=None, effect=None, annotation_id=None):
+                 connective=None, cause=None, effect=None, means=None,
+                 annotation_id=None):
         if degree is None:
             degree = len(self.Degrees)
         if causation_type is None:
@@ -1007,11 +1011,12 @@ class CausationInstance(_BinaryRelationInstance):
                                                 cause, effect, causation_type,
                                                 annotation_id)
         self.degree = degree
+        self.arg2 = means
 
-    # Map cause/effect attributes to arg0/arg1 attributes.
-    arg_names = bidict({'arg0': 'cause', 'arg1': 'effect'})
+    # Map argument attribute names to arg_i attributes.
+    arg_names = bidict({'arg0': 'cause', 'arg1': 'effect', 'arg2': 'means'})
 
-for arg_attr_name in ['cause', 'effect']:
+for arg_attr_name in ['cause', 'effect', 'means']:
     underlying_property_name = CausationInstance.arg_names.inv[arg_attr_name]
     getter = make_getter(underlying_property_name)
     setter = make_setter(underlying_property_name)
@@ -1019,7 +1024,7 @@ for arg_attr_name in ['cause', 'effect']:
 
 
 # TODO: should this have any common object hierarchy with CausationInstance?
-class OverlappingRelationInstance(_BinaryRelationInstance):
+class OverlappingRelationInstance(_RelationInstance):
     RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
                           'Obligation_permission', 'Creation_termination',
                           'Extremity_sufficiency', 'Circumstance'])

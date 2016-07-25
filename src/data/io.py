@@ -582,15 +582,20 @@ class CausalityStandoffReader(DocumentReader):
                             annotation))
                 except ValueError as e:
                     raise UserWarning(e.message)
-                if arg_type.startswith('Cause') or arg_type.startswith('Arg0'):
-                    instance.arg0 = annotation_tokens
-                elif (arg_type.startswith('Effect')
-                      or arg_type.startswith('Arg1')):
-                    instance.arg1 = annotation_tokens
-                elif (arg_type.startswith('Means')):
-                    logging.warn('Ignoring Means argument (%s)', line.rstrip())
-                else:
-                    raise UserWarning('Skipping event with invalid arg types')
+
+                try:
+                    try:
+                        setattr(instance, arg_type.lower(), annotation_tokens)
+                    except AttributeError:
+                        # This could be an annotation whose arc label started
+                        # out as a duplicate and therefore got an extra numeral
+                        # on the end. Just in case, retry without the last
+                        # character of the arg type.
+                        setattr(instance, arg_type[:-1].lower(),
+                                annotation_tokens)
+                except AttributeError:
+                    raise UserWarning('Skipping event with invalid arg type %s'
+                                      % arg_type)
 
                 try:
                     unused_arg_ids.remove(arg_id)
@@ -760,19 +765,18 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
             instance.connective, instance_type_name)
         self._write_line(connective_id, bounds_str, text_str)
 
-        # TODO: update for Means arguments
         arg_strings = [
             self._get_arg_string(instance.arg_names[arg_name].title(),
                                  getattr(instance, arg_name))
-            for arg_name in 'arg0', 'arg1']
+            for arg_name in instance.get_arg_names()]
         event_component_strings = [':'.join([instance_type_name,
                                              connective_id])] + arg_strings
         self._write_line(event_id, ' '.join(event_component_strings))
         return event_id
 
     def _write_causation(self, instance):
-        self._write_argument(instance.cause)
-        self._write_argument(instance.effect)
+        for arg in instance.get_args():
+            self._write_argument(arg)
 
         instance_type = CausationInstance.CausationTypes[instance.type]
         event_id = self._write_event(instance, instance_type)
