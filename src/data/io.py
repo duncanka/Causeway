@@ -120,9 +120,9 @@ class StanfordParsedSentenceReader(DocumentReader):
     for that file. Returns one SentencesDocument of StanfordParsedSentences per
     file.
     '''
-    def __init__(self):
-        super(StanfordParsedSentenceReader, self).__init__()
+    def __init__(self, filepath=None):
         self._parse_file = None
+        super(StanfordParsedSentenceReader, self).__init__(filepath)
 
     def open(self, filepath):
         super(StanfordParsedSentenceReader, self).open(filepath)
@@ -150,7 +150,7 @@ class StanfordParsedSentenceReader(DocumentReader):
     def get_next(self):
         sentences = []
         while True:
-            next_sentence = self._get_next_sentence()
+            next_sentence = self.get_next_sentence()
             if next_sentence is None: # end of file
                 break
             sentences.append(next_sentence)
@@ -160,7 +160,7 @@ class StanfordParsedSentenceReader(DocumentReader):
         else:
             return None
 
-    def _get_next_sentence(self):
+    def get_next_sentence(self):
         # Read the next 3 blocks of the parse file.
         tokenized = self._parse_file.readline()
         if not tokenized: # empty string means we've hit the end of the file
@@ -309,7 +309,7 @@ class CausalityStandoffReader(DocumentReader):
         document = self.sentence_reader.get_next()
 
         lines = self._file_stream.readlines()
-        if not lines:
+        if document and not lines:
             logging.warn("No annotations found in file %s"
                          % self._file_stream.name)
             # Don't close the reader: we still want to return the sentences,

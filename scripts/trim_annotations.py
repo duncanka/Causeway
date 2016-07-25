@@ -4,7 +4,8 @@ from os import path
 import shutil
 import sys
 
-from data.io import CausalityStandoffReader, CausalityStandoffWriter
+from data.io import (CausalityStandoffReader, CausalityStandoffWriter,
+                     StanfordParsedSentenceReader)
 from util.streams import CharacterTrackingStreamWrapper
 
 try:
@@ -25,6 +26,7 @@ if __name__ == '__main__':
     base_name = path.splitext(path.split(in_file)[1])[0]
     in_txt_name = path.splitext(in_file)[0] + '.txt'
     out_txt_name = path.join(out_directory, base_name + '.txt')
+    out_parse_name = path.join(out_directory, base_name + '.parse')
 
     if FLAGS.start_sentence > 0:
         start_copying_char = doc.sentences[
@@ -32,12 +34,17 @@ if __name__ == '__main__':
     else:
         start_copying_char = 0
 
-    with CharacterTrackingStreamWrapper(
-        io.open(in_txt_name, 'rb'), FLAGS.reader_codec) as in_txt_file:
-        with io.open(out_txt_name, 'wb') as out_txt_file:
-            while in_txt_file.character_position < start_copying_char:
-                in_txt_file.read(1)
-            shutil.copyfileobj(in_txt_file, out_txt_file)
+    sentence_reader = StanfordParsedSentenceReader(in_txt_name)
+    for i in range(FLAGS.start_sentence):
+        sentence_reader.get_next_sentence()
+
+    with io.open(out_txt_name, 'wb') as out_txt_file:
+        in_txt_file = sentence_reader._file_stream
+        while in_txt_file.character_position < start_copying_char:
+            in_txt_file.read(1)
+        shutil.copyfileobj(in_txt_file, out_txt_file)
+    with io.open(out_parse_name, 'wb') as out_parse_file:
+        shutil.copyfileobj(sentence_reader._parse_file, out_parse_file)
 
     out_ann_name = path.join(out_directory, base_name + '.ann')
     writer = CausalityStandoffWriter(out_ann_name, start_copying_char)

@@ -12,9 +12,6 @@ from iaa import CausalityMetrics, print_indented
 
 try:
     DEFINE_list(
-        'iaa_paths', [], "Paths to annotation files to be compared against each"
-        " other for IAA.")
-    DEFINE_list(
         'iaa_file_regexes', r".*\.ann$",
         "Regexes to match filenames against for IAA (non-matching files will"
         " not be compared).")
@@ -74,7 +71,8 @@ def compare_instance_lists(gold, predicted, indent=0):
 
 def main(argv):
     try:
-        FLAGS(argv)  # parse flags
+        argv = FLAGS(argv) # parse flags
+        iaa_paths = argv[1:]
     except FlagsError as e:
         print('%s\nUsage: %s ARGS\n%s' % (e, sys.argv[0], FLAGS))
         sys.exit(1)
@@ -91,7 +89,7 @@ def main(argv):
 
     reader = DirectoryReader(FLAGS.iaa_file_regexes, CausalityStandoffReader())
     instances_by_path = []
-    for path in FLAGS.iaa_paths:
+    for path in iaa_paths:
         reader.open(path)
         path_docs = reader.get_all()[:FLAGS.iaa_max_sentence]
         path_instances = list(itertools.chain.from_iterable(doc.sentences for
@@ -99,7 +97,7 @@ def main(argv):
         instances_by_path.append(path_instances)
     reader.close()
 
-    instances_path_pairs = zip(instances_by_path, FLAGS.iaa_paths)
+    instances_path_pairs = zip(instances_by_path, iaa_paths)
     for ((gold, gold_path), (predicted, predicted_path)) in (
             itertools.combinations(instances_path_pairs, 2)):
         print('%s vs. %s:' % (gold_path, predicted_path))
