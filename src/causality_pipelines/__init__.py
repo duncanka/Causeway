@@ -33,13 +33,14 @@ except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
 
-class PossibleCausation(object):
+class PossibleCausation(CausationInstance):
     '''
-    Designed to mimic actual CausationInstance objects.
+    Acts like a normal CausationInstance object, but with some extra stuff.
     '''
-    # TODO: Make these actually descend from CausationInstances.
+
     def __init__(self, sentence, matching_patterns, connective,
-                 true_causation_instance=None, cause=None, effect=None):
+                 true_causation_instance=None, cause=None, effect=None,
+                 means=None):
         self.sentence = sentence
         self.matching_patterns = listify(matching_patterns)
         self.connective = connective
@@ -51,16 +52,10 @@ class PossibleCausation(object):
         if effect is not None:
             cause = sorted(effect, key=lambda token: token.index)
         self.effect = effect
+        self.means = means
+        self.id = None
+        self.type = None
         # TODO: Add spans of plausible ranges for argument spans
-
-    def __repr__(self):
-        return CausationInstance.pprint(self)
-
-for underlying_property_name in ['cause', 'effect']:
-    arg_attr_name = CausationInstance.arg_names.inv[underlying_property_name]
-    getter = make_getter(underlying_property_name)
-    setter = make_setter(underlying_property_name)
-    setattr(PossibleCausation, arg_attr_name, property(getter, setter))
 
 
 class IAAEvaluator(Evaluator):
