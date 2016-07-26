@@ -14,7 +14,8 @@ from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
 from causality_pipelines.baseline.most_freq_filter import (
     MostFreqSenseFilterStage)
-from causality_pipelines.candidate_filter import CausationPatternFilterStage
+from causality_pipelines.candidate_filter import (CausationPatternFilterStage,
+                                                  CausalPatternClassifierModel)
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
@@ -125,6 +126,10 @@ if __name__ == '__main__':
         print_indented(1, subprocess.check_output("git rev-parse HEAD".split()),
                        "Modified:", sep='')
         print_indented(2, subprocess.check_output("git ls-files -m".split()))
+        print "Available filter features:"
+        print_indented(
+            1, '\n'.join(sorted(e.name for e in
+                CausalPatternClassifierModel.all_feature_extractors)))
     except FlagsError, e:
         print '%s\nUsage: %s ARGS\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
@@ -145,7 +150,8 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'knn':
         candidate_classifier = neighbors.KNeighborsClassifier()
     elif FLAGS.classifier_model == 'logistic':
-        candidate_classifier = linear_model.LogisticRegression(penalty='l1')
+        candidate_classifier = linear_model.LogisticRegression(
+            penalty='l1', class_weight='balanced', tol=1e-5)
     elif FLAGS.classifier_model == 'svm':
         candidate_classifier = svm.SVC()
     elif FLAGS.classifier_model == 'forest':
@@ -153,8 +159,9 @@ if __name__ == '__main__':
     elif FLAGS.classifier_model == 'nb':
         candidate_classifier = naive_bayes.MultinomialNB()
 
-    candidate_classifier = ClassBalancingClassifierWrapper(
-        candidate_classifier, FLAGS.rebalance_ratio)
+    if FLAGS.classifier_model != 'logistic':
+        candidate_classifier = ClassBalancingClassifierWrapper(
+            candidate_classifier, FLAGS.rebalance_ratio)
 
     stages = get_stages(candidate_classifier)
 
