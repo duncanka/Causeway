@@ -310,7 +310,7 @@ class CausalPatternClassifierModel(object):
             return 'None'
 
     ALL_CLOSED_CLASS = set(
-        "it be to there" # Copulas, infinitives, and extraposition
+        "be to there" # Copulas, infinitives, and extraposition
         " all both some many much more most too enough few little fewer less"
             " least than one" # Quantifiers and comparisons
         " this these that those a the any each" # Other determiners
@@ -318,19 +318,14 @@ class CausalPatternClassifierModel(object):
         " yes everywhere always" # Affirmations
         " have can cannot could shall should may might must do will"
             " would" # Modals
-        " who whom whose what which where when how why" # Wh-words
         " albeit although because 'cause if neither since so than that though"
             " lest 'til till unless until whereas whether while" # Subordinating
         " & and 'n 'n' but either et neither nor or plus v. versus vs."
             " yet" # Coordinating
-        " aboard about above across after against ago along alongside amid"
-            " among amongst around as astride at atop before behind below"
-            " beneath beside besides between beyond by despite de down during"
-            " en except for from in inside into like minus near next"
-            " notwithstanding of off on onto opposite out outside over par past"
-            " per plus post since through throughout 'til till to toward"
-            " towards under underneath unlike until unto up upon versus via vs."
-            " with within without worth" # Prepositions
+        " ago as at besides between by except for from in into like"
+            " notwithstanding of off on onto out over per since through"
+            " throughout"
+            " unto up upon versus via vs. with within without" # Prepositions
         .split(" "))
     # Adapted from http://mailman.uib.no/public/corpora/2011-November/014318.html
     # (Omitted: numbers, times, places, non-extrapositional pronouns.)
