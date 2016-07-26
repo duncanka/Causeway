@@ -28,12 +28,8 @@ from util.scipy import AutoWeightedVotingClassifier
 
 try:
     DEFINE_list(
-        'filter_features',
-        'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'cause_tense,effect_tense,cause_tense:effect_tense,domination,'
-        'cause_neg,effect_neg,commas_btw,cause_prep_start,'
-        'effect_prep_start,cause_ner,effect_ner,'
-        'cause_ner:effect_ner'.split(','),
+        'filter_features', 'all,cause_tense:effect_tense,cause_ner:effect_ner,'
+                           'cause_neg:effect_neg'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -53,7 +49,7 @@ try:
     DEFINE_bool('filter_train_with_partials', False,
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
-    DEFINE_integer('filter_feature_select_k', 100,
+    DEFINE_integer('filter_feature_select_k', -1,
                    "Specifies how many features to keep in feature selection"
                    " for per-connective causality filters. -1 means no feature"
                    " selection.")
