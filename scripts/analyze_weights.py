@@ -1,6 +1,8 @@
 from __future__ import print_function
 
 from collections import OrderedDict
+from gflags import FLAGS
+import numpy as np
 from sklearn.pipeline import Pipeline
 import sys
 
@@ -10,8 +12,12 @@ from util import print_indented
 def get_weights_for_classifier(classifier_pipeline):
     classifier = classifier_pipeline.steps[1][1]
     featurizer = classifier_pipeline.steps[0][1].featurizer
-    support = classifier.named_steps['feature_selection'].get_support()
-    lr = classifier.named_steps['classification'].classifier
+    if FLAGS.filter_feature_select_k == -1:
+        support = classifier.get_support()
+        lr = classifier.classifier
+    else:
+        support = classifier.named_steps['feature_selection'].get_support()
+        lr = classifier.named_steps['classification'].classifier
     weights = [(featurizer.feature_name_dictionary.ids_to_names[ftnum],
                 lr.coef_[0][i])
                for i, ftnum in enumerate(support.nonzero()[0])
@@ -29,12 +35,22 @@ def get_per_connective_weights(pipeline):
     for connective, classifier in stage.model.classifiers.iteritems():
         if isinstance(classifier, Pipeline):
             weight_dicts[connective] = None
-            continue        
-        
-        weight_dicts[connective] = get_weights_for_classifier(
-            dict(classifier.estimators)['per_conn'])
+        else:
+            weight_dicts[connective] = get_weights_for_classifier(
+                dict(classifier.estimators)['per_conn'])
 
     return weight_dicts
+
+def get_inter_classifier_weights(pipeline):
+    stage = pipeline.stages[3]
+    weights_by_connective = {}
+    for connective, classifier in stage.model.classifiers.iteritems():
+        if isinstance(classifier, Pipeline):
+            weights_by_connective[connective] = np.array([0, 1, 0])
+        else:
+            weights_by_connective[connective] = classifier.weights
+
+    return weights_by_connective
 
 def print_ordered_dict(d, indent=0, file=sys.stdout):
     print_indented(indent, 'OrderedDict({', file=file)
