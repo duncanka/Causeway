@@ -130,7 +130,7 @@ ArgumentLabelerModel.all_feature_extractors = [
         'is_connective',
         lambda observation: (observation.observation in
                              observation.instance.connective),
-        FeatureExtractor.FeatureTypes.Numerical),
+        FeatureExtractor.FeatureTypes.Binary),
     FeatureExtractor(
         'conn_parse_path', ArgumentLabelerModel.get_connective_parse_path),
     FeatureExtractor(
@@ -141,7 +141,7 @@ ArgumentLabelerModel.all_feature_extractors = [
         'in_parse_tree',
         lambda observation: (observation.instance.sentence.get_depth(
                                 observation.observation) < np.inf),
-                     FeatureExtractor.FeatureTypes.Numerical),
+                     FeatureExtractor.FeatureTypes.Binary),
     # Use repr to get around issues with ws at the end of feature names (breaks
     # CRFSuite dump parser)
     SetValuedFeatureExtractor(
@@ -159,7 +159,7 @@ ArgumentLabelerModel.all_feature_extractors = [
                      ArgumentLabelerModel.get_connective_relative_position),
     FeatureExtractor('is_alnum', lambda observation: (
                                     observation.observation.lemma.isalnum()),
-                     FeatureExtractor.FeatureTypes.Numerical)
+                     FeatureExtractor.FeatureTypes.Binary)
 ]
 
 

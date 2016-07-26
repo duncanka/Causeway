@@ -23,7 +23,7 @@ class FeaturizationError(Exception):
 
 
 class FeatureExtractor(object):
-    FeatureTypes = Enum(['Categorical', 'Numerical']) # Numerical includes bool
+    FeatureTypes = Enum(['Categorical', 'Numerical', 'Binary'])
 
     def __init__(self, name, extractor_fn, feature_type=None):
         if feature_type is None:
@@ -37,7 +37,7 @@ class FeatureExtractor(object):
             values_set = set(self._extractor_fn(part) for part in instances)
             return [self._get_categorical_feature_name(self.name, value)
                     for value in values_set]
-        else: # feature_type == Numerical
+        else: # feature_type == Numerical or feature_type == Binary
             return [self.name]
 
     def extract(self, part):
@@ -50,7 +50,7 @@ class FeatureExtractor(object):
             feature_name = self._get_categorical_feature_name(
                 self.name, feature_value)
             return {feature_name: 1.0}
-        else: # feature_type == Numerical
+        else: # feature_type == Numerical or feature_type == Binary
             return {self.name: feature_value}
 
     def extract_all(self, parts):
@@ -95,10 +95,10 @@ class Featurizer(object):
             self.name = name
             self.feature_type = self.FeatureTypes.Categorical
             for extractor in extractors:
-                if extractor.feature_type != self.FeatureTypes.Categorical:
+                if extractor.feature_type == self.FeatureTypes.Numerical:
                     raise FeaturizationError(
-                        "Only categorical features can be conjoined (attempted"
-                        " to conjoin %s)" % [e.name for e in extractors])
+                        "Numerical features cannot be conjoined (attempted to"
+                        " conjoin %s)" % [e.name for e in extractors])
             self._extractors = extractors
             self.sep = FLAGS.conjoined_feature_sep
 
@@ -124,8 +124,10 @@ class Featurizer(object):
                 extractor_results = [
                     featurized_cache[extractor]
                     for extractor in self._extractors]
-                # Separactor chars are already escaped.
+                # Separator chars are already escaped.
             else:
+                # Categorical and binary features are all binary values, so if
+                # they're present in the results dict, they're firing.
                 extractor_results = [extractor.extract(instance).keys()
                                      for extractor in self._extractors]
                 # Separator characters must be escaped for conjoined names.

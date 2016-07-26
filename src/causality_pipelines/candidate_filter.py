@@ -350,6 +350,7 @@ class CausalPatternClassifierModel(object):
 
 
 Numerical = FeatureExtractor.FeatureTypes.Numerical
+Binary = FeatureExtractor.FeatureTypes.Binary
 
 CausalPatternClassifierModel.connective_feature_extractors = [
     SetValuedFeatureExtractor(
@@ -501,38 +502,38 @@ CausalPatternClassifierModel.general_feature_extractors = [
     FeatureExtractor(
         'cause_neg',
         lambda part: CausalPatternClassifierModel.is_negated(part.cause_head),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'effect_neg',
         lambda part: CausalPatternClassifierModel.is_negated(part.effect_head),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'cause_neg_child',
         lambda part: CausalPatternClassifierModel.has_negated_child(
                         part.cause_head),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'effect_neg_child',
         lambda part: CausalPatternClassifierModel.has_negated_child(
                         part.effect_head),
-        Numerical),
+        Binary),
     # TODO: look for other negative words
     FeatureExtractor(
         'cause_comp',
         lambda part: CausalPatternClassifierModel.is_comp(part.cause_head),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'effect_comp',
         lambda part: CausalPatternClassifierModel.is_comp(part.effect_head),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'cause_comp_start',
         lambda part: CausalPatternClassifierModel.starts_w_comp(part.cause),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'effect_comp_start',
         lambda part: CausalPatternClassifierModel.starts_w_comp(part.effect),
-        Numerical),
+        Binary),
     FeatureExtractor(
         'cause_prep_start',
         lambda part: CausalPatternClassifierModel.initial_prep(part.cause)),
