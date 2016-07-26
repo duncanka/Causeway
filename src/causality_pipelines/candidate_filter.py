@@ -30,10 +30,10 @@ try:
     DEFINE_list(
         'filter_features',
         'cause_pos,effect_pos,wordsbtw,deppath,deplen,connective,cn_lemmas,'
-        'cause_tense,effect_tense,cause_tense:effect_tense,cause_case_children,'
-        'effect_case_children,domination,cause_pp_prep,effect_pp_prep,'
+        'cause_tense,effect_tense,cause_tense:effect_tense,domination,'
         'cause_neg,effect_neg,commas_btw,cause_prep_start,'
-        'effect_prep_start'.split(','),
+        'effect_prep_start,cause_ner,effect_ner,'
+        'cause_ner:effect_ner'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
@@ -207,7 +207,7 @@ class CausalPatternClassifierModel(object):
             synsets = wordnet.synsets(token.lemma, pos=wn_pos_key)
         except KeyError: # Invalid POS tag
             return []
-        
+
         synsets_with_hypernyms = set()
         for synset in synsets:
             for hypernym_path in synset.hypernym_paths():
@@ -270,7 +270,7 @@ class CausalPatternClassifierModel(object):
             return RELATIVE_POSITIONS.After
         else:
             return RELATIVE_POSITIONS.Overlapping
-        
+
     @staticmethod
     def get_pp_preps(argument_head):
         sentence = argument_head.parent_sentence
@@ -278,20 +278,23 @@ class CausalPatternClassifierModel(object):
         return [c.lemma for c in children if c.pos == 'IN']
 
     @staticmethod
-    def is_negated(argument_head):
-        sentence = argument_head.parent_sentence
-        children = sentence.get_children(argument_head, 'neg')
+    def is_negated(token):
+        sentence = token.parent_sentence
+        children = sentence.get_children(token, 'neg')
         return bool(children)
+
+    @staticmethod
+    def has_negated_child(argument_head):
+        sentence = argument_head.parent_sentence
+        children = sentence.get_children(argument_head, '*')
+        return any(CausalPatternClassifierModel.is_negated(child)
+                   for child in children if child.get_gen_pos() == 'NN')
 
     @staticmethod
     def is_comp(argument_head):
         sentence = argument_head.parent_sentence
         edge_label, _ = sentence.get_most_direct_parent(argument_head)
-        if edge_label != 'ccomp':
-            return False
-        else:
-            children = sentence.get_children(argument_head, 'mark')
-            return bool(children)
+        return edge_label == 'ccomp'
 
     @staticmethod
     def starts_w_comp(argument_span):
@@ -305,6 +308,48 @@ class CausalPatternClassifierModel(object):
             return first_token.lemma
         else:
             return 'None'
+
+    ALL_CLOSED_CLASS = set(
+        "it be to there" # Copulas, infinitives, and extraposition
+        " all both some many much more most too enough few little fewer less"
+            " least than one" # Quantifiers and comparisons
+        " this these that those a the any each" # Other determiners
+        " no not nobody nothing none nowhere never" # Negations
+        " yes everywhere always" # Affirmations
+        " have can cannot could shall should may might must do will"
+            " would" # Modals
+        " who whom whose what which where when how why" # Wh-words
+        " albeit although because 'cause if neither since so than that though"
+            " lest 'til till unless until whereas whether while" # Subordinating
+        " & and 'n 'n' but either et neither nor or plus v. versus vs."
+            " yet" # Coordinating
+        " aboard about above across after against ago along alongside amid"
+            " among amongst around as astride at atop before behind below"
+            " beneath beside besides between beyond by despite de down during"
+            " en except for from in inside into like minus near next"
+            " notwithstanding of off on onto opposite out outside over par past"
+            " per plus post since through throughout 'til till to toward"
+            " towards under underneath unlike until unto up upon versus via vs."
+            " with within without worth" # Prepositions
+        .split(" "))
+    # Adapted from http://mailman.uib.no/public/corpora/2011-November/014318.html
+    # (Omitted: numbers, times, places, non-extrapositional pronouns.)
+
+    @staticmethod
+    def closed_class_children(arg_head):
+        child_tokens = arg_head.parent_sentence.get_children(arg_head, '*')
+        child_tokens.sort(key=lambda token: token.index)
+        return tuple(token.lemma for token in child_tokens if token.lemma
+                     in CausalPatternClassifierModel.ALL_CLOSED_CLASS)
+
+    @staticmethod
+    def closed_class_children_deps(arg_head):
+        child_edges_and_tokens = arg_head.parent_sentence.get_children(arg_head)
+        child_edges_and_tokens.sort(key=lambda pair: pair[1].index)
+        return tuple('/'.join([token.lemma, edge_label])
+                     for edge_label, token in child_edges_and_tokens
+                     if token.lemma in
+                         CausalPatternClassifierModel.ALL_CLOSED_CLASS)
 
     all_feature_extractors = []
 
@@ -384,11 +429,20 @@ CausalPatternClassifierModel.general_feature_extractors = [
 #         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
 #             part.effect_head)),
     FeatureExtractor(
-        'cause_case_children',
-        lambda part: CausalPatternClassifierModel.extract_case_children(
+        'all_cause_closed_children',
+        lambda part: CausalPatternClassifierModel.closed_class_children(
                         part.cause_head)),
-    FeatureExtractor('effect_case_children',
-        lambda part: CausalPatternClassifierModel.extract_case_children(
+    FeatureExtractor(
+        'all_effect_closed_children',
+        lambda part: CausalPatternClassifierModel.closed_class_children(
+                        part.effect_head)),
+    SetValuedFeatureExtractor(
+        'cause_closed_children',
+        lambda part: CausalPatternClassifierModel.closed_class_children(
+                        part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_closed_children',
+        lambda part: CausalPatternClassifierModel.closed_class_children(
                         part.effect_head)),
     KnownValuesFeatureExtractor('domination',
         lambda part: part.sentence.get_domination_relation(
@@ -410,10 +464,14 @@ CausalPatternClassifierModel.general_feature_extractors = [
 #         'vector_cos_dist',
 #         lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
 #                         part.cause_head, part.effect_head), Numerical),
+    # TODO: remove for general classifier? (Too construction-specific)
     KnownValuesFeatureExtractor(
-        'ners', lambda part: '/'.join(
-                    StanfordNERStage.NER_TYPES[arg_head.ner_tag]
-                    for arg_head in [part.cause_head, part.effect_head]),
+        'cause_ner',
+        lambda part: StanfordNERStage.NER_TYPES[part.cause_head.ner_tag],
+        StanfordNERStage.NER_TYPES),
+    KnownValuesFeatureExtractor(
+        'effect_ner',
+        lambda part: StanfordNERStage.NER_TYPES[part.effect_head.ner_tag],
         StanfordNERStage.NER_TYPES),
     FeatureExtractor(
         'commas_btw',
@@ -429,14 +487,22 @@ CausalPatternClassifierModel.general_feature_extractors = [
         'heads_rel_pos',
         lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
             [part.cause_head], [part.effect_head])),
+    FeatureExtractor(
+        'all_cause_closed_children_deps',
+        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+                        part.cause_head)),
+    FeatureExtractor(
+        'all_effect_closed_children_deps',
+        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+                        part.effect_head)),
     SetValuedFeatureExtractor(
-        'cause_pp_prep',
-        lambda part: CausalPatternClassifierModel.get_pp_preps(
-            part.cause_head)),
+        'cause_closed_children_deps',
+        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+                        part.cause_head)),
     SetValuedFeatureExtractor(
-        'effect_pp_prep',
-        lambda part: CausalPatternClassifierModel.get_pp_preps(
-            part.effect_head)),
+        'effect_closed_children_deps',
+        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+                        part.effect_head)),
     FeatureExtractor(
         'cause_neg',
         lambda part: CausalPatternClassifierModel.is_negated(part.cause_head),
@@ -445,6 +511,17 @@ CausalPatternClassifierModel.general_feature_extractors = [
         'effect_neg',
         lambda part: CausalPatternClassifierModel.is_negated(part.effect_head),
         Numerical),
+    FeatureExtractor(
+        'cause_neg_child',
+        lambda part: CausalPatternClassifierModel.has_negated_child(
+                        part.cause_head),
+        Numerical),
+    FeatureExtractor(
+        'effect_neg_child',
+        lambda part: CausalPatternClassifierModel.has_negated_child(
+                        part.effect_head),
+        Numerical),
+    # TODO: look for other negative words
     FeatureExtractor(
         'cause_comp',
         lambda part: CausalPatternClassifierModel.is_comp(part.cause_head),
@@ -478,7 +555,7 @@ class PatternBasedCausationFilter(StructuredModel):
     def __init__(self, classifier, save_featurized=False):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder())
-        
+
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
             general_classifier = sklearn.clone(classifier)
@@ -486,7 +563,7 @@ class PatternBasedCausationFilter(StructuredModel):
             k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
             base_per_conn_classifier = SKLPipeline([
                 ('feature_selection', k_best),
-                ('classification', classifier)
+                ('classification', sklearn.clone(classifier))
             ])
             general_classifier = sklearn.clone(base_per_conn_classifier)
 
