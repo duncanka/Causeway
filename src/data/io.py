@@ -14,7 +14,7 @@ from data import (StanfordParsedSentence, Annotation, CausationInstance,
                   SentencesDocument, OverlappingRelationInstance)
 
 try:
-    DEFINE_bool('reader_binarize_degrees', False,
+    DEFINE_bool('reader_binarize_degrees', True,
                 'Whether to turn all degrees into "Facilitate" and "Inhibit"')
     DEFINE_string('reader_codec', 'utf-8',
                   'The encoding to assume for data files')
@@ -367,7 +367,10 @@ class CausalityStandoffReader(DocumentReader):
                         ids_to_instances, lines_to_reprocess, ids_to_reprocess,
                         ids_needed_to_reprocess, unused_arg_ids)
                 elif line_parts[1].startswith('Coref'):
-                    self.__process_coref_line(line, line_parts, unused_arg_ids)
+                    self.__process_coref_line(
+                        line, line_parts, ids_to_annotations, unused_arg_ids,
+                        lines_to_reprocess, ids_to_reprocess,
+                        ids_needed_to_reprocess)
                 # skip annotator notes silently
                 elif line_id[0] == '#':
                     continue
@@ -383,10 +386,10 @@ class CausalityStandoffReader(DocumentReader):
         # the set of IDs that need to be added.
         recurse = False
         if lines_to_reprocess:
-            if len(lines_to_reprocess) == prev_line_count:
-                logging.warn("Count of lines to process has not changed after"
+            if len(lines_to_reprocess) >= prev_line_count:
+                logging.warn("Count of lines to process has not shrunk after"
                              " recursion. Giving up on the following IDs: %s"
-                             % ids_needed_to_reprocess)
+                             % ', '.join(ids_needed_to_reprocess))
                 return
             for id_needed in ids_needed_to_reprocess:
                 # Any ID that was referenced before being defined must be
@@ -412,16 +415,34 @@ class CausalityStandoffReader(DocumentReader):
                              % (arg_id, ids_to_annotations[arg_id].text,
                                 self._file_stream.name))
 
-    def __process_coref_line(self, line, line_parts, unused_arg_ids):
+    def __process_coref_line(self, line, line_parts, ids_to_annotations,
+                             unused_arg_ids, lines_to_reprocess,
+                             ids_to_reprocess, ids_needed_to_reprocess):
         try:
             _line_id, coref_str = line_parts
             coref_args = coref_str.split(' ')[1:]
-            arg_ids = [arg_str.split(':')[1] for arg_str in coref_args]
-            for arg_id in arg_ids:
-                unused_arg_ids.remove(arg_id)
-        except Exception:
+            from_arg_id, to_arg_id = [arg_str.split(':')[1]
+                                      for arg_str in coref_args]
+        except ValueError:
             logging.warn('Skipping incorrectly formatted coref line.'
-                         ' (Line: %s)' % line)
+                         ' (Line: %s)' % line.rstrip())
+            return
+
+        try:
+            unused_arg_ids.remove(to_arg_id)
+        except KeyError:
+            # Being unable to mark an arg ID as used means either that it's
+            # not in the document at all; that it's in the document but we
+            # haven't read it yet; or that it's in the document and it's already
+            # been marked used.
+            #
+            # For the first or second cases, we want to flag this line for
+            # reanalysis, and if we end up not finding it (1st case) we'll
+            # eventually complain. For the third case, we don't need to do
+            # anything further.
+            if to_arg_id not in ids_to_annotations:
+                lines_to_reprocess.append(line)
+                ids_needed_to_reprocess.add(to_arg_id)
 
     def __process_text_annotation(self, line, line_parts, ids_to_annotations,
                                   ids_to_instances, lines_to_reprocess,
