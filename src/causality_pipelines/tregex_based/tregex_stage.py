@@ -1,4 +1,5 @@
-from gflags import DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer, DEFINE_enum
+from gflags import (DEFINE_string, FLAGS, DuplicateFlagError, DEFINE_integer,
+                    DEFINE_enum)
 import itertools
 import threading
 import logging
@@ -14,7 +15,8 @@ from threading import Lock
 from data import Token
 from pipeline import Stage
 from pipeline.models import Model
-from causality_pipelines import PossibleCausation, IAAEvaluator, get_causation_tuple
+from causality_pipelines import (PossibleCausation, IAAEvaluator,
+                                 get_causation_tuple)
 from util import pairwise, igroup
 from util.nltk import subtree_at_index, index_of_subtree
 from util.scipy import steiner_tree, longest_path_in_tree
