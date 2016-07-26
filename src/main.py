@@ -9,7 +9,7 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
-from causality_pipelines import remove_smaller_matches
+from causality_pipelines import remove_smaller_matches, StanfordNERStage
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
 from causality_pipelines.baseline.most_freq_filter import (
@@ -63,17 +63,20 @@ def get_stages(candidate_classifier):
 
     if FLAGS.pipeline_type == 'tregex':
         stages = [TRegexConnectiveStage('TRegex connectives'),
+                  StanfordNERStage('NER'),
                   ArgSpanStage('Argument span expander'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
+                  StanfordNERStage('NER'),
                   ArgumentLabelerStage('CRF arg labeler'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier')]
     elif FLAGS.pipeline_type == 'tregex+baseline':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   TRegexConnectiveStage('TRegex connectives'),
+                  StanfordNERStage('NER'),
                   ArgSpanStage('Argument span expander'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier'),
@@ -81,6 +84,7 @@ def get_stages(candidate_classifier):
     elif FLAGS.pipeline_type == 'regex+baseline':
         stages = [BaselineStage('Baseline', BASELINE_CAUSATIONS_NAME),
                   RegexConnectiveStage('Regex connectives'),
+                  StanfordNERStage('NER'),
                   ArgumentLabelerStage('CRF arg labeler'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier'),
@@ -93,14 +97,14 @@ def get_stages(candidate_classifier):
                   MostFreqSenseFilterStage('Most frequent sense filter')]
     elif FLAGS.pipeline_type == 'regex_mostfreq':
         stages = [RegexConnectiveStage('Regex connectives'),
+                  StanfordNERStage('NER'),
                   ArgumentLabelerStage('CRF arg labeler'),
                   MostFreqSenseFilterStage('Most frequent sense filter')]
 
-    if FLAGS.filter_overlapping:
-        if FLAGS.pipeline_type != 'baseline':
-            stages.append(SimpleStage('Filter smaller connectives',
-                                      remove_smaller_matches,
-                                      stages[-1]._make_evaluator))
+    if FLAGS.filter_overlapping and FLAGS.pipeline_type != 'baseline':
+        stages.append(SimpleStage('Filter smaller connectives',
+                                  remove_smaller_matches,
+                                  stages[-1]._make_evaluator))
     return stages
 
 
