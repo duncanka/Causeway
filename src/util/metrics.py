@@ -91,7 +91,8 @@ class ClassificationMetrics(object):
                         self._f1)
 
     def __eq__(self, other):
-        return (floats_same_or_nearly_equal(self._tp, other._tp)
+        return (isinstance(other, ClassificationMetrics)
+                and floats_same_or_nearly_equal(self._tp, other._tp)
                 and floats_same_or_nearly_equal(self._fp, other._fp)
                 and floats_same_or_nearly_equal(self._fn, other._fn)
                 and floats_same_or_nearly_equal(self._tn, other._tn))
@@ -341,7 +342,8 @@ class AccuracyMetrics(object):
         return new_metrics
 
     def __eq__(self, other):
-        return (self.correct == other.correct
+        return (isinstance(other, AccuracyMetrics)
+                and self.correct == other.correct
                 and self.incorrect == other.incorrect
                 # Extra check to make sure averages work right
                 and floats_same_or_nearly_equal(self.accuracy, other.accuracy))
