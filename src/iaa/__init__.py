@@ -140,12 +140,19 @@ class ArgumentMetrics(object):
         self.jaccard = jaccard
 
     def __add__(self, other):
-        added_span_metrics = self.span_metrics + other.span_metrics
-        added_head_metrics = self.head_metrics + other.head_metrics
-        # Ignore NaNs.
-        if np.isnan(self.jaccard):
+        if self.span_metrics is not None and other.span_metrics is not None:
+            added_span_metrics = self.span_metrics + other.span_metrics
+        else:
+            added_span_metrics = None
+        if self.head_metrics is not None and other.head_metrics is not None:
+            added_head_metrics = self.head_metrics + other.head_metrics
+        else:
+            added_head_metrics = None
+
+        # Ignore NaNs and Nones.
+        if self.jaccard is None or np.isnan(self.jaccard):
             added_jaccard = other.jaccard
-        elif np.isnan(other.jaccard):
+        elif other.jaccard is None or np.isnan(other.jaccard):
             added_jaccard = self.jaccard
         else:
             added_jaccard = (self.jaccard + other.jaccard) / 2.0
