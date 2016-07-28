@@ -210,7 +210,7 @@ class _RelationMetrics(object):
         else:
             null_metrics = ArgumentMetrics(None, None, None)
             for arg_num in range(self._INSTANCE_CLASS._num_args):
-                setattr(self, 'arg%d_metrics', null_metrics)
+                setattr(self, 'arg%d_metrics' % arg_num, null_metrics)
 
     def __add__(self, other):
         if (self.allow_partial != other.allow_partial or
