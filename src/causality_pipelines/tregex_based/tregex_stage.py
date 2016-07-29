@@ -17,9 +17,10 @@ from pipeline import Stage
 from pipeline.models import Model
 from causality_pipelines import (PossibleCausation, IAAEvaluator,
                                  get_causation_tuple)
-from util import pairwise, igroup
+from util import pairwise, igroup, hash_file
 from util.nltk import subtree_at_index, index_of_subtree
 from util.scipy import steiner_tree, longest_path_in_tree
+import os
 
 try:
     DEFINE_string('tregex_dir',
@@ -592,32 +593,61 @@ class TRegexConnectiveModel(Model):
             except Queue.Empty: # no more items in queue
                 return
 
-        FIXED_TREGEX_ARGS = '-o -l -N -h cause -h effect'.split()
-        def _process_pattern(
-            self, pattern, connective_labels, connective_lemmas,
-            possible_sentences, tree_file_path):
-            # Create output file
-            with tempfile.NamedTemporaryFile(
-                'w+b', prefix='matches') as self.output_file:
-                # logging.debug("Processing %s to %s"
-                #              % (pattern, self.output_file.name))
-                if FLAGS.tregex_pattern_type == 'dependency':
-                    output_type_arg = '-u'
-                else:
-                    output_type_arg = '-x'
+        _FIXED_TREGEX_ARGS = '-o -l -N -h cause -h effect'.split()
+        def _run_tregex(self, pattern, connective_labels, tree_file_path):
+            logging.debug("Processing %s to %s"
+                          % (pattern, self.output_file.name))
+            if FLAGS.tregex_pattern_type == 'dependency':
+                output_type_arg = '-u'
+            else:
+                output_type_arg = '-x'
 
-                connective_printing_args = []
-                for connective_label in connective_labels:
-                    connective_printing_args.extend(['-h', connective_label])
+            connective_printing_args = []
+            for connective_label in connective_labels:
+                connective_printing_args.extend(['-h', connective_label])
 
-                tregex_command = (
-                    [path.join(FLAGS.tregex_dir, 'tregex.sh'), output_type_arg]
-                    + self.FIXED_TREGEX_ARGS + connective_printing_args
-                    + [pattern, tree_file_path])
-                subprocess.call(tregex_command, stdout=self.output_file,
-                                stderr=self.dev_null)
+            tregex_command = (
+                [path.join(FLAGS.tregex_dir, 'tregex.sh'), output_type_arg]
+                + self._FIXED_TREGEX_ARGS + connective_printing_args
+                + [pattern, tree_file_path])
+            subprocess.call(tregex_command, stdout=self.output_file,
+                            stderr=self.dev_null)
+
+        _TREGEX_CACHE_DIR = '/tmp/tregex_cache'
+        def _create_output_file_if_not_exists(self, pattern, connective_labels,
+                                              tree_file_path):
+            pattern_dir_name = pattern.replace('/', '\\')
+            if len(pattern_dir_name) > 255:
+                # The combination of the start of the pattern plus the hash
+                # should be very hard indeed to accidentally match.
+                pattern_hash = hash(pattern_dir_name)
+                # Leave room for up to 20 characters of numerical hash (the max
+                # we could get on a 64-bit system).
+                pattern_dir_name = pattern_dir_name[:235]
+                pattern_dir_name += str(pattern_hash)
+
+            file_hash = hash_file(tree_file_path)
+            cache_dir_name = path.join(self._TREGEX_CACHE_DIR, pattern_dir_name)
+            cache_file_name = path.join(cache_dir_name, file_hash)
+            try:
+                self.output_file = open(cache_file_name, 'rb')
+            except IOError: # No such file
+                try:
+                    os.makedirs(cache_dir_name)
+                except OSError:
+                    if not path.isdir(cache_dir_name):
+                        raise
+
+                self.output_file = open(cache_file_name, 'w+b')
+                self._run_tregex(pattern, connective_labels, tree_file_path)
                 self.output_file.seek(0)
 
+        def _process_pattern(self, pattern, connective_labels,
+                             connective_lemmas, possible_sentences,
+                             tree_file_path):
+            self._create_output_file_if_not_exists(pattern, connective_labels,
+                                                   tree_file_path)
+            with self.output_file:
                 for sentence_index, sentence in possible_sentences:
                     possible_causations = self._process_tregex_for_sentence(
                         pattern, connective_labels, connective_lemmas, sentence)
