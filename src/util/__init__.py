@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import colorama
 import fcntl
+import hashlib
 import importlib
 from itertools import tee, izip, izip_longest
 import numpy as np
@@ -225,3 +226,17 @@ def make_setter(underlying_attr_name):
     def setter(self, value):
         return setattr(self, underlying_attr_name, value)
     return setter
+
+
+def hash_file(filename, chunk_size=1024 * 1024):
+    """" This function returns the SHA-256 hash
+         of the file passed into it. """
+    h = hashlib.sha256()
+
+    with open(filename, 'rb') as in_file:
+        chunk = 0
+        while chunk != b'':
+            chunk = in_file.read(chunk_size)
+            h.update(chunk)
+
+    return h.hexdigest()
