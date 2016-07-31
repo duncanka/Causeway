@@ -1,6 +1,6 @@
 from collections import defaultdict
 from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
-                    DuplicateFlagError)
+                    DuplicateFlagError, DEFINE_float)
 from itertools import chain, product
 import logging
 from nltk.corpus import wordnet
@@ -53,6 +53,8 @@ try:
                    "Specifies how many features to keep in feature selection"
                    " for per-connective causality filters. -1 means no feature"
                    " selection.")
+    DEFINE_float('filter_prob_cutoff', 0.4,
+                 'Probability threshold for instances to mark as causal')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -676,17 +678,29 @@ class PatternBasedCausationFilter(StructuredModel):
             self.classifiers[connective] = classifier
 
     def _score_parts(self, sentence, possible_causations):
-        return [self.classifiers[stringify_connective(pc)].predict([pc])
-                for pc in possible_causations]
-
+        scores = []
+        for pc in possible_causations:
+            classifier = self.classifiers[stringify_connective(pc)]
+            try:
+                true_class_index = classifier.le_.transform(True)
+                score = classifier.predict_proba([pc])[0, true_class_index]
+            except AttributeError: # no label encoder: non-voting classifier
+                try:
+                    true_class_index = np.where(
+                        classifier.classes_ == True)[0][0]
+                    score = classifier.predict_proba([pc])[0, true_class_index]
+                except ValueError: # True not in list
+                    score = 0.0
+            scores.append(score)
+        return scores
 
 class PatternBasedFilterDecoder(StructuredDecoder):
-    def decode(self, sentence, classifier_parts, labels):
+    def decode(self, sentence, classifier_parts, scores):
         # Deduplicate the results.
-
+        cutoff = FLAGS.filter_prob_cutoff
         tokens_to_parts = defaultdict(int)
-        positive_parts = [part for part, label in zip(classifier_parts, labels)
-                          if label]
+        positive_parts = [part for part, score in zip(classifier_parts, scores)
+                          if score > cutoff]
         for part in positive_parts:
             # Count every instance each connective word is part of.
             for connective_token in part.connective:
