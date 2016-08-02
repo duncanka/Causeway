@@ -53,7 +53,7 @@ try:
                    "Specifies how many features to keep in feature selection"
                    " for per-connective causality filters. -1 means no feature"
                    " selection.")
-    DEFINE_float('filter_prob_cutoff', 0.4,
+    DEFINE_float('filter_prob_cutoff', 0.45,
                  'Probability threshold for instances to mark as causal')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
@@ -689,7 +689,7 @@ class PatternBasedCausationFilter(StructuredModel):
                     true_class_index = np.where(
                         classifier.classes_ == True)[0][0]
                     score = classifier.predict_proba([pc])[0, true_class_index]
-                except ValueError: # True not in list
+                except IndexError: # True not in list
                     score = 0.0
             scores.append(score)
         return scores
