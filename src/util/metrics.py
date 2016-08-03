@@ -172,15 +172,18 @@ for property_name in ClassificationMetrics.DERIVED_PROPERTY_NAMES:
     setattr(ClassificationMetrics, property_name, property(getter, setter))
 
 
-def diff_binary_vectors(predicted, gold):
+def diff_binary_vectors(predicted, gold, count_tns=True):
     # Make sure np.where works properly
     predicted = np.array(predicted)
     gold = np.array(gold)
 
     tp = np.count_nonzero((predicted == 1) & (gold == 1))
-    tn = np.count_nonzero((predicted == 0) & (gold == 0))
     fp = np.count_nonzero((predicted == 1) & (gold == 0))
     fn = np.count_nonzero((predicted == 0) & (gold == 1))
+    if count_tns:
+        tn = np.count_nonzero((predicted == 0) & (gold == 0))
+    else:
+        tn = None
     return ClassificationMetrics(tp, fp, fn, tn)
 
 

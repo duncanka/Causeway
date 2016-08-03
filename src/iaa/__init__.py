@@ -675,8 +675,9 @@ class _RelationMetrics(object):
             else:
                 setattr(aggregated, attr_name, [])
 
-        aggregated.connective_metrics = ClassificationMetrics.average(
-            [m.connective_metrics for m in metrics_list])
+        aggregated.connective_metrics = (
+            metrics_list[0].connective_metrics.average(
+                [m.connective_metrics for m in metrics_list]))
 
         property_matrices = defaultdict(list)
         for m in metrics_list:
@@ -708,7 +709,7 @@ class _RelationMetrics(object):
                 sub_attr_values = [v for v in sub_attr_values if v is not None]
                 if sub_attr_values:
                     setattr(arg_metrics, sub_attr_name,
-                            AccuracyMetrics.average(sub_attr_values))
+                            sub_attr_values[0].average(sub_attr_values))
                 else:
                     setattr(arg_metrics, sub_attr_name, None)
 

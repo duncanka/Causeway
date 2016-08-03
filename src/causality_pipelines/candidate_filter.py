@@ -24,6 +24,7 @@ from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
 from util.diff import SequenceDiff
 from util.scipy import AutoWeightedVotingClassifier
+from util.metrics import ClassificationMetrics, diff_binary_vectors
 
 
 try:
@@ -55,6 +56,9 @@ try:
                    " selection.")
     DEFINE_float('filter_prob_cutoff', 0.45,
                  'Probability threshold for instances to mark as causal')
+    DEFINE_bool('filter_record_raw_accuracy', True,
+                'Whether to include raw classification accuracy in the'
+                ' evaluation scores for the causation filter')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -81,12 +85,6 @@ class PatternFilterPart(object):
 
 
 class CausalPatternClassifierModel(object):
-    def __init__(self, classifier, selected_features=None,
-                 model_path=None, save_featurized=False):
-        super(CausalPatternClassifierModel, self).__init__(
-            classifier=classifier, selected_features=selected_features,
-            model_path=model_path, save_featurized=save_featurized)
-
     @staticmethod
     def _get_gold_labels(classifier_parts):
         return [part.connective_correct for part in classifier_parts]
@@ -546,9 +544,9 @@ CausalPatternClassifierModel.all_feature_extractors = (
 
 
 class PatternBasedCausationFilter(StructuredModel):
-    def __init__(self, classifier, save_featurized=False):
+    def __init__(self, classifier, labels_for_eval, gold_labels_for_eval):
         super(PatternBasedCausationFilter, self).__init__(
-            PatternBasedFilterDecoder())
+            PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval))
 
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
@@ -567,8 +565,7 @@ class PatternBasedCausationFilter(StructuredModel):
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
             '.all_feature_extractors',
-            FLAGS.filter_features,
-            'per_conn_classifier')
+            FLAGS.filter_features, 'per_conn_classifier')
 
         # TODO: provide this filtering as a general-purpose function somewhere?
         general_extractor_names = [
@@ -695,20 +692,31 @@ class PatternBasedCausationFilter(StructuredModel):
         return scores
 
 class PatternBasedFilterDecoder(StructuredDecoder):
+    def __init__(self, labels_for_eval, gold_labels_for_eval):
+        self._labels_for_eval = labels_for_eval
+        self._gold_labels_for_eval = gold_labels_for_eval
+
     def decode(self, sentence, classifier_parts, scores):
-        # Deduplicate the results.
+        if not classifier_parts:
+            return []
+
         cutoff = FLAGS.filter_prob_cutoff
         tokens_to_parts = defaultdict(int)
-        positive_parts = [part for part, score in zip(classifier_parts, scores)
-                          if score > cutoff]
+        labels = [score > cutoff for score in scores]
+        self._labels_for_eval.extend(labels)
+        self._gold_labels_for_eval.extend(
+            [bool(p.possible_causation.true_causation_instance)
+             for p in classifier_parts])
+
+        # Deduplicate the results.
+        positive_parts = [part for part, label in zip(classifier_parts, labels)
+                          if label]
         for part in positive_parts:
             # Count every instance each connective word is part of.
             for connective_token in part.connective:
                 tokens_to_parts[connective_token] += 1
 
-        causation_instances = []
-        for part in positive_parts:
-            keep_part = True
+        def should_keep_part(part):
             for token in part.connective:
                 if tokens_to_parts[token] > 1:
                     # Assume that if there are other matches for a word, and
@@ -717,21 +725,106 @@ class PatternBasedFilterDecoder(StructuredDecoder):
                     # on this word were found using Steiner patterns?
                     if any('steiner_0' in pattern
                            for pattern in part.connective_patterns):
-                        keep_part = False
-                        break
+                        return False
                     # TODO: add check for duplicates in other cases?
-            if keep_part:
-                causation_instances.append(CausationInstance(
-                    sentence, connective=part.connective,
-                    cause=part.cause, effect=part.effect))
+            return True
 
-        return causation_instances
+        return [CausationInstance(sentence, connective=part.connective,
+                                  cause=part.cause, effect=part.effect)
+                for part in positive_parts
+                if should_keep_part(part)]
 
 
 class CausationPatternFilterStage(Stage):
+    class FilterMetrics(ClassificationMetrics):
+        def __init__(self, raw_classifier_metrics, *args, **kwargs):
+            self.raw_classifier_metrics = raw_classifier_metrics
+            super(self.FilterMetrics, self).__init__(*args, **kwargs)
+
+        def __add__(self, other):
+            metrics = object.__new__(type(self))
+            metrics.__dict__ = super(type(self), self).__add__(
+                other).__dict__
+            try:
+                metrics.raw_classifier_metrics = (
+                    self.raw_classifier_metrics + other.raw_classifier_metrics)
+            except AttributeError:
+                metrics.raw_classifier_metrics = self.raw_classifier_metrics
+            return metrics
+
+        def __eq__(self, other):
+            return (
+                isinstance(other, self.FilterMetrics)
+                and super(self.FilterMetrics, self).__eq__(other)
+                and self.raw_classifier_metrics == other.raw_classifier_metrics)
+
+        def __repr__(self):
+            metrics_str = ClassificationMetrics.__repr__(self)
+            raw_metrics_lines = str(self.raw_classifier_metrics).split('\n')
+            to_join = [metrics_str, "Raw classifier metrics:"]
+            for line in raw_metrics_lines:
+                to_join.append('    ' + line)
+            return '\n'.join(to_join)
+
+        @staticmethod
+        def average(metrics_list, ignore_nans=True):
+            avg = object.__new__(CausationPatternFilterStage.FilterMetrics)
+            avg.__dict__ = ClassificationMetrics.average(metrics_list,
+                                                         ignore_nans).__dict__
+            avg.raw_classifier_metrics = ClassificationMetrics.average(
+                [m.raw_classifier_metrics for m in metrics_list], ignore_nans)
+            return avg
+
+    class ClassifierIAAEvaluator(IAAEvaluator):
+        def __init__(self, decoder, *args, **kwargs):
+            super(CausationPatternFilterStage.ClassifierIAAEvaluator, self
+                  ).__init__(*args, **kwargs)
+            self._decoder = decoder # for grabbing labels
+            # Only convert without-partial metrics: if with-partial metrics are
+            # present, the raw classification scores won't be any different.
+            self._without_partial_metrics.connective_metrics = (
+                self._convert_classification_metrics(
+                    self._without_partial_metrics.connective_metrics))
+
+        def evaluate(self, document, original_document, sentences,
+                     original_sentences):
+            super(CausationPatternFilterStage.ClassifierIAAEvaluator,
+                  self).evaluate(document, original_document, sentences,
+                                 original_sentences)
+            if (FLAGS.filter_record_raw_accuracy
+                and self._decoder._labels_for_eval):
+                diff = diff_binary_vectors(self._decoder._labels_for_eval,
+                                           self._decoder._gold_labels_for_eval,
+                                           count_tns=False)
+                connective_metrics = (
+                    self._without_partial_metrics.connective_metrics)
+                connective_metrics.raw_classifier_metrics += diff
+                
+        def _convert_classification_metrics(self, classification_metrics):
+            new_metrics = object.__new__(
+                CausationPatternFilterStage.FilterMetrics)
+            new_metrics.__dict__ = classification_metrics.__dict__
+            new_metrics.raw_classifier_metrics = ClassificationMetrics(
+                finalize=False)
+            return new_metrics
+            
+
+        # Aggregation automatically handled by average() above.
+
     def __init__(self, classifier, name):
-        super(CausationPatternFilterStage, self).__init__(
-            name=name, model=PatternBasedCausationFilter(classifier))
+        self._labels_for_eval = []
+        self._gold_labels_for_eval = []
+        model = PatternBasedCausationFilter(classifier, self._labels_for_eval,
+                                            self._gold_labels_for_eval)
+        super(CausationPatternFilterStage, self).__init__(name=name,
+                                                          model=model)
+
+    def test(self, document, instances, writer=None):
+        # Clear labels lists between documents.
+        del self._labels_for_eval[:]
+        del self._gold_labels_for_eval[:]
+        super(CausationPatternFilterStage, self).test(document, instances,
+                                                      writer=writer)
 
     consumed_attributes = ['possible_causations']
 
@@ -739,5 +832,6 @@ class CausationPatternFilterStage(Stage):
         sentence.causation_instances = predicted_causations
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False,
-                            FLAGS.filter_print_test_instances, True, True)
+        return self.ClassifierIAAEvaluator(self.model.decoder, False, False,
+                                           FLAGS.filter_print_test_instances,
+                                           True, True)

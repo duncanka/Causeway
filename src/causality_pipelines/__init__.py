@@ -144,16 +144,16 @@ class IAAEvaluator(Evaluator):
 
     def aggregate_results(self, results_list):
         if FLAGS.iaa_calculate_partial:
-            permissive = CausalityMetrics.aggregate(
+            permissive = results_list[0].aggregate(
                 [result_dict[IAAEvaluator._PERMISSIVE_KEY]
                  for result_dict in results_list])
-            strict = CausalityMetrics.aggregate(
+            strict = results_list[0].aggregate(
                 [result_dict[IAAEvaluator._STRICT_KEY]
                  for result_dict in results_list])
             return {IAAEvaluator._PERMISSIVE_KEY: permissive,
                     IAAEvaluator._STRICT_KEY: strict}
         else:
-            return CausalityMetrics.aggregate(results_list)
+            return results_list[0].aggregate(results_list)
 
 
 class StanfordNERStage(Stage):
