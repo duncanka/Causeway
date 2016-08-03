@@ -46,11 +46,11 @@ class ClassificationMetrics(object):
         summed = copy.copy(self)
         summed._tp += other._tp
         summed._fp += other._fp
-        summed._tn += other._tn
-        if summed._fn is None or other._fn is None:
-            summed._fn = None
+        summed._fn += other._fn
+        if summed._tn is None or other._tn is None:
+            summed._tn = None
         else:
-            summed._fn += other._fn
+            summed._tn += other._tn
         summed._finalized = False
         return summed
 
