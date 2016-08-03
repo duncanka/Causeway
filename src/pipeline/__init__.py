@@ -51,6 +51,11 @@ try:
                    "If documents are being read from test_paths, defines how"
                    " many test documents are read and tested at once. -1 means"
                    " read all documents at once.")
+    DEFINE_boolean('eval_training_test', False,
+                   'When testing a stage at training time (usually to give the'
+                   ' next stage realistic input), evaluation results will be'
+                   ' printed if this stage is true. Causes all stages to'
+                   ' default to being tested at train time on training data.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -86,15 +91,18 @@ class Pipeline(object):
         # i.e., a no-op.
         self.test_stages_during_training_mask = np.full((len(stages)), True,
                                                         bool)
-        self.test_stages_during_training_mask[-1] = False
-        for i in range(len(stages) - 2, -1, -1): # iterate from penultimate
-            next_stage = stages[i + 1]
-            if (next_stage.model.__class__._train_model == Model._train_model
-                and next_stage.__class__.train == Stage.train):
-                self.test_stages_during_training_mask[i] = False
-            else:
-                # This stage and all before it should test during training.
-                break
+        # if evaluating training tests, leave all defaults as True.
+        if not FLAGS.eval_training_test:
+            self.test_stages_during_training_mask[-1] = False
+            for i in range(len(stages) - 2, -1, -1): # iterate from penultimate
+                next_stage = stages[i + 1]
+                if (next_stage.model.__class__._train_model
+                    == Model._train_model
+                    and next_stage.__class__.train == Stage.train):
+                    self.test_stages_during_training_mask[i] = False
+                else:
+                    # This stage and all before it should test during training.
+                    break
 
     def _read_documents(self, doc_paths=None):
         documents = []
@@ -164,7 +172,7 @@ class Pipeline(object):
             for stage, stage_results, stage_fold_result in zip(
                 self.stages, results, fold_results):
                 stage_results.append(stage_fold_result)
-                if FLAGS.cv_print_fold_results:
+                if FLAGS.cv_print_fold_results and None != stage_fold_result:
                     print_indented(1, 'Stage "', stage.name, '" results:',
                                    sep='')
                     self.print_stage_results(2, stage_fold_result)
@@ -174,8 +182,6 @@ class Pipeline(object):
                 and i + 1 >= FLAGS.cv_debug_stop_after):
                 break
 
-        # It may be slightly expensive to construct new evaluators again just to
-        # access their aggregator functions. Oh, well.
         evaluators = [stage._make_evaluator() for stage in self.stages]
         results = [(stage_evaluator.aggregate_results(stage_results)
                     if stage_evaluator else None)
@@ -195,9 +201,10 @@ class Pipeline(object):
 
     def print_eval_results(self, eval_results, indent_baseline=0):
         for stage, result in zip(self.stages, eval_results):
-            print_indented(indent_baseline, 'Evaluation for stage "',
-                           stage.name, '":', sep='')
-            self.print_stage_results(indent_baseline + 1, result)
+            if result is not None:
+                print_indented(indent_baseline, 'Evaluation for stage "',
+                               stage.name, '":', sep='')
+                self.print_stage_results(indent_baseline + 1, result)
 
     def train(self, documents=None):
         '''
@@ -223,6 +230,7 @@ class Pipeline(object):
                 stage._extract_instances(doc, True, False) for doc in documents]
             stage.train(documents, instances_by_document)
             logging.info('Finished training stage "%s"' % stage.name)
+
             # For training, each stage needs a realistic view of what its inputs
             # will look like. So now that we've trained the stage, if there is
             # another trainable stage after it we run the trained stage as
@@ -231,19 +239,38 @@ class Pipeline(object):
             # for particular pipelines by changing
             # test_stages_during_training_mask.
             if self.test_stages_during_training_mask[i]:
-                logging.info('Testing stage "%s" for input to next stage...'
-                             % stage.name)
-                instances_by_document = [
-                    stage._extract_instances(document, False, False)
-                    for document in documents]
-                stage._test_documents(documents, instances_by_document, None)
-                logging.info('Done testing stage "%s"' % stage.name)
+                self._do_training_test(stage, documents)
 
             # TODO: Fix attribute consumption
             else: # consume attributes because it won't happen via test()
                 for document, instances in zip(documents,
                                                instances_by_document):
                     stage._consume_attributes(document, instances)
+
+    def _do_training_test(self, stage, documents):
+        logging.info('Testing stage "%s" for input to next stage...'
+                             % stage.name)
+        instances_by_doc = [
+            stage._extract_instances(document, False, False)
+            for document in documents]
+
+        if FLAGS.eval_training_test:
+            evaluator = stage._make_evaluator()
+            original_docs = deepcopy(documents)
+            original_instances_by_doc = deepcopy(instances_by_doc)
+
+        stage._test_documents(documents, instances_by_doc, None)
+
+        if FLAGS.eval_training_test and evaluator is not None:
+            for (document, original_doc, instances, original_instances) in zip(
+                    documents, original_docs, instances_by_doc,
+                    original_instances_by_doc):
+                evaluator.evaluate(document, original_doc, instances,
+                                   original_instances)
+            print "Training results for stage %s:" % stage.name
+            self.print_stage_results(1, evaluator.complete_evaluation())
+
+        logging.info('Done testing stage "%s"' % stage.name)
 
     def evaluate(self, documents=None):
         '''
@@ -396,7 +423,7 @@ class Evaluator(object):
     def complete_evaluation(self):
         '''
         Should return the evaluation results for this stage, incorporating the
-        results of all calls to self._evaluate. If a dict is returned, it will
+        results of all calls to self.evaluate. If a dict is returned, it will
         be treated as a collection of named result metrics, where each key
         indicates the name of the corresponding metric.
         '''
