@@ -9,7 +9,8 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
-from causality_pipelines import remove_smaller_matches, StanfordNERStage
+from causality_pipelines import (remove_smaller_matches, StanfordNERStage,
+                                 IAAEvaluator)
 from causality_pipelines.baseline import BaselineStage
 from causality_pipelines.baseline.combiner import BaselineCombinerStage
 from causality_pipelines.baseline.most_freq_filter import (
@@ -103,9 +104,11 @@ def get_stages(candidate_classifier):
                   MostFreqSenseFilterStage('Most frequent sense filter')]
 
     if FLAGS.filter_overlapping and FLAGS.pipeline_type != 'baseline':
-        stages.append(SimpleStage('Filter smaller connectives',
-                                  remove_smaller_matches,
-                                  stages[-1]._make_evaluator))
+        smaller_filter_stage = SimpleStage(
+            'Filter smaller connectives', remove_smaller_matches,
+            lambda: IAAEvaluator(False, False,
+                                 FLAGS.filter_print_test_instances, True, True))
+        stages.append(smaller_filter_stage)
     return stages
 
 
