@@ -1,4 +1,4 @@
-from gflags import FLAGS, DEFINE_integer, DuplicateFlagError
+from gflags import FLAGS, DEFINE_integer, DEFINE_string, DuplicateFlagError
 import io
 from os import path
 import shutil
@@ -6,11 +6,12 @@ import sys
 
 from data.io import (CausalityStandoffReader, CausalityStandoffWriter,
                      StanfordParsedSentenceReader)
-from util.streams import CharacterTrackingStreamWrapper
 
 try:
     DEFINE_integer('start_sentence', 0, 'Sentence at which to start copying')
     DEFINE_integer('end_sentence', -1, 'Sentence at which to stop copying')
+    DEFINE_string('out_file_name', None,
+                  'Base name for output file. Defaults to same as input file.')
 except DuplicateFlagError:
     pass
 
@@ -23,7 +24,11 @@ if __name__ == '__main__':
     reader = CausalityStandoffReader(in_file)
     doc = reader.get_next()
 
-    base_name = path.splitext(path.split(in_file)[1])[0]
+    if FLAGS.out_file_name is None:
+        base_name = path.splitext(path.split(in_file)[1])[0]
+    else:
+        base_name = FLAGS.out_file_name
+
     in_txt_name = path.splitext(in_file)[0] + '.txt'
     out_txt_name = path.join(out_directory, base_name + '.txt')
     out_parse_name = path.join(out_directory, base_name + '.parse')
