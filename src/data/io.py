@@ -8,6 +8,7 @@ import os
 import numpy as np
 import re
 
+from iaa import stringify_connective
 from util import recursively_list_files
 from util.streams import read_stream_until, CharacterTrackingStreamWrapper
 from data import (StanfordParsedSentence, Annotation, CausationInstance,
@@ -307,9 +308,11 @@ class CausalityStandoffReader(DocumentReader):
 
     def get_next(self):
         document = self.sentence_reader.get_next()
+        if not document:
+            return None
 
         lines = self._file_stream.readlines()
-        if document and not lines:
+        if not lines:
             logging.warn("No annotations found in file %s"
                          % self._file_stream.name)
             # Don't close the reader: we still want to return the sentences,
@@ -327,6 +330,13 @@ class CausalityStandoffReader(DocumentReader):
                 to_duplicate.sentence.add_overlapping_instance(
                     instance_type, to_duplicate.connective, to_duplicate.arg0,
                     to_duplicate.arg1, to_duplicate.id, to_duplicate)
+
+            for sentence in document:
+                for ovl_instance in sentence.overlapping_rel_instances:
+                    if ovl_instance.type is None:
+                        logging.warn(
+                            "No relation type for non-causal instance %s (%s)",
+                            ovl_instance.id, stringify_connective(ovl_instance))
 
         return document
 
@@ -823,6 +833,10 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
             self._write_line(degree_attr_id, degree_string)
 
     def _write_overlapping(self, instance):
+        if instance.type is None:
+            logging.warn("Skipping instance with no type: %s", instance)
+            return]
+
         if instance.attached_causation is not None:
             event_id = self._objects_to_ids[id(instance.attached_causation)]
         else:

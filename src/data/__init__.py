@@ -986,9 +986,13 @@ class _RelationInstance(object):
                 txt=' '.join([t.original_text for t in annotation]
                              if annotation else ['<None>']))
              for arg_name, annotation in sorted(named_args.iteritems())]
+        if instance.type is not None:
+            type_str = instance._types[instance.type]
+        else: 
+            type_str = "UNKNOWN"
         self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
             typename=instance.__class__.__name__, conn=connective,
-            args=', '.join(arg_strings), type=instance._types[instance.type])
+            args=', '.join(arg_strings), type=type_str)
         return '\n'.join(_RelationInstance.__wrapper.wrap(self_str))
 
     def __repr__(self):
