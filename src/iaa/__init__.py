@@ -427,9 +427,9 @@ class _RelationMetrics(object):
             property_1 = getattr(instance_1, property_name)
             property_2 = getattr(instance_2, property_name)
 
-            if property_1 >= len(labels_enum):
+            if property_1 >= len(labels_enum) or property_1 is None:
                 log_missing(instance_1, 1)
-            elif property_2 >= len(labels_enum):
+            elif property_2 >= len(labels_enum) or property_2 is None:
                 log_missing(instance_2, 2)
             else:
                 labels_1.append(labels_enum[property_1])
