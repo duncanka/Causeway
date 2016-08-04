@@ -430,7 +430,7 @@ class CausalityStandoffReader(DocumentReader):
                              ids_to_reprocess, ids_needed_to_reprocess):
         try:
             _line_id, coref_str = line_parts
-            coref_args = coref_str.split(' ')[1:]
+            coref_args = coref_str.split()[1:]
             from_arg_id, to_arg_id = [arg_str.split(':')[1]
                                       for arg_str in coref_args]
         except ValueError:
@@ -520,7 +520,7 @@ class CausalityStandoffReader(DocumentReader):
             len(line_parts) != 2,
             "Skipping attribute line lacking 2 tab-separated entries")
         line_id = line_parts[0]
-        attr_parts = line_parts[1].split(' ')
+        attr_parts = line_parts[1].split()
 
         attr_type = attr_parts[0]
         if attr_type == 'Degree':
@@ -575,7 +575,7 @@ class CausalityStandoffReader(DocumentReader):
         self.__raise_warning_if(len(line_parts) != 2,
             "Skipping event line that does not have 2 tab-separated entries")
         line_id = line_parts[0]
-        args = line_parts[1].split(' ')
+        args = line_parts[1].split()
         # TODO: update this to handle zero-arg instances?
         self.__raise_warning_if(
             len(args) < 2,
@@ -813,8 +813,9 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
             self._get_arg_string(instance.arg_names[arg_type].title(),
                                  getattr(instance, arg_type))
             for arg_type in instance.get_arg_types()]
-        event_component_strings = [':'.join([instance_type_name,
-                                             connective_id])] + arg_strings
+        event_component_strings = (
+            [':'.join([instance_type_name, connective_id])]
+            + [arg for arg in arg_strings if arg]) # skip blank args
         self._write_line(event_id, ' '.join(event_component_strings))
         return event_id
 
@@ -835,7 +836,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
     def _write_overlapping(self, instance):
         if instance.type is None:
             logging.warn("Skipping instance with no type: %s", instance)
-            return]
+            return
 
         if instance.attached_causation is not None:
             event_id = self._objects_to_ids[id(instance.attached_causation)]
