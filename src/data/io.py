@@ -497,8 +497,8 @@ class CausalityStandoffReader(DocumentReader):
                 and not is_noncausal,
                 "Skipping text annotation with invalid causation type")
             try:
-                connective = containing_sentence.find_tokens_for_annotation(
-                    annotation)
+                connective = self._find_tokens_for_annotation(
+                    containing_sentence, annotation)
                 if is_noncausal:
                     instance = containing_sentence.add_overlapping_instance(
                         connective=connective)
@@ -510,6 +510,53 @@ class CausalityStandoffReader(DocumentReader):
                 raise UserWarning(e.message)
         elif annotation_type == 'Argument':
             unused_arg_ids.add(line_id)
+
+    def _find_tokens_for_annotation(self, sentence, annotation):
+        tokens = []
+        tokens_iter = iter(sentence.tokens)
+        tokens_iter.next() # skip ROOT
+        next_token = tokens_iter.next()
+        try:
+            for start, end in annotation.offsets:
+                prev_token = None
+                while next_token.start_offset < start:
+                    prev_token = next_token
+                    next_token = tokens_iter.next()
+                if next_token.start_offset != start:
+                    warning = ("Start of annotation %s in file %s does not"
+                               " correspond to a token start"
+                               % (annotation.id, sentence.source_file_path))
+                    if prev_token and prev_token.end_offset >= start:
+                        tokens.append(prev_token)
+                        warning += '; the token it bisects has been appended'
+                    logging.warn(warning)
+                # We might have grabbed a whole additional token just because
+                # of an annotation that included a final space, so make sure
+                # next_token really is in the annotation span before adding it.
+                if next_token.start_offset < end:
+                    tokens.append(next_token)
+
+                while next_token.end_offset < end:
+                    prev_token = next_token
+                    next_token = tokens_iter.next()
+                    if next_token.start_offset < end:
+                        tokens.append(next_token)
+                if next_token.end_offset != end:
+                    warning = ("End of annotation %s in file %s does not"
+                               " correspond to a token start"
+                               % (annotation.id, sentence.source_file_path))
+                    # If we appended the next token, that means the index
+                    # brought us into the middle of the next word.
+                    if tokens[-1] is next_token:
+                        warning += '; the token it bisects has been appended'
+                    logging.warn(warning)
+
+            # TODO: Should we check to make sure the annotation text is right?
+            return tokens
+
+        except StopIteration:
+            raise ValueError("Annotation %s couldn't be matched against tokens!"
+                         " Ignoring..." % annotation.offsets)
 
     def __process_attribute(self, line, line_parts, ids_to_annotations,
                             ids_to_instances, instances_also_overlapping,
@@ -622,8 +669,8 @@ class CausalityStandoffReader(DocumentReader):
                 annotation = ids_to_annotations[arg_id]
                 try:
                     annotation_tokens = (
-                        instance.sentence.find_tokens_for_annotation(
-                            annotation))
+                        self._find_tokens_for_annotation(
+                            instance.sentence, annotation))
                 except ValueError as e:
                     raise UserWarning(e.message)
 

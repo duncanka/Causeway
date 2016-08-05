@@ -422,53 +422,6 @@ class StanfordParsedSentence(object):
 
         return closest, min_distance
 
-    def find_tokens_for_annotation(self, annotation):
-        tokens = []
-        tokens_iter = iter(self.tokens)
-        tokens_iter.next()  # skip ROOT
-        next_token = tokens_iter.next()
-        try:
-            for start, end in annotation.offsets:
-                prev_token = None
-                while next_token.start_offset < start:
-                    prev_token = next_token
-                    next_token = tokens_iter.next()
-                if next_token.start_offset != start:
-                    warning = ("Start of annotation %s in file %s does not"
-                               " correspond to a token start"
-                               % (annotation.id, self.source_file_path))
-                    if prev_token and prev_token.end_offset >= start:
-                        tokens.append(prev_token)
-                        warning += '; the token it bisects has been appended'
-                    logging.warn(warning)
-                # We might have grabbed a whole additional token just because
-                # of an annotation that included a final space, so make sure
-                # next_token really is in the annotation span before adding it.
-                if next_token.start_offset < end:
-                    tokens.append(next_token)
-
-                while next_token.end_offset < end:
-                    prev_token = next_token
-                    next_token = tokens_iter.next()
-                    if next_token.start_offset < end:
-                        tokens.append(next_token)
-                if next_token.end_offset != end:
-                    warning = ("End of annotation %s in file %s does not"
-                               " correspond to a token start"
-                               % (annotation.id, self.source_file_path))
-                    # If we appended the next token, that means the index
-                    # brought us into the middle of the next word.
-                    if tokens[-1] is next_token:
-                        warning += '; the token it bisects has been appended'
-                    logging.warn(warning)
-
-            # TODO: Should we check to make sure the annotation text is right?
-            return tokens
-
-        except StopIteration:
-            raise ValueError("Annotation %s couldn't be matched against tokens!"
-                         " Ignoring..." % annotation.offsets)
-
     def dep_to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
         # recursion.
