@@ -7,7 +7,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, NameDictionary, get_object_by_fqname
+from util import Enum, NameDictionary, get_object_by_fqname, merge_dicts
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
@@ -134,6 +134,28 @@ class VectorValuedFeatureExtractor(FeatureExtractor):
             subfeature_name = '%s[%d]' % (self.name, i)
             feature_values[subfeature_name] = subfeature_value
         return feature_values
+
+
+class NestedFeatureExtractor(FeatureExtractor):
+    def __init__(self, name, subextractors):
+        self.name = name
+        self.subextractors = subextractors
+
+    def extract_subfeature_names(self, instances):
+        names_by_subextractor = [
+            ['_'.join([self.name, subextractor_subfeature_name])
+             for subextractor_subfeature_name
+             in subextractor.extract_subfeature_names(instances)]
+            for subextractor in self.subextractors]
+        return list(itertools.chain.from_iterable(names_by_subextractor))
+
+    def extract(self, part):
+        features_by_subextractor = [
+            {'_'.join([self.name, feature_name]): feature_value
+             for feature_name, feature_value
+             in subextractor.extract(part).iteritems()}
+            for subextractor in self.subextractors]
+        return merge_dicts(features_by_subextractor)
 
 
 class Featurizer(object):
