@@ -16,7 +16,7 @@ from causality_pipelines.baseline.combiner import BaselineCombinerStage
 from causality_pipelines.baseline.most_freq_filter import (
     MostFreqSenseFilterStage)
 from causality_pipelines.candidate_filter import (CausationPatternFilterStage,
-                                                  CausalPatternClassifierModel)
+                                                  CausalClassifierModel)
 from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
 from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
 from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
@@ -132,7 +132,7 @@ if __name__ == '__main__':
         print "Available filter features:"
         print_indented(
             1, '\n'.join(sorted(e.name for e in
-                CausalPatternClassifierModel.all_feature_extractors)))
+                CausalClassifierModel.all_feature_extractors)))
     except FlagsError, e:
         print '%s\nUsage: %s ARGS\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)

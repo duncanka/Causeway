@@ -84,7 +84,7 @@ class PatternFilterPart(object):
         self.connective_correct = connective_correct
 
 
-class CausalPatternClassifierModel(object):
+class CausalClassifierModel(object):
     @staticmethod
     def _get_gold_labels(classifier_parts):
         return [part.connective_correct for part in classifier_parts]
@@ -125,18 +125,18 @@ class CausalPatternClassifierModel(object):
     @staticmethod
     def extract_tense(head):
         if head.parent_sentence is (
-            CausalPatternClassifierModel.__cached_tenses_sentence):
+            CausalClassifierModel.__cached_tenses_sentence):
             try:
-                return CausalPatternClassifierModel.__cached_tenses[head]
+                return CausalClassifierModel.__cached_tenses[head]
             except KeyError:
                 pass
         else:
-            CausalPatternClassifierModel.__cached_tenses_sentence = (
+            CausalClassifierModel.__cached_tenses_sentence = (
                 head.parent_sentence)
-            CausalPatternClassifierModel.__cached_tenses = {}
+            CausalClassifierModel.__cached_tenses = {}
 
         tense = head.parent_sentence.get_auxiliaries_string(head)
-        CausalPatternClassifierModel.__cached_tenses[head] = tense
+        CausalClassifierModel.__cached_tenses[head] = tense
         return tense
 
     @staticmethod
@@ -174,7 +174,7 @@ class CausalPatternClassifierModel(object):
             part.connective_head)
         if parent is None:
             return None
-        return CausalPatternClassifierModel.get_pos_with_copulas(parent)
+        return CausalClassifierModel.get_pos_with_copulas(parent)
 
     _ALL_POS_PAIRS = ['/'.join(tags) for tags in product(
                         Token.ALL_POS_TAGS, Token.ALL_POS_TAGS)]
@@ -182,15 +182,15 @@ class CausalPatternClassifierModel(object):
     def extract_pos_bigram(part, arg_head):
         if arg_head.index < 2:
             prev_pos = 'NONE'
-            pos = CausalPatternClassifierModel.get_pos_with_copulas(arg_head)
+            pos = CausalClassifierModel.get_pos_with_copulas(arg_head)
         else:
             previous_token = part.sentence.tokens[arg_head.index - 1]
             # TODO: would this be helpful or harmful?
             # while previous_token.pos in Token.PUNCT_TAGS:
             #     previous_token = part.sentence.tokens[
             #         previous_token.index - 1]
-            prev_pos, pos = [CausalPatternClassifierModel.get_pos_with_copulas(
-                                token) for token in previous_token, arg_head]
+            prev_pos, pos = [CausalClassifierModel.get_pos_with_copulas(token)
+                             for token in previous_token, arg_head]
         '/'.join([prev_pos, pos])
 
     @staticmethod
@@ -220,24 +220,24 @@ class CausalPatternClassifierModel(object):
     _embeddings = None # only initialize if being used
     @staticmethod
     def extract_vector(arg_head):
-        if not CausalPatternClassifierModel._embeddings:
-            CausalPatternClassifierModel._embeddings = SennaEmbeddings()
+        if not CausalClassifierModel._embeddings:
+            CausalClassifierModel._embeddings = SennaEmbeddings()
         try:
-            return CausalPatternClassifierModel._embeddings[
+            return CausalClassifierModel._embeddings[
                 arg_head.lowered_text]
         except KeyError: # Unknown word; return special vector
-            return CausalPatternClassifierModel._embeddings['UNKNOWN']
+            return CausalClassifierModel._embeddings['UNKNOWN']
 
     @staticmethod
     def extract_vector_dist(head1, head2):
-        v1 = CausalPatternClassifierModel.extract_vector(head1)
-        v2 = CausalPatternClassifierModel.extract_vector(head2)
+        v1 = CausalClassifierModel.extract_vector(head1)
+        v2 = CausalClassifierModel.extract_vector(head2)
         return np.linalg.norm(v1 - v2)
 
     @staticmethod
     def extract_vector_cos_dist(head1, head2):
-        v1 = CausalPatternClassifierModel.extract_vector(head1)
-        v2 = CausalPatternClassifierModel.extract_vector(head2)
+        v1 = CausalClassifierModel.extract_vector(head1)
+        v2 = CausalClassifierModel.extract_vector(head2)
         return distance.cosine(v1, v2)
 
     @staticmethod
@@ -283,7 +283,7 @@ class CausalPatternClassifierModel(object):
     def has_negated_child(argument_head):
         sentence = argument_head.parent_sentence
         children = sentence.get_children(argument_head, '*')
-        return any(CausalPatternClassifierModel.is_negated(child)
+        return any(CausalClassifierModel.is_negated(child)
                    for child in children if child.get_gen_pos() == 'NN')
 
     @staticmethod
@@ -323,15 +323,16 @@ class CausalPatternClassifierModel(object):
             " throughout"
             " unto up upon versus via vs. with within without" # Prepositions
         .split(" "))
-    # Adapted from http://mailman.uib.no/public/corpora/2011-November/014318.html
+    # Adapted from
+    # http://mailman.uib.no/public/corpora/2011-November/014318.html.
     # (Omitted: numbers, times, places, non-extrapositional pronouns.)
 
     @staticmethod
     def closed_class_children(arg_head):
         child_tokens = arg_head.parent_sentence.get_children(arg_head, '*')
         child_tokens.sort(key=lambda token: token.index)
-        return tuple(token.lemma for token in child_tokens if token.lemma
-                     in CausalPatternClassifierModel.ALL_CLOSED_CLASS)
+        return tuple(token.lemma for token in child_tokens
+                     if token.lemma in CausalClassifierModel.ALL_CLOSED_CLASS)
 
     @staticmethod
     def closed_class_children_deps(arg_head):
@@ -339,8 +340,7 @@ class CausalPatternClassifierModel(object):
         child_edges_and_tokens.sort(key=lambda pair: pair[1].index)
         return tuple('/'.join([token.lemma, edge_label])
                      for edge_label, token in child_edges_and_tokens
-                     if token.lemma in
-                         CausalPatternClassifierModel.ALL_CLOSED_CLASS)
+                     if token.lemma in CausalClassifierModel.ALL_CLOSED_CLASS)
 
     all_feature_extractors = []
 
@@ -348,7 +348,7 @@ class CausalPatternClassifierModel(object):
 Numerical = FeatureExtractor.FeatureTypes.Numerical
 Binary = FeatureExtractor.FeatureTypes.Binary
 
-CausalPatternClassifierModel.connective_feature_extractors = [
+CausalClassifierModel.connective_feature_extractors = [
     SetValuedFeatureExtractor(
         'connective', lambda part: part.connective_patterns),
     FeatureExtractor('cn_words',
@@ -358,27 +358,27 @@ CausalPatternClassifierModel.connective_feature_extractors = [
                      lambda part: ' '.join([t.lemma
                                             for t in part.connective])), ]
 
-CausalPatternClassifierModel.general_feature_extractors = [
+CausalClassifierModel.general_feature_extractors = [
     KnownValuesFeatureExtractor(
         'cause_pos',
-        lambda part: CausalPatternClassifierModel.get_pos_with_copulas(
+        lambda part: CausalClassifierModel.get_pos_with_copulas(
                         part.cause_head),
         Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
         'effect_pos',
-        lambda part: CausalPatternClassifierModel.get_pos_with_copulas(
+        lambda part: CausalClassifierModel.get_pos_with_copulas(
                         part.effect_head),
         Token.ALL_POS_TAGS),
     KnownValuesFeatureExtractor(
         'cause_pos_bigram',
-        lambda part: CausalPatternClassifierModel.extract_pos_bigram(
+        lambda part: CausalClassifierModel.extract_pos_bigram(
                              part, part.cause_head),
-                         CausalPatternClassifierModel._ALL_POS_PAIRS),
+                         CausalClassifierModel._ALL_POS_PAIRS),
     KnownValuesFeatureExtractor(
         'effect_pos_bigram',
-        lambda part: CausalPatternClassifierModel.extract_pos_bigram(
+        lambda part: CausalClassifierModel.extract_pos_bigram(
                              part, part.effect_head),
-                         CausalPatternClassifierModel._ALL_POS_PAIRS),
+                         CausalClassifierModel._ALL_POS_PAIRS),
     # Generalized POS tags don't seem to be that useful.
     KnownValuesFeatureExtractor(
         'cause_pos_gen', lambda part: part.cause_head.get_gen_pos(),
@@ -386,9 +386,9 @@ CausalPatternClassifierModel.general_feature_extractors = [
     KnownValuesFeatureExtractor(
         'effect_pos_gen', lambda part: part.effect_head.get_gen_pos(),
         Token.ALL_POS_TAGS),
-    FeatureExtractor('wordsbtw', CausalPatternClassifierModel.words_btw_heads,
+    FeatureExtractor('wordsbtw', CausalClassifierModel.words_btw_heads,
                      Numerical),
-    FeatureExtractor('deppath', CausalPatternClassifierModel.extract_dep_path),
+    FeatureExtractor('deppath', CausalClassifierModel.extract_dep_path),
     SetValuedFeatureExtractor(
         'deps_on_path',
         lambda part: part.sentence.extract_dependency_path(
@@ -397,44 +397,40 @@ CausalPatternClassifierModel.general_feature_extractors = [
                      lambda part: len(part.sentence.extract_dependency_path(
                         part.cause_head, part.effect_head)), Numerical),
     FeatureExtractor('cause_tense',
-                     lambda part: CausalPatternClassifierModel.extract_tense(
+                     lambda part: CausalClassifierModel.extract_tense(
                         part.cause_head)),
     FeatureExtractor('effect_tense',
-                     lambda part: CausalPatternClassifierModel.extract_tense(
+                     lambda part: CausalClassifierModel.extract_tense(
                         part.effect_head)),
-    SetValuedFeatureExtractor(
-        'cn_daughter_deps',
-        CausalPatternClassifierModel.extract_daughter_deps),
-    FeatureExtractor(
-        'cn_incoming_dep',
-        CausalPatternClassifierModel.extract_incoming_dep),
+    SetValuedFeatureExtractor('cn_daughter_deps',
+                              CausalClassifierModel.extract_daughter_deps),
+    FeatureExtractor('cn_incoming_dep',
+                     CausalClassifierModel.extract_incoming_dep),
     FeatureExtractor('verb_children_deps',
-                     CausalPatternClassifierModel.get_verb_children_deps),
+                     CausalClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
-                     CausalPatternClassifierModel.extract_parent_pos),
+                     CausalClassifierModel.extract_parent_pos),
 #     SetValuedFeatureExtractor(
 #         'cause_hypernyms',
-#         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
+#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
 #             part.cause_head)),
 #     SetValuedFeatureExtractor(
 #         'effect_hypernyms',
-#         lambda part: CausalPatternClassifierModel.extract_wn_hypernyms(
+#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
 #             part.effect_head)),
-    FeatureExtractor(
-        'all_cause_closed_children',
-        lambda part: CausalPatternClassifierModel.closed_class_children(
-                        part.cause_head)),
-    FeatureExtractor(
-        'all_effect_closed_children',
-        lambda part: CausalPatternClassifierModel.closed_class_children(
-                        part.effect_head)),
+    FeatureExtractor('all_cause_closed_children',
+                     lambda part: CausalClassifierModel.closed_class_children(
+                                      part.cause_head)),
+    FeatureExtractor('all_effect_closed_children',
+                     lambda part: CausalClassifierModel.closed_class_children(
+                                      part.effect_head)),
     SetValuedFeatureExtractor(
         'cause_closed_children',
-        lambda part: CausalPatternClassifierModel.closed_class_children(
+        lambda part: CausalClassifierModel.closed_class_children(
                         part.cause_head)),
     SetValuedFeatureExtractor(
         'effect_closed_children',
-        lambda part: CausalPatternClassifierModel.closed_class_children(
+        lambda part: CausalClassifierModel.closed_class_children(
                         part.effect_head)),
     KnownValuesFeatureExtractor('domination',
         lambda part: part.sentence.get_domination_relation(
@@ -442,19 +438,19 @@ CausalPatternClassifierModel.general_feature_extractors = [
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
 #     VectorValuedFeatureExtractor(
 #         'cause_vector',
-#         lambda part: CausalPatternClassifierModel.extract_vector(
+#         lambda part: CausalClassifierModel.extract_vector(
 #                         part.cause_head)),
 #     VectorValuedFeatureExtractor(
 #         'effect_vector',
-#         lambda part: CausalPatternClassifierModel.extract_vector(
+#         lambda part: CausalClassifierModel.extract_vector(
 #                         part.cause_head)),
 #     FeatureExtractor(
 #         'vector_dist',
-#         lambda part: CausalPatternClassifierModel.extract_vector_dist(
+#         lambda part: CausalClassifierModel.extract_vector_dist(
 #                          part.cause_head, part.effect_head), Numerical),
 #     FeatureExtractor(
 #         'vector_cos_dist',
-#         lambda part: CausalPatternClassifierModel.extract_vector_cos_dist(
+#         lambda part: CausalClassifierModel.extract_vector_cos_dist(
 #                         part.cause_head, part.effect_head), Numerical),
     # TODO: remove for general classifier? (Too construction-specific)
     KnownValuesFeatureExtractor(
@@ -465,82 +461,79 @@ CausalPatternClassifierModel.general_feature_extractors = [
         'effect_ner',
         lambda part: StanfordNERStage.NER_TYPES[part.effect_head.ner_tag],
         StanfordNERStage.NER_TYPES),
-    FeatureExtractor(
-        'commas_btw',
-        lambda part: CausalPatternClassifierModel.count_commas_between(
-            part.cause, part.effect), Numerical),
+    FeatureExtractor('commas_btw',
+                     lambda part: CausalClassifierModel.count_commas_between(
+                                      part.cause, part.effect), Numerical),
     FeatureExtractor('cause_len', lambda part: len(part.cause), Numerical),
     FeatureExtractor('effect_len', lambda part: len(part.effect), Numerical),
-    FeatureExtractor(
-        'args_rel_pos',
-        lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
-            part.cause, part.effect)),
-    FeatureExtractor(
-        'heads_rel_pos',
-        lambda part: CausalPatternClassifierModel.cause_pos_wrt_effect(
-            [part.cause_head], [part.effect_head])),
+    FeatureExtractor('args_rel_pos',
+                     lambda part: CausalClassifierModel.cause_pos_wrt_effect(
+                                      part.cause, part.effect)),
+    FeatureExtractor('heads_rel_pos',
+                     lambda part: CausalClassifierModel.cause_pos_wrt_effect(
+                                      [part.cause_head], [part.effect_head])),
     FeatureExtractor(
         'all_cause_closed_children_deps',
-        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+        lambda part: CausalClassifierModel.closed_class_children_deps(
                         part.cause_head)),
     FeatureExtractor(
         'all_effect_closed_children_deps',
-        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+        lambda part: CausalClassifierModel.closed_class_children_deps(
                         part.effect_head)),
     SetValuedFeatureExtractor(
         'cause_closed_children_deps',
-        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+        lambda part: CausalClassifierModel.closed_class_children_deps(
                         part.cause_head)),
     SetValuedFeatureExtractor(
         'effect_closed_children_deps',
-        lambda part: CausalPatternClassifierModel.closed_class_children_deps(
+        lambda part: CausalClassifierModel.closed_class_children_deps(
                         part.effect_head)),
     FeatureExtractor(
         'cause_neg',
-        lambda part: CausalPatternClassifierModel.is_negated(part.cause_head),
+        lambda part: CausalClassifierModel.is_negated(part.cause_head),
         Binary),
     FeatureExtractor(
         'effect_neg',
-        lambda part: CausalPatternClassifierModel.is_negated(part.effect_head),
+        lambda part: CausalClassifierModel.is_negated(part.effect_head),
         Binary),
     FeatureExtractor(
         'cause_neg_child',
-        lambda part: CausalPatternClassifierModel.has_negated_child(
+        lambda part: CausalClassifierModel.has_negated_child(
                         part.cause_head),
         Binary),
     FeatureExtractor(
         'effect_neg_child',
-        lambda part: CausalPatternClassifierModel.has_negated_child(
+        lambda part: CausalClassifierModel.has_negated_child(
                         part.effect_head),
         Binary),
     # TODO: look for other negative words
     FeatureExtractor(
         'cause_comp',
-        lambda part: CausalPatternClassifierModel.is_comp(part.cause_head),
+        lambda part: CausalClassifierModel.is_comp(part.cause_head),
         Binary),
     FeatureExtractor(
         'effect_comp',
-        lambda part: CausalPatternClassifierModel.is_comp(part.effect_head),
+        lambda part: CausalClassifierModel.is_comp(part.effect_head),
         Binary),
     FeatureExtractor(
         'cause_comp_start',
-        lambda part: CausalPatternClassifierModel.starts_w_comp(part.cause),
+        lambda part: CausalClassifierModel.starts_w_comp(part.cause),
         Binary),
     FeatureExtractor(
         'effect_comp_start',
-        lambda part: CausalPatternClassifierModel.starts_w_comp(part.effect),
+        lambda part: CausalClassifierModel.starts_w_comp(part.effect),
         Binary),
     FeatureExtractor(
         'cause_prep_start',
-        lambda part: CausalPatternClassifierModel.initial_prep(part.cause)),
+        lambda part: CausalClassifierModel.initial_prep(part.cause)),
     FeatureExtractor(
         'effect_prep_start',
-        lambda part: CausalPatternClassifierModel.initial_prep(part.effect)),
+        lambda part: CausalClassifierModel.initial_prep(part.effect)),
 ]
 
-CausalPatternClassifierModel.all_feature_extractors = (
-    CausalPatternClassifierModel.connective_feature_extractors
-    + CausalPatternClassifierModel.general_feature_extractors)
+CausalClassifierModel.all_feature_extractors = (
+    CausalClassifierModel.connective_feature_extractors
+    + CausalClassifierModel.general_feature_extractors)
 
 
 class PatternBasedCausationFilter(StructuredModel):
@@ -563,14 +556,14 @@ class PatternBasedCausationFilter(StructuredModel):
             'most_freq_classifier')
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
-            'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
+            'causality_pipelines.candidate_filter.CausalClassifierModel'
             '.all_feature_extractors',
             FLAGS.filter_features, 'per_conn_classifier')
 
         # TODO: provide this filtering as a general-purpose function somewhere?
         general_extractor_names = [
             e.name for e in
-            CausalPatternClassifierModel.general_feature_extractors]
+            CausalClassifierModel.general_feature_extractors]
         conjoined_sep = FLAGS.conjoined_feature_sep
         general_selected_features = [
             feature for feature in FLAGS.filter_features
@@ -578,7 +571,7 @@ class PatternBasedCausationFilter(StructuredModel):
                                        in feature.split(conjoined_sep))]
         self.general_classifier = make_featurizing_estimator(
             general_classifier,
-            'causality_pipelines.candidate_filter.CausalPatternClassifierModel'
+            'causality_pipelines.candidate_filter.CausalClassifierModel'
             '.general_feature_extractors', general_selected_features,
             'global_causality_classifier')
 
@@ -635,7 +628,7 @@ class PatternBasedCausationFilter(StructuredModel):
 
     def _train_structured(self, sentences, parts_by_sentence):
         all_pcs = list(chain.from_iterable(parts_by_sentence))
-        all_labels = CausalPatternClassifierModel._get_gold_labels(all_pcs)
+        all_labels = CausalClassifierModel._get_gold_labels(all_pcs)
         self.general_classifier.fit(all_pcs, all_labels)
 
         pcs_by_connective = defaultdict(list)
@@ -646,7 +639,7 @@ class PatternBasedCausationFilter(StructuredModel):
         for connective, pcs in pcs_by_connective.iteritems():
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
             pcs = pcs_with_both_args # train only on instances with 2 args
-            labels = CausalPatternClassifierModel._get_gold_labels(pcs)
+            labels = CausalClassifierModel._get_gold_labels(pcs)
 
             # Some classifiers don't deal well with all labels being the same.
             # If this is the case, it should just default to majority class
