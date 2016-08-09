@@ -158,6 +158,27 @@ class NestedFeatureExtractor(FeatureExtractor):
         return merge_dicts(features_by_subextractor)
 
 
+class MultiNumericalFeatureExtractor(FeatureExtractor):
+    '''
+    Feature extractor for extracting a feature with multiple named numerical
+    components. Expects extractor_fn to return the feature-name-to-numerical-
+    value dictionary.
+    '''
+    def __init__(self, name, extractor_fn):
+        FeatureExtractor.__init__(self, name, extractor_fn,
+                                  self.FeatureTypes.Numerical)
+
+    def extract_subfeature_names(self, instances):
+        names_set = set()
+        for part in instances:
+            names_set.update(self._extractor_fn(part).keys())
+        return names_set
+
+    def extract(self, part):
+        ''' Directly returns the dictionary of feature names/values. '''
+        return self._extractor_fn(part)
+
+
 class Featurizer(object):
     '''
     Encapsulates and manages a set of FeatureExtractors, stores the feature name
