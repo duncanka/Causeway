@@ -64,6 +64,78 @@ class FeatureExtractor(object):
         return '<Feature extractor: %s>' % self.name
 
 
+class KnownValuesFeatureExtractor(FeatureExtractor):
+    '''
+    This class makes model training more efficient by pre-registering known
+    feature values, rather than deriving them from the corpus. The list of
+    feature values may include entries that do not in fact appear in the data.
+
+    Using this class implies a categorical feature type.
+    '''
+    def __init__(self, name, extractor_fn, feature_values):
+        super(KnownValuesFeatureExtractor, self).__init__(
+            name, extractor_fn, self.FeatureTypes.Categorical)
+        self.feature_values = feature_values
+
+    def extract_subfeature_names(self, instances):
+        ''' Ignore `instances` and just use known values. '''
+        return [self._get_categorical_feature_name(self.name, value)
+                for value in self.feature_values]
+
+
+class SetValuedFeatureExtractor(FeatureExtractor):
+    '''
+    Class for extracting features where the same feature name can legally take
+    on multiple discrete values simultaneously -- i.e., the feature is
+    set-valued -- but where we want to represent that set as a collection of
+    individual indicator features, rather than a single indicator for each
+    possible set value.
+    '''
+
+    def __init__(self, name, extractor_fn):
+        '''
+        Unlike a traditional feature extractor, extractor_fn for a
+        SetValuedFeatureExtractor should return a list (or tuple) of values.
+        '''
+        super(SetValuedFeatureExtractor, self).__init__(
+            name, extractor_fn, self.FeatureTypes.Categorical)
+
+    def extract_subfeature_names(self, instances):
+        values_set = set()
+        for part in instances:
+            values_set.update(self._extractor_fn(part))
+        return [self._get_categorical_feature_name(self.name, value)
+                for value in values_set]
+
+    def extract(self, part):
+        feature_values = self._extractor_fn(part)
+        feature_names = [self._get_categorical_feature_name(self.name, value)
+                         for value in feature_values]
+        return {feature_name: 1.0 for feature_name in feature_names}
+
+
+class VectorValuedFeatureExtractor(FeatureExtractor):
+    '''
+    Class for extracting vector-valued features, where each vector is a fixed
+    size and we want to record a feature for every position in the vector.
+    '''
+    def __init__(self, name, extractor_fn):
+        super(VectorValuedFeatureExtractor, self).__init__(
+            name, extractor_fn, self.FeatureTypes.Numerical)
+
+    def extract_subfeature_names(self, instances):
+        # NOTE: Assumes at least one instance.
+        vector_size = len(self._extractor_fn(instances[0]))
+        return ['%s[%d]' % (self.name, i) for i in range(vector_size)]
+
+    def extract(self, part):
+        feature_values = {}
+        for i, subfeature_value in enumerate(self._extractor_fn(part)):
+            subfeature_name = '%s[%d]' % (self.name, i)
+            feature_values[subfeature_name] = subfeature_value
+        return feature_values
+
+
 class Featurizer(object):
     '''
     Encapsulates and manages a set of FeatureExtractors, stores the feature name
@@ -414,79 +486,3 @@ class DictOnlyFeaturizer(Featurizer):
             raise FeaturizationError("Cannot featurize to matrix with %s" %
                                      self.__class__.__name__)
         return Featurizer.featurize(self, instances, False)
-
-
-class KnownValuesFeatureExtractor(FeatureExtractor):
-    '''
-    This class makes model training more efficient by pre-registering known
-    feature values, rather than deriving them from the corpus. The list of
-    feature values may include entries that do not in fact appear in the data.
-
-    Using this class implies a categorical feature type.
-    '''
-    def __init__(self, name, extractor_fn, feature_values):
-        super(KnownValuesFeatureExtractor, self).__init__(
-            name, extractor_fn, self.FeatureTypes.Categorical)
-        self.feature_values = feature_values
-
-    def extract_subfeature_names(self, instances):
-        ''' Ignore `instances` and just use known values. '''
-        return [self._get_categorical_feature_name(self.name, value)
-                for value in self.feature_values]
-
-
-class SetValuedFeatureExtractor(FeatureExtractor):
-    '''
-    Class for extracting features where the same feature name can legally take
-    on multiple discrete values simultaneously -- i.e., the feature is
-    set-valued -- but where we want to represent that set as a collection of
-    individual indicator features, rather than a single indicator for each
-    possible set value.
-    '''
-
-    def __init__(self, name, extractor_fn):
-        '''
-        Unlike a traditional feature extractor, extractor_fn for a
-        SetValuedFeatureExtractor should return a list (or tuple) of values.
-        '''
-        super(SetValuedFeatureExtractor, self).__init__(
-            name, extractor_fn, self.FeatureTypes.Categorical)
-
-    def extract_subfeature_names(self, instances):
-        values_set = set()
-        for part in instances:
-            values_set.update(self._extractor_fn(part))
-        return [self._get_categorical_feature_name(self.name, value)
-                for value in values_set]
-
-    def extract(self, part):
-        '''
-        Returns a dictionary of subfeature name -> subfeature value. More
-        complex feature extractor classes should override this function.
-        '''
-        feature_values = self._extractor_fn(part)
-        feature_names = [self._get_categorical_feature_name(self.name, value)
-                         for value in feature_values]
-        return {feature_name: 1.0 for feature_name in feature_names}
-
-
-class VectorValuedFeatureExtractor(FeatureExtractor):
-    '''
-    Class for extracting vector-valued features, where each vector is a fixed
-    size and we want to record a feature for every position in the vector.
-    '''
-    def __init__(self, name, extractor_fn):
-        super(VectorValuedFeatureExtractor, self).__init__(
-            name, extractor_fn, self.FeatureTypes.Numerical)
-
-    def extract_subfeature_names(self, instances):
-        # NOTE: Assumes at least one instance.
-        vector_size = len(self._extractor_fn(instances[0]))
-        return ['%s[%d]' % (self.name, i) for i in range(vector_size)]
-
-    def extract(self, part):
-        feature_values = {}
-        for i, subfeature_value in enumerate(self._extractor_fn(part)):
-            subfeature_name = '%s[%d]' % (self.name, i)
-            feature_values[subfeature_name] = subfeature_value
-        return feature_values
