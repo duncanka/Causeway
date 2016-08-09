@@ -124,7 +124,7 @@ class CausalClassifierModel(ClassifierModel):
         return tense
 
     @staticmethod
-    def extract_daughter_deps(part):
+    def extract_cn_daughter_deps(part):
         sentence = part.sentence
         deps = sentence.get_children(part.connective_head)
         edge_labels = [label for label, _ in deps]
@@ -259,7 +259,7 @@ CausalClassifierModel.all_feature_extractors = [
                         [CausalClassifierModel.extract_tense(head)
                          for head in part.cause_head, part.effect_head])),
     FeatureExtractor('cn_daughter_deps',
-                     CausalClassifierModel.extract_daughter_deps),
+                     CausalClassifierModel.extract_cn_daughter_deps),
     FeatureExtractor('cn_incoming_dep',
                      CausalClassifierModel.extract_incoming_dep),
     FeatureExtractor('verb_children_deps',

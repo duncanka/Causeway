@@ -1,9 +1,10 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
                     DuplicateFlagError, DEFINE_float)
 from itertools import chain, product
 import logging
 from nltk.corpus import wordnet
+from nltk.util import skipgrams
 import numpy as np
 from scipy.spatial import distance
 import sklearn
@@ -18,7 +19,8 @@ from nlp.senna import SennaEmbeddings
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
-    VectorValuedFeatureExtractor, FeaturizationError, NestedFeatureExtractor)
+    VectorValuedFeatureExtractor, FeaturizationError, NestedFeatureExtractor,
+    MultiNumericalFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
@@ -140,12 +142,17 @@ class CausalClassifierModel(object):
         return tense
 
     @staticmethod
-    def extract_daughter_deps(part):
+    def extract_daughter_deps(part, head):
         sentence = part.sentence
-        deps = sentence.get_children(part.connective_head)
+        deps = sentence.get_children(head)
         edge_labels = [label for label, _ in deps]
         edge_labels.sort()
         return tuple(edge_labels)
+
+    @staticmethod
+    def extract_cn_daughter_deps(part):
+        return CausalClassifierModel.extract_daughter_deps(part,
+                                                           part.connective_head)
 
     @staticmethod
     def extract_incoming_dep(part):
@@ -349,6 +356,11 @@ class CausalClassifierModel(object):
                 return i
         return -1
 
+    @staticmethod
+    def get_pos_skipgrams(arg):
+        pos_skipgrams = skipgrams([t.pos for t in arg], 2, 1)
+        return Counter(' '.join(skipgram) for skipgram in pos_skipgrams)
+
     all_feature_extractors = []
 
 
@@ -409,10 +421,18 @@ CausalClassifierModel.general_feature_extractors = [
     FeatureExtractor('effect_tense',
                      lambda part: CausalClassifierModel.extract_tense(
                         part.effect_head)),
-    SetValuedFeatureExtractor('cn_daughter_deps',
-                              CausalClassifierModel.extract_daughter_deps),
     FeatureExtractor('cn_incoming_dep',
                      CausalClassifierModel.extract_incoming_dep),
+    SetValuedFeatureExtractor('cn_daughter_deps',
+                              CausalClassifierModel.extract_cn_daughter_deps),
+    SetValuedFeatureExtractor(
+        'cause_daughter_deps',
+        lambda part: CausalClassifierModel.extract_daughter_deps(
+                         part, part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_daughter_deps',
+        lambda part: CausalClassifierModel.extract_daughter_deps(
+                         part, part.effect_head)),
     FeatureExtractor('verb_children_deps',
                      CausalClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
@@ -547,7 +567,13 @@ CausalClassifierModel.general_feature_extractors = [
         [FeatureExtractor(tag_name,
                           lambda part: CausalClassifierModel.get_ner_distance(
                                            part.effect, tag_type))
-         for tag_type, tag_name in enumerate(StanfordNERStage.NER_TYPES)])
+         for tag_type, tag_name in enumerate(StanfordNERStage.NER_TYPES)]),
+    MultiNumericalFeatureExtractor(
+        'cause_pos_skipgrams',
+        lambda part: CausalClassifierModel.get_pos_skipgrams(part.cause)),
+    MultiNumericalFeatureExtractor(
+        'effect_pos_skipgrams',
+        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect)),
 ]
 
 CausalClassifierModel.all_feature_extractors = (
