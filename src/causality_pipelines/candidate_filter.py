@@ -18,7 +18,7 @@ from nlp.senna import SennaEmbeddings
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
-    VectorValuedFeatureExtractor, FeaturizationError)
+    VectorValuedFeatureExtractor, FeaturizationError, NestedFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
@@ -342,6 +342,13 @@ class CausalClassifierModel(object):
                      for edge_label, token in child_edges_and_tokens
                      if token.lemma in CausalClassifierModel.ALL_CLOSED_CLASS)
 
+    @staticmethod
+    def get_ner_distance(arg, ner_tag_type):
+        for i, token in enumerate(arg):
+            if token.ner_tag == ner_tag_type:
+                return i
+        return -1
+
     all_feature_extractors = []
 
 
@@ -529,6 +536,18 @@ CausalClassifierModel.general_feature_extractors = [
     FeatureExtractor(
         'effect_prep_start',
         lambda part: CausalClassifierModel.initial_prep(part.effect)),
+    NestedFeatureExtractor(
+        'cause_ner_distances',
+        [FeatureExtractor(tag_name,
+                          lambda part: CausalClassifierModel.get_ner_distance(
+                                           part.cause, tag_type))
+         for tag_type, tag_name in enumerate(StanfordNERStage.NER_TYPES)]),
+    NestedFeatureExtractor(
+        'effect_ner_distances',
+        [FeatureExtractor(tag_name,
+                          lambda part: CausalClassifierModel.get_ner_distance(
+                                           part.effect, tag_type))
+         for tag_type, tag_name in enumerate(StanfordNERStage.NER_TYPES)])
 ]
 
 CausalClassifierModel.all_feature_extractors = (
