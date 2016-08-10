@@ -12,15 +12,19 @@ from util import print_indented
 def get_weights_for_classifier(classifier_pipeline):
     classifier = classifier_pipeline.steps[1][1]
     featurizer = classifier_pipeline.steps[0][1].featurizer
+    feature_name_dict = featurizer.feature_name_dictionary
+
     if FLAGS.filter_feature_select_k == -1:
-        support = classifier.get_support()
-        lr = classifier.classifier
+        # All features in feature dictionary are selected.
+        feature_indices = range(len(feature_name_dict))
+        lr = classifier
     else:
-        support = classifier.named_steps['feature_selection'].get_support()
+        feature_indices = classifier.named_steps[
+            'feature_selection'].get_support().nonzero()[0]
         lr = classifier.named_steps['classification'].classifier
-    weights = [(featurizer.feature_name_dictionary.ids_to_names[ftnum],
-                lr.coef_[0][i])
-               for i, ftnum in enumerate(support.nonzero()[0])
+
+    weights = [(feature_name_dict.ids_to_names[ftnum], lr.coef_[0][i])
+               for i, ftnum in enumerate(feature_indices)
                if lr.coef_[0][i] != 0.0]
     weights.sort(key=lambda tup: abs(tup[1])) # sort by weights' absolute values
     return OrderedDict(weights)
