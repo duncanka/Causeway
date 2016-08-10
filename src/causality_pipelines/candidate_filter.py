@@ -61,6 +61,9 @@ try:
     DEFINE_bool('filter_record_raw_accuracy', True,
                 'Whether to include raw classification accuracy in the'
                 ' evaluation scores for the causation filter')
+    DEFINE_bool('filter_scale_C', True,
+                'Whether to scale the regularization strength on the filter'
+                ' classifier')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -312,6 +315,9 @@ class CausalClassifierModel(object):
         else:
             return 'None'
 
+    # Adapted from
+    # http://mailman.uib.no/public/corpora/2011-November/014318.html.
+    # (Omitted: numbers, times, places, non-extrapositional pronouns.)
     ALL_CLOSED_CLASS = set(
         "be to there" # Copulas, infinitives, and extraposition
         " all both some many much more most too enough few little fewer less"
@@ -330,9 +336,6 @@ class CausalClassifierModel(object):
             " throughout"
             " unto up upon versus via vs. with within without" # Prepositions
         .split(" "))
-    # Adapted from
-    # http://mailman.uib.no/public/corpora/2011-November/014318.html.
-    # (Omitted: numbers, times, places, non-extrapositional pronouns.)
 
     @staticmethod
     def closed_class_children(arg_head):
@@ -694,6 +697,10 @@ class PatternBasedCausationFilter(StructuredModel):
                 classifier.fit(pcs, labels)
             else:
                 per_conn = sklearn.clone(self.base_per_conn_classifier)
+                if FLAGS.filter_scale_C:
+                    per_conn.named_steps['per_conn_classifier'].C = (
+                        np.count_nonzero(labels) / 5.0)
+                    # print "C =", np.count_nonzero(labels) / 5.0
                 mostfreq = sklearn.clone(self.base_mostfreq_classifier)
                 for new_classifier in per_conn, mostfreq:
                     try:
