@@ -162,7 +162,8 @@ class MultiNumericalFeatureExtractor(FeatureExtractor):
     '''
     Feature extractor for extracting a feature with multiple named numerical
     components. Expects extractor_fn to return the feature-name-to-numerical-
-    value dictionary.
+    value dictionary, though feature names will be updated with the extractor
+    name.
     '''
     def __init__(self, name, extractor_fn):
         FeatureExtractor.__init__(self, name, extractor_fn,
@@ -171,12 +172,17 @@ class MultiNumericalFeatureExtractor(FeatureExtractor):
     def extract_subfeature_names(self, instances):
         names_set = set()
         for part in instances:
-            names_set.update(self._extractor_fn(part).keys())
+            names_set.update([self._complete_feature_name(key)
+                              for key in self._extractor_fn(part).keys()])
         return names_set
 
     def extract(self, part):
         ''' Directly returns the dictionary of feature names/values. '''
-        return self._extractor_fn(part)
+        return {self._complete_feature_name(key): val
+                for key, val in self._extractor_fn(part).iteritems()}
+
+    def _complete_feature_name(self, feature_name):
+        return '='.join([self.name, feature_name])
 
 
 class Featurizer(object):
