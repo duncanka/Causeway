@@ -449,11 +449,13 @@ CausalClassifierModel.general_feature_extractors = [
 #         lambda part: CausalClassifierModel.extract_wn_hypernyms(
 #             part.effect_head)),
     FeatureExtractor('all_cause_closed_children',
-                     lambda part: CausalClassifierModel.closed_class_children(
-                                      part.cause_head)),
+                     lambda part: ' '.join(
+                         CausalClassifierModel.closed_class_children(
+                            part.cause_head))),
     FeatureExtractor('all_effect_closed_children',
-                     lambda part: CausalClassifierModel.closed_class_children(
-                                      part.effect_head)),
+                     lambda part: ' '.join(
+                         CausalClassifierModel.closed_class_children(
+                            part.effect_head))),
     SetValuedFeatureExtractor(
         'cause_closed_children',
         lambda part: CausalClassifierModel.closed_class_children(
@@ -504,12 +506,12 @@ CausalClassifierModel.general_feature_extractors = [
                                       [part.cause_head], [part.effect_head])),
     FeatureExtractor(
         'all_cause_closed_children_deps',
-        lambda part: CausalClassifierModel.closed_class_children_deps(
-                        part.cause_head)),
+        lambda part: ' '.join(CausalClassifierModel.closed_class_children_deps(
+                        part.cause_head))),
     FeatureExtractor(
         'all_effect_closed_children_deps',
-        lambda part: CausalClassifierModel.closed_class_children_deps(
-                        part.effect_head)),
+        lambda part: ' '.join(CausalClassifierModel.closed_class_children_deps(
+                        part.effect_head))),
     SetValuedFeatureExtractor(
         'cause_closed_children_deps',
         lambda part: CausalClassifierModel.closed_class_children_deps(
@@ -576,7 +578,7 @@ CausalClassifierModel.general_feature_extractors = [
         lambda part: CausalClassifierModel.get_pos_skipgrams(part.cause)),
     MultiNumericalFeatureExtractor(
         'effect_pos_skipgrams',
-        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect)),
+        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect))
 ]
 
 CausalClassifierModel.all_feature_extractors = (
