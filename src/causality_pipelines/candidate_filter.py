@@ -3,6 +3,7 @@ from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
                     DuplicateFlagError, DEFINE_float)
 from itertools import chain, product
 import logging
+import math
 from nltk.corpus import wordnet
 from nltk.util import skipgrams
 import numpy as np
@@ -19,7 +20,7 @@ from nlp.senna import SennaEmbeddings
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
-    VectorValuedFeatureExtractor, FeaturizationError, NestedFeatureExtractor,
+    VectorValuedFeatureExtractor, NestedFeatureExtractor,
     MultiNumericalFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
@@ -701,8 +702,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 per_conn = sklearn.clone(self.base_per_conn_classifier)
                 if FLAGS.filter_scale_C:
                     per_conn.named_steps['per_conn_classifier'].C = (
-                        np.count_nonzero(labels) / 5.0)
-                    # print "C =", np.count_nonzero(labels) / 5.0
+                        math.sqrt(len(pcs) / 5.0))
                 mostfreq = sklearn.clone(self.base_mostfreq_classifier)
                 for new_classifier in per_conn, mostfreq:
                     try:
