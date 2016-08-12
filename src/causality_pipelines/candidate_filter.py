@@ -730,7 +730,8 @@ class PatternBasedCausationFilter(StructuredModel):
             classifier = self.classifiers[stringify_connective(pc)]
             try:
                 true_class_index = classifier.le_.transform(True)
-                score = classifier.predict_proba([pc])[0, true_class_index]
+                pc_scores = [c.predict_proba([pc])[0, true_class_index] for c in
+                             [classifier] + classifier.estimators_]
             except AttributeError: # no label encoder: non-voting classifier
                 try:
                     true_class_index = np.where(
@@ -738,7 +739,8 @@ class PatternBasedCausationFilter(StructuredModel):
                     score = classifier.predict_proba([pc])[0, true_class_index]
                 except IndexError: # True not in list
                     score = 0.0
-            scores.append(score)
+                pc_scores = [score] + [0.0] * 3
+            scores.append(pc_scores)
         return scores
 
 class PatternBasedFilterDecoder(StructuredDecoder):
@@ -756,12 +758,12 @@ class PatternBasedFilterDecoder(StructuredDecoder):
 
         if self.save_scored:
             self.saved.extend([
-                (bool(p.possible_causation.true_causation_instance), prob)
-                for p, prob in zip(classifier_parts, scores)])
+                (bool(p.possible_causation.true_causation_instance), probs)
+                for p, probs in zip(classifier_parts, scores)])
 
         cutoff = FLAGS.filter_prob_cutoff
         tokens_to_parts = defaultdict(int)
-        labels = [score > cutoff for score in scores]
+        labels = [score[0] > cutoff for score in scores]
         self._labels_for_eval.extend(labels)
         self._gold_labels_for_eval.extend(
             [bool(p.possible_causation.true_causation_instance)
