@@ -30,7 +30,7 @@ try:
         'iaa_given_connective_ids', [], "Annotation IDs for connectives"
         " that were given as gold and should be treated separately for IAA.")
     DEFINE_float(
-        'iaa_min_partial_overlap', 0.5, "Minimum fraction of the larger of two"
+        'iaa_min_partial_overlap', 0.25, "Minimum fraction of the larger of two"
         " annotations that must be overlapping for the two annotations to be"
         " considered a partial match.")
     DEFINE_bool('iaa_log_confusion', False, "Log confusion matrices for IAA.")
