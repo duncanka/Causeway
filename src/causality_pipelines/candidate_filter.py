@@ -65,6 +65,8 @@ try:
     DEFINE_bool('filter_scale_C', True,
                 'Whether to scale the regularization strength on the filter'
                 ' classifier')
+    DEFINE_bool('filter_save_scored', False,
+                'Whether to save the classifier probabilities and true labels')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -590,7 +592,8 @@ CausalClassifierModel.all_feature_extractors = (
 class PatternBasedCausationFilter(StructuredModel):
     def __init__(self, classifier, labels_for_eval, gold_labels_for_eval):
         super(PatternBasedCausationFilter, self).__init__(
-            PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval))
+            PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval,
+                                      FLAGS.filter_save_scored))
 
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
@@ -739,13 +742,22 @@ class PatternBasedCausationFilter(StructuredModel):
         return scores
 
 class PatternBasedFilterDecoder(StructuredDecoder):
-    def __init__(self, labels_for_eval, gold_labels_for_eval):
+    def __init__(self, labels_for_eval, gold_labels_for_eval,
+                 save_scored=False):
+        super(PatternBasedFilterDecoder, self).__init__(save_scored)
         self._labels_for_eval = labels_for_eval
         self._gold_labels_for_eval = gold_labels_for_eval
+        if save_scored:
+            self.saved = []
 
     def decode(self, sentence, classifier_parts, scores):
         if not classifier_parts:
             return []
+
+        if self.save_scored:
+            self.saved.extend([
+                (bool(p.possible_causation.true_causation_instance), prob)
+                for p, prob in zip(classifier_parts, scores)])
 
         cutoff = FLAGS.filter_prob_cutoff
         tokens_to_parts = defaultdict(int)

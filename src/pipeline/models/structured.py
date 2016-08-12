@@ -143,6 +143,9 @@ class FeaturizedStructuredModel(StructuredModel, MultiplyFeaturizedModel):
 
 
 class StructuredDecoder(object):
+    def __init__(self, save_scored=False):
+        self.save_scored = save_scored
+
     def decode(self, instance, instance_parts, scores):
         raise NotImplementedError
 
