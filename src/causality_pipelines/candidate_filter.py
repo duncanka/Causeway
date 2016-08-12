@@ -739,7 +739,7 @@ class PatternBasedCausationFilter(StructuredModel):
                     score = classifier.predict_proba([pc])[0, true_class_index]
                 except IndexError: # True not in list
                     score = 0.0
-                pc_scores = [score] + [0.0] * 3
+                pc_scores = [score] + [np.nan] * 3
             scores.append(pc_scores)
         return scores
 
