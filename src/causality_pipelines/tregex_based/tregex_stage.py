@@ -613,7 +613,7 @@ class TRegexConnectiveModel(Model):
             subprocess.call(tregex_command, stdout=self.output_file,
                             stderr=self.dev_null)
 
-        _TREGEX_CACHE_DIR = '/tmp/tregex_cache'
+        _TREGEX_CACHE_DIR = home = path.expanduser("~/tregex_cache")
         def _create_output_file_if_not_exists(self, pattern, connective_labels,
                                               tree_file_path):
             pattern_dir_name = pattern.replace('/', '\\')
