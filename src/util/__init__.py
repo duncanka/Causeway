@@ -153,7 +153,7 @@ def print_indented(indent_level, *args, **kwargs):
 
         stringified = [str(arg) for arg in args]
         result_str = kwargs.get('sep', ' ').join(stringified)
-        for line in result_str.split('\n'):
+        for line in result_str.split(os.linesep):
             print(prefix, **prefix_kwargs)
             print(line, **kwargs)
 
