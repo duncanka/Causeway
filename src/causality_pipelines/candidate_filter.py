@@ -21,7 +21,7 @@ from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
     VectorValuedFeatureExtractor, NestedFeatureExtractor,
-    MultiNumericalFeatureExtractor)
+    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
@@ -67,6 +67,9 @@ try:
                 ' classifier')
     DEFINE_bool('filter_save_scored', False,
                 'Whether to save the classifier probabilities and true labels')
+    DEFINE_integer('filter_sg_lemma_threshold', 4,
+                   'Minimum # of arguments that a lemma skipgram must appear in'
+                   ' for it to be considered as a skipgram feature')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -367,6 +370,11 @@ class CausalClassifierModel(object):
         pos_skipgrams = skipgrams([t.pos for t in arg], 2, 1)
         return Counter(' '.join(skipgram) for skipgram in pos_skipgrams)
 
+    @staticmethod
+    def get_lemma_skipgrams(arg):
+        lemma_skipgrams = skipgrams([t.lemma for t in arg], 2, 1)
+        return Counter(' '.join(skipgram) for skipgram in lemma_skipgrams)
+
     all_feature_extractors = []
 
 
@@ -581,7 +589,18 @@ CausalClassifierModel.general_feature_extractors = [
         lambda part: CausalClassifierModel.get_pos_skipgrams(part.cause)),
     MultiNumericalFeatureExtractor(
         'effect_pos_skipgrams',
-        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect))
+        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect)),
+    ThresholdedFeatureExtractor(
+        MultiNumericalFeatureExtractor(
+            'cause_lemma_skipgrams',
+            lambda part: CausalClassifierModel.get_lemma_skipgrams(part.cause)),
+        FLAGS.filter_sg_lemma_threshold),
+    ThresholdedFeatureExtractor(
+        MultiNumericalFeatureExtractor(
+            'effect_lemma_skipgrams',
+            lambda part: CausalClassifierModel.get_lemma_skipgrams(
+                             part.effect)),
+        FLAGS.filter_sg_lemma_threshold),
 ]
 
 CausalClassifierModel.all_feature_extractors = (
