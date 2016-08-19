@@ -617,6 +617,8 @@ class PatternBasedCausationFilter(StructuredModel):
             PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval,
                                       FLAGS.filter_save_scored))
 
+        self.soft_voting = hasattr(classifier, 'predict_proba')
+
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
             general_classifier = sklearn.clone(classifier)
@@ -751,27 +753,34 @@ class PatternBasedCausationFilter(StructuredModel):
                 classifier = AutoWeightedVotingClassifier(
                     estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
                                 ('global_causality', self.general_classifier)],
-                    voting='soft')
+                    voting=self.soft_voting)
                 classifier.fit_weights(pcs, labels) # use train + dev for tuning
 
             self.classifiers[connective] = classifier
 
     def _score_parts(self, sentence, possible_causations):
-        scores = []
-        for pc in possible_causations:
-            classifier = self.classifiers[stringify_connective(pc)]
-            try:
-                true_class_index = classifier.le_.transform(True)
-                score = classifier.predict_proba([pc])[0, true_class_index]
-            except AttributeError: # no label encoder: non-voting classifier
+        if self.soft_voting:
+            scores = []
+            for pc in possible_causations:
+                classifier = self.classifiers[stringify_connective(pc)]
                 try:
-                    true_class_index = np.where(
-                        classifier.classes_ == True)[0][0]
+                    true_class_index = classifier.le_.transform(True)
                     score = classifier.predict_proba([pc])[0, true_class_index]
-                except IndexError: # True not in list
-                    score = 0.0
-            scores.append(score)
-        return scores
+                except AttributeError: # no label encoder: non-voting classifier
+                    try:
+                        true_class_index = np.where(
+                            classifier.classes_ == True)[0][0]
+                        predicted_probas = classifier.predict_proba([pc])
+                        score = predicted_probas[0, true_class_index]
+                    except IndexError: # True not in list
+                        score = 0.0
+                scores.append(score)
+            return scores
+        else:
+            # Predictions will be 1 or 0, which we can treat as just extreme
+            # scores.
+            return [self.classifiers[stringify_connective(pc)].predict([pc])[0]
+                    for pc in possible_causations]
 
 class PatternBasedFilterDecoder(StructuredDecoder):
     def __init__(self, labels_for_eval, gold_labels_for_eval,
