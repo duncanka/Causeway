@@ -26,8 +26,10 @@ from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
 from util.diff import SequenceDiff
-from util.scipy import AutoWeightedVotingClassifier
+from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
+                        prob_sum_score)
 from util.metrics import ClassificationMetrics, diff_binary_vectors
+from nltk.metrics.scores import accuracy
 
 
 try:
@@ -54,9 +56,9 @@ try:
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
     DEFINE_integer('filter_feature_select_k', -1,
-                   "Specifies how many features to keep in feature selection"
-                   " for per-connective causality filters. -1 means no feature"
-                   " selection.")
+                   'Specifies how many features to keep in feature selection'
+                   ' for per-connective causality filters. -1 means no feature'
+                   ' selection.')
     DEFINE_float('filter_prob_cutoff', 0.45,
                  'Probability threshold for instances to mark as causal')
     DEFINE_bool('filter_record_raw_accuracy', True,
@@ -73,6 +75,10 @@ try:
     DEFINE_float('filter_tuning_pct', 0.5,
                  'Fraction of training data to devote to tuning classifier'
                  ' weights instead of training per-connective classifiers')
+    DEFINE_float('filter_wt_score_slope', None,
+                 'Slope parameter for the logistic function used in weighting'
+                 ' classifiers. If None, no logistic function is used; the'
+                 ' probabilities of the correct answers are summed directly.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -714,6 +720,15 @@ class PatternBasedCausationFilter(StructuredModel):
             connective = stringify_connective(pc)
             pcs_by_connective[connective].append(pc)
 
+        if self.soft_voting:
+            if FLAGS.filter_wt_score_slope is None:
+                score_fn = prob_sum_score
+            else:
+                score_fn = make_logistic_score(1.0, FLAGS.filter_wt_score_slope,
+                                               0.5)
+        else:
+            score_fn = accuracy
+
         for connective, pcs in pcs_by_connective.iteritems():
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
             pcs = pcs_with_both_args # train only on instances with 2 args
@@ -749,12 +764,14 @@ class PatternBasedCausationFilter(StructuredModel):
                         feature_selector.k = 'all'
                         new_classifier.fit(per_conn_training,
                                            per_conn_training_labels)
-
+                   
                 classifier = AutoWeightedVotingClassifier(
                     estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
                                 ('global_causality', self.general_classifier)],
-                    voting=self.soft_voting)
+                    voting='soft' if self.soft_voting else 'hard',
+                    score_probas=self.soft_voting, score_fn=score_fn)
                 classifier.fit_weights(pcs, labels) # use train + dev for tuning
+                # print classifier.weights, connective
 
             self.classifiers[connective] = classifier
 
