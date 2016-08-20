@@ -560,13 +560,14 @@ class DummyLabelEncoder(LabelEncoder):
 
 
 class AutoWeightedVotingClassifier(VotingClassifier):
-    '''
+    """
     Voting classifier that fits the classifier weights automatically depending
     on how accurate each is on the training data.
-    '''
+    """
     def __init__(self, estimators, voting='hard', weights=None,
-                 score_fn=accuracy):
+                 score_fn=accuracy, score_probas=False):
         self.score_fn = score_fn
+        self.score_probas = score_probas
         super(AutoWeightedVotingClassifier, self).__init__(estimators,
                                                            voting, weights)
 
@@ -578,7 +579,10 @@ class AutoWeightedVotingClassifier(VotingClassifier):
     def fit_weights(self, X, y):
         weights = []
         for estimator in self.estimators_:
-            predicted = estimator.predict(X)
+            if self.score_probas and self.voting == 'soft':
+                predicted = estimator.predict_proba(X)
+            else:
+                predicted = estimator.predict(X)
             weights.append(self.score_fn(y, predicted))
         self.weights = normalize([weights], 'l1')[0]
         return self.weights
@@ -587,3 +591,22 @@ class AutoWeightedVotingClassifier(VotingClassifier):
         retval = super(AutoWeightedVotingClassifier, self).fit(X, y)
         self.fit_weights(X, y)
         return retval
+
+
+def make_logistic_score(L=1.0, k=1.0, x0=0.0):
+    """
+    Makes a score function with parameters L, k, and x0. The score function,
+    given a list of reference values and a corresponding array of test class
+    probabilities, returns the sum of the logistic function applied to all those
+    probabilities, where the logistic function is parameterized by L, k, and x0.
+    """
+    def logistic_score(reference, test_probs):
+        probs_of_correct_answer = test_probs[np.arange(len(reference)),
+                                             reference]
+        return np.sum(L / (1.0 + np.exp(-k * (probs_of_correct_answer - x0))))
+    return logistic_score
+
+
+def prob_sum_score(reference, test_probs):
+    probs_of_correct_answer = test_probs[np.arange(len(reference)), reference]
+    return np.sum(probs_of_correct_answer)
