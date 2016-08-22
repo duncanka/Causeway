@@ -385,12 +385,14 @@ class CausalClassifierModel(object):
         return Counter(' '.join(skipgram) for skipgram in lemma_skipgrams)
 
     all_feature_extractors = []
+    per_conn_and_shared_feature_extractors = []
+    general_and_shared_feature_extractors = []
 
 
 Numerical = FeatureExtractor.FeatureTypes.Numerical
 Binary = FeatureExtractor.FeatureTypes.Binary
 
-CausalClassifierModel.connective_feature_extractors = [
+CausalClassifierModel.per_connective_feature_extractors = [
     SetValuedFeatureExtractor(
         'connective', lambda part: part.connective_patterns),
     FeatureExtractor('cn_words',
@@ -401,6 +403,33 @@ CausalClassifierModel.connective_feature_extractors = [
                                             for t in part.connective])), ]
 
 CausalClassifierModel.general_feature_extractors = [
+    SetValuedFeatureExtractor(
+        'cause_hypernyms',
+        lambda part: CausalClassifierModel.extract_wn_hypernyms(
+            part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_hypernyms',
+        lambda part: CausalClassifierModel.extract_wn_hypernyms(
+            part.effect_head)),
+    VectorValuedFeatureExtractor(
+        'cause_vector',
+        lambda part: CausalClassifierModel.extract_vector(
+                        part.cause_head)),
+    VectorValuedFeatureExtractor(
+        'effect_vector',
+        lambda part: CausalClassifierModel.extract_vector(
+                        part.cause_head)),
+    FeatureExtractor(
+        'vector_dist',
+        lambda part: CausalClassifierModel.extract_vector_dist(
+                         part.cause_head, part.effect_head), Numerical),
+    FeatureExtractor(
+        'vector_cos_dist',
+        lambda part: CausalClassifierModel.extract_vector_cos_dist(
+                        part.cause_head, part.effect_head), Numerical),
+]
+
+CausalClassifierModel.shared_feature_extractors = [
     KnownValuesFeatureExtractor(
         'cause_pos',
         lambda part: CausalClassifierModel.get_pos_with_copulas(
@@ -460,14 +489,6 @@ CausalClassifierModel.general_feature_extractors = [
                      CausalClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
                      CausalClassifierModel.extract_parent_pos),
-#     SetValuedFeatureExtractor(
-#         'cause_hypernyms',
-#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
-#             part.cause_head)),
-#     SetValuedFeatureExtractor(
-#         'effect_hypernyms',
-#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
-#             part.effect_head)),
     FeatureExtractor('all_cause_closed_children',
                      lambda part: ' '.join(
                          CausalClassifierModel.closed_class_children(
@@ -488,22 +509,6 @@ CausalClassifierModel.general_feature_extractors = [
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
-#     VectorValuedFeatureExtractor(
-#         'cause_vector',
-#         lambda part: CausalClassifierModel.extract_vector(
-#                         part.cause_head)),
-#     VectorValuedFeatureExtractor(
-#         'effect_vector',
-#         lambda part: CausalClassifierModel.extract_vector(
-#                         part.cause_head)),
-#     FeatureExtractor(
-#         'vector_dist',
-#         lambda part: CausalClassifierModel.extract_vector_dist(
-#                          part.cause_head, part.effect_head), Numerical),
-#     FeatureExtractor(
-#         'vector_cos_dist',
-#         lambda part: CausalClassifierModel.extract_vector_cos_dist(
-#                         part.cause_head, part.effect_head), Numerical),
     # TODO: remove for general classifier? (Too construction-specific)
     KnownValuesFeatureExtractor(
         'cause_ner',
@@ -612,9 +617,18 @@ CausalClassifierModel.general_feature_extractors = [
         FLAGS.filter_sg_lemma_threshold),
 ]
 
+CausalClassifierModel.per_conn_and_shared_feature_extractors = (
+    CausalClassifierModel.per_connective_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
+
+CausalClassifierModel.general_and_shared_feature_extractors = (
+    CausalClassifierModel.general_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
+
 CausalClassifierModel.all_feature_extractors = (
-    CausalClassifierModel.connective_feature_extractors
-    + CausalClassifierModel.general_feature_extractors)
+    CausalClassifierModel.per_connective_feature_extractors
+    + CausalClassifierModel.general_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
 
 
 class PatternBasedCausationFilter(StructuredModel):
@@ -641,13 +655,14 @@ class PatternBasedCausationFilter(StructuredModel):
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.all_feature_extractors',
+            '.per_conn_and_shared_feature_extractors',
             FLAGS.filter_features, 'per_conn_classifier')
 
         # TODO: provide this filtering as a general-purpose function somewhere?
         general_extractor_names = [
             e.name for e in
-            CausalClassifierModel.general_feature_extractors]
+            CausalClassifierModel.general_feature_extractors
+                + CausalClassifierModel.shared_feature_extractors]
         conjoined_sep = FLAGS.conjoined_feature_sep
         general_selected_features = [
             feature for feature in FLAGS.filter_features
@@ -656,7 +671,7 @@ class PatternBasedCausationFilter(StructuredModel):
         self.general_classifier = make_featurizing_estimator(
             general_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.general_feature_extractors', general_selected_features,
+            '.general_and_shared_feature_extractors', general_selected_features,
             'global_causality_classifier')
 
         self.classifiers = {}
