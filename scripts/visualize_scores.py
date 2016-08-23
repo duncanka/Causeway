@@ -17,8 +17,8 @@ def plot_saved_scores(causality_pipeline):
         plt.text(-0.1, -offset - 0.045, classifier_name)
 
         pos = [p[i] for p in positives if not np.isnan(p[i])]
-        plt.plot(pos, np.zeros_like(pos) - offset, 'bx',)
+        plt.plot(pos, np.zeros_like(pos) - offset, 'b+',)
         neg = [n[i] for n in negatives if not np.isnan(n[i])]
-        plt.plot(neg, np.zeros_like(neg) - offset - 0.08, 'r+',)
+        plt.plot(neg, np.zeros_like(neg) - offset - 0.08, 'rx',)
 
     plt.show(block=False)
