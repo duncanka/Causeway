@@ -1,3 +1,4 @@
+from collections import Counter
 from copy import copy
 from cPickle import PicklingError
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
@@ -183,6 +184,32 @@ class MultiNumericalFeatureExtractor(FeatureExtractor):
 
     def _complete_feature_name(self, feature_name):
         return '='.join([self.name, feature_name])
+
+
+class ThresholdedFeatureExtractor(FeatureExtractor):
+    """
+    Takes another FeatureExtractor and turns it into one that only extracts
+    features that appear at least a given number of times in the training data.
+    This class doesn't respect the base extractor's extract_subfeature_names.
+    """
+    def __init__(self, base_extractor, threshold):
+        self.name = base_extractor.name
+        self.base_extractor = base_extractor
+        self.threshold = threshold
+
+    def extract_subfeature_names(self, instances):
+        names_to_counts = Counter()
+        for instance in instances:
+            for k in self.base_extractor.extract(instance).keys():
+                names_to_counts[k] += 1
+        return [k for k, v in names_to_counts.iteritems()
+                if v >= self.threshold]
+
+    def extract(self, part):
+        # Don't worry about extracting things that didn't appear often enough.
+        # Features not meeting the threshold will just be ignored as unknonwn
+        # features.
+        return self.base_extractor.extract(part)
 
 
 class Featurizer(object):

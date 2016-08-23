@@ -21,13 +21,15 @@ from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
     VectorValuedFeatureExtractor, NestedFeatureExtractor,
-    MultiNumericalFeatureExtractor)
+    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
 from util.diff import SequenceDiff
-from util.scipy import AutoWeightedVotingClassifier
+from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
+                        prob_sum_score)
 from util.metrics import ClassificationMetrics, diff_binary_vectors
+from nltk.metrics.scores import accuracy
 
 
 try:
@@ -54,19 +56,31 @@ try:
                 'Whether to train the candidate classifier model counting'
                 ' partial overlap as correct')
     DEFINE_integer('filter_feature_select_k', -1,
-                   "Specifies how many features to keep in feature selection"
-                   " for per-connective causality filters. -1 means no feature"
-                   " selection.")
+                   'Specifies how many features to keep in feature selection'
+                   ' for per-connective causality filters. -1 means no feature'
+                   ' selection.')
     DEFINE_float('filter_prob_cutoff', 0.45,
-                 'Probability threshold for instances to mark as causal')
+                 'Probability threshold for instances to mark as causal',
+                 0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
                 'Whether to include raw classification accuracy in the'
                 ' evaluation scores for the causation filter')
-    DEFINE_bool('filter_scale_C', True,
+    DEFINE_bool('filter_scale_C', False,
                 'Whether to scale the regularization strength on the filter'
                 ' classifier')
     DEFINE_bool('filter_save_scored', False,
                 'Whether to save the classifier probabilities and true labels')
+    DEFINE_integer('filter_sg_lemma_threshold', 4,
+                   'Minimum # of arguments that a lemma skipgram must appear in'
+                   ' for it to be considered as a skipgram feature')
+    DEFINE_float('filter_tuning_pct', 0.5,
+                 'Fraction of training data to devote to tuning classifier'
+                 ' weights instead of training per-connective classifiers',
+                 0.0, 1.0)
+    DEFINE_float('filter_wt_score_slope', None,
+                 'Slope parameter for the logistic function used in weighting'
+                 ' classifiers. If None, no logistic function is used; the'
+                 ' probabilities of the correct answers are summed directly.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -367,13 +381,20 @@ class CausalClassifierModel(object):
         pos_skipgrams = skipgrams([t.pos for t in arg], 2, 1)
         return Counter(' '.join(skipgram) for skipgram in pos_skipgrams)
 
+    @staticmethod
+    def get_lemma_skipgrams(arg):
+        lemma_skipgrams = skipgrams([t.lemma for t in arg], 2, 1)
+        return Counter(' '.join(skipgram) for skipgram in lemma_skipgrams)
+
     all_feature_extractors = []
+    per_conn_and_shared_feature_extractors = []
+    general_and_shared_feature_extractors = []
 
 
 Numerical = FeatureExtractor.FeatureTypes.Numerical
 Binary = FeatureExtractor.FeatureTypes.Binary
 
-CausalClassifierModel.connective_feature_extractors = [
+CausalClassifierModel.per_connective_feature_extractors = [
     SetValuedFeatureExtractor(
         'connective', lambda part: part.connective_patterns),
     FeatureExtractor('cn_words',
@@ -384,6 +405,33 @@ CausalClassifierModel.connective_feature_extractors = [
                                             for t in part.connective])), ]
 
 CausalClassifierModel.general_feature_extractors = [
+    SetValuedFeatureExtractor(
+        'cause_hypernyms',
+        lambda part: CausalClassifierModel.extract_wn_hypernyms(
+            part.cause_head)),
+    SetValuedFeatureExtractor(
+        'effect_hypernyms',
+        lambda part: CausalClassifierModel.extract_wn_hypernyms(
+            part.effect_head)),
+    VectorValuedFeatureExtractor(
+        'cause_vector',
+        lambda part: CausalClassifierModel.extract_vector(
+                        part.cause_head)),
+    VectorValuedFeatureExtractor(
+        'effect_vector',
+        lambda part: CausalClassifierModel.extract_vector(
+                        part.cause_head)),
+    FeatureExtractor(
+        'vector_dist',
+        lambda part: CausalClassifierModel.extract_vector_dist(
+                         part.cause_head, part.effect_head), Numerical),
+    FeatureExtractor(
+        'vector_cos_dist',
+        lambda part: CausalClassifierModel.extract_vector_cos_dist(
+                        part.cause_head, part.effect_head), Numerical),
+]
+
+CausalClassifierModel.shared_feature_extractors = [
     KnownValuesFeatureExtractor(
         'cause_pos',
         lambda part: CausalClassifierModel.get_pos_with_copulas(
@@ -443,14 +491,6 @@ CausalClassifierModel.general_feature_extractors = [
                      CausalClassifierModel.get_verb_children_deps),
     FeatureExtractor('cn_parent_pos',
                      CausalClassifierModel.extract_parent_pos),
-#     SetValuedFeatureExtractor(
-#         'cause_hypernyms',
-#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
-#             part.cause_head)),
-#     SetValuedFeatureExtractor(
-#         'effect_hypernyms',
-#         lambda part: CausalClassifierModel.extract_wn_hypernyms(
-#             part.effect_head)),
     FeatureExtractor('all_cause_closed_children',
                      lambda part: ' '.join(
                          CausalClassifierModel.closed_class_children(
@@ -471,22 +511,6 @@ CausalClassifierModel.general_feature_extractors = [
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
-#     VectorValuedFeatureExtractor(
-#         'cause_vector',
-#         lambda part: CausalClassifierModel.extract_vector(
-#                         part.cause_head)),
-#     VectorValuedFeatureExtractor(
-#         'effect_vector',
-#         lambda part: CausalClassifierModel.extract_vector(
-#                         part.cause_head)),
-#     FeatureExtractor(
-#         'vector_dist',
-#         lambda part: CausalClassifierModel.extract_vector_dist(
-#                          part.cause_head, part.effect_head), Numerical),
-#     FeatureExtractor(
-#         'vector_cos_dist',
-#         lambda part: CausalClassifierModel.extract_vector_cos_dist(
-#                         part.cause_head, part.effect_head), Numerical),
     # TODO: remove for general classifier? (Too construction-specific)
     KnownValuesFeatureExtractor(
         'cause_ner',
@@ -581,12 +605,32 @@ CausalClassifierModel.general_feature_extractors = [
         lambda part: CausalClassifierModel.get_pos_skipgrams(part.cause)),
     MultiNumericalFeatureExtractor(
         'effect_pos_skipgrams',
-        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect))
+        lambda part: CausalClassifierModel.get_pos_skipgrams(part.effect)),
+    ThresholdedFeatureExtractor(
+        MultiNumericalFeatureExtractor(
+            'cause_lemma_skipgrams',
+            lambda part: CausalClassifierModel.get_lemma_skipgrams(part.cause)),
+        FLAGS.filter_sg_lemma_threshold),
+    ThresholdedFeatureExtractor(
+        MultiNumericalFeatureExtractor(
+            'effect_lemma_skipgrams',
+            lambda part: CausalClassifierModel.get_lemma_skipgrams(
+                             part.effect)),
+        FLAGS.filter_sg_lemma_threshold),
 ]
 
+CausalClassifierModel.per_conn_and_shared_feature_extractors = (
+    CausalClassifierModel.per_connective_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
+
+CausalClassifierModel.general_and_shared_feature_extractors = (
+    CausalClassifierModel.general_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
+
 CausalClassifierModel.all_feature_extractors = (
-    CausalClassifierModel.connective_feature_extractors
-    + CausalClassifierModel.general_feature_extractors)
+    CausalClassifierModel.per_connective_feature_extractors
+    + CausalClassifierModel.general_feature_extractors
+    + CausalClassifierModel.shared_feature_extractors)
 
 
 class PatternBasedCausationFilter(StructuredModel):
@@ -594,6 +638,8 @@ class PatternBasedCausationFilter(StructuredModel):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval,
                                       FLAGS.filter_save_scored))
+
+        self.soft_voting = hasattr(classifier, 'predict_proba')
 
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
@@ -611,13 +657,14 @@ class PatternBasedCausationFilter(StructuredModel):
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.all_feature_extractors',
+            '.per_conn_and_shared_feature_extractors',
             FLAGS.filter_features, 'per_conn_classifier')
 
         # TODO: provide this filtering as a general-purpose function somewhere?
         general_extractor_names = [
             e.name for e in
-            CausalClassifierModel.general_feature_extractors]
+            CausalClassifierModel.general_feature_extractors
+                + CausalClassifierModel.shared_feature_extractors]
         conjoined_sep = FLAGS.conjoined_feature_sep
         general_selected_features = [
             feature for feature in FLAGS.filter_features
@@ -626,7 +673,7 @@ class PatternBasedCausationFilter(StructuredModel):
         self.general_classifier = make_featurizing_estimator(
             general_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.general_feature_extractors', general_selected_features,
+            '.general_and_shared_feature_extractors', general_selected_features,
             'global_causality_classifier')
 
         self.classifiers = {}
@@ -690,58 +737,87 @@ class PatternBasedCausationFilter(StructuredModel):
             connective = stringify_connective(pc)
             pcs_by_connective[connective].append(pc)
 
+        if self.soft_voting:
+            if FLAGS.filter_wt_score_slope is None:
+                score_fn = prob_sum_score
+            else:
+                score_fn = make_logistic_score(1.0, FLAGS.filter_wt_score_slope,
+                                               0.5)
+        else:
+            score_fn = accuracy
+
         for connective, pcs in pcs_by_connective.iteritems():
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
             pcs = pcs_with_both_args # train only on instances with 2 args
             labels = CausalClassifierModel._get_gold_labels(pcs)
 
+            # Don't use all the training data when training the per-connective
+            # classifier. Instead, reserve some of it for tuning classifier
+            # weights.
+            num_per_conn_training = int(math.ceil(len(pcs)
+                                                  * FLAGS.filter_tuning_pct))
+            per_conn_training = pcs[:num_per_conn_training]
+            per_conn_training_labels = labels[:num_per_conn_training]
+
             # Some classifiers don't deal well with all labels being the same.
             # If this is the case, it should just default to majority class
             # anyway, so just do that.
-            if len(set(labels)) < 2:
+            if len(set(per_conn_training_labels)) < 2:
                 classifier = make_mostfreq_featurizing_estimator()
                 classifier.fit(pcs, labels)
             else:
                 per_conn = sklearn.clone(self.base_per_conn_classifier)
                 if FLAGS.filter_scale_C:
                     per_conn.named_steps['per_conn_classifier'].C = (
-                        math.sqrt(len(pcs) / 5.0))
+                        math.sqrt(num_per_conn_training / 5.0))
                 mostfreq = sklearn.clone(self.base_mostfreq_classifier)
                 for new_classifier in per_conn, mostfreq:
                     try:
-                        new_classifier.fit(pcs, labels)
+                        new_classifier.fit(per_conn_training,
+                                           per_conn_training_labels)
                     except ValueError:
                         classification_pipeline = new_classifier.steps[1][1]
                         feature_selector = classification_pipeline.steps[0][1]
                         feature_selector.k = 'all'
-                        new_classifier.fit(pcs, labels)
-
+                        new_classifier.fit(per_conn_training,
+                                           per_conn_training_labels)
+                   
                 classifier = AutoWeightedVotingClassifier(
                     estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
                                 ('global_causality', self.general_classifier)],
-                    voting='soft')
-                classifier.fit_weights(pcs, labels)
+                    voting='soft' if self.soft_voting else 'hard',
+                    score_probas=self.soft_voting, score_fn=score_fn)
+                classifier.fit_weights(pcs, labels) # use train + dev for tuning
+                # print classifier.weights, connective
 
             self.classifiers[connective] = classifier
 
     def _score_parts(self, sentence, possible_causations):
-        scores = []
-        for pc in possible_causations:
-            classifier = self.classifiers[stringify_connective(pc)]
-            try:
-                true_class_index = classifier.le_.transform(True)
-                pc_scores = [c.predict_proba([pc])[0, true_class_index] for c in
-                             [classifier] + classifier.estimators_]
-            except AttributeError: # no label encoder: non-voting classifier
+        if self.soft_voting:
+            scores = []
+            for pc in possible_causations:
+                classifier = self.classifiers[stringify_connective(pc)]
                 try:
-                    true_class_index = np.where(
-                        classifier.classes_ == True)[0][0]
-                    score = classifier.predict_proba([pc])[0, true_class_index]
-                except IndexError: # True not in list
-                    score = 0.0
-                pc_scores = [score] + [np.nan] * 3
-            scores.append(pc_scores)
-        return scores
+                    true_class_index = classifier.le_.transform(True)
+                    pc_scores = [c.predict_proba([pc])[0, true_class_index] for c in
+                                 [classifier] + classifier.estimators_]
+                except AttributeError: # no label encoder: non-voting classifier
+                    try:
+                        true_class_index = np.where(
+                            classifier.classes_ == True)[0][0]
+                        predicted_probas = classifier.predict_proba([pc])
+                        score = predicted_probas[0, true_class_index]
+                    except IndexError: # True not in list
+                        score = 0.0
+                    pc_scores = [score] + [np.nan] * 3
+                scores.append(pc_scores)
+            return scores
+        else:
+            # Predictions will be 1 or 0, which we can treat as just extreme
+            # scores. (Don't worry about including all the scores, since there
+            # are none of interest.)
+            return [self.classifiers[stringify_connective(pc)].predict([pc])[0]
+                    for pc in possible_causations]
 
 class PatternBasedFilterDecoder(StructuredDecoder):
     def __init__(self, labels_for_eval, gold_labels_for_eval,
