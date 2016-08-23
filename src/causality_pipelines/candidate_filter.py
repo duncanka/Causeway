@@ -60,7 +60,8 @@ try:
                    ' for per-connective causality filters. -1 means no feature'
                    ' selection.')
     DEFINE_float('filter_prob_cutoff', 0.45,
-                 'Probability threshold for instances to mark as causal')
+                 'Probability threshold for instances to mark as causal',
+                 0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
                 'Whether to include raw classification accuracy in the'
                 ' evaluation scores for the causation filter')
@@ -74,7 +75,8 @@ try:
                    ' for it to be considered as a skipgram feature')
     DEFINE_float('filter_tuning_pct', 0.5,
                  'Fraction of training data to devote to tuning classifier'
-                 ' weights instead of training per-connective classifiers')
+                 ' weights instead of training per-connective classifiers',
+                 0.0, 1.0)
     DEFINE_float('filter_wt_score_slope', None,
                  'Slope parameter for the logistic function used in weighting'
                  ' classifiers. If None, no logistic function is used; the'
