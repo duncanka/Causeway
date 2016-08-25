@@ -4,7 +4,7 @@ import colorama
 import fcntl
 import hashlib
 import importlib
-from itertools import tee, izip, izip_longest
+from itertools import chain, combinations, izip, izip_longest, tee
 import numpy as np
 import os
 import struct
@@ -240,3 +240,10 @@ def hash_file(filename, chunk_size=1024 * 1024):
             h.update(chunk)
 
     return h.hexdigest()
+
+
+# From https://docs.python.org/2/library/itertools.html#recipes
+def powerset(iterable):
+    xs = list(iterable)
+    # note we return an iterator rather than a list
+    return chain.from_iterable(combinations(xs, n) for n in range(len(xs) + 1))
