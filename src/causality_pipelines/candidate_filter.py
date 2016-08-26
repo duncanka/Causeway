@@ -59,7 +59,7 @@ try:
                    'Specifies how many features to keep in feature selection'
                    ' for per-connective causality filters. -1 means no feature'
                    ' selection.')
-    DEFINE_float('filter_prob_cutoff', 0.45,
+    DEFINE_float('filter_prob_cutoff', 0.5,
                  'Probability threshold for instances to mark as causal',
                  0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
@@ -727,6 +727,30 @@ class PatternBasedCausationFilter(StructuredModel):
         super(PatternBasedCausationFilter, self).reset()
         self.classifiers = {}
 
+    def _make_classifier_for_connective(self, pcs, labels, per_conn_training,
+                                        per_conn_training_labels, score_fn):
+        per_conn = sklearn.clone(self.base_per_conn_classifier)
+        if FLAGS.filter_scale_C:
+            per_conn.named_steps['per_conn_classifier'].C = math.sqrt(
+                len(per_conn_training) / 5.0)
+        mostfreq = sklearn.clone(self.base_mostfreq_classifier)
+        for new_classifier in per_conn, mostfreq:
+            try:
+                new_classifier.fit(per_conn_training, per_conn_training_labels)
+            except ValueError:
+                classification_pipeline = new_classifier.steps[1][1]
+                feature_selector = classification_pipeline.steps[0][1]
+                feature_selector.k = 'all'
+                new_classifier.fit(per_conn_training, per_conn_training_labels)
+
+        classifier = AutoWeightedVotingClassifier(
+            estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
+                ('global_causality', self.general_classifier)],
+            voting='soft' if self.soft_voting else 'hard',
+            score_probas=self.soft_voting, score_fn=score_fn)
+        classifier.fit_weights(pcs, labels) # use train + dev for tuning
+        return classifier
+
     def _train_structured(self, sentences, parts_by_sentence):
         all_pcs = list(chain.from_iterable(parts_by_sentence))
         all_labels = CausalClassifierModel._get_gold_labels(all_pcs)
@@ -766,29 +790,9 @@ class PatternBasedCausationFilter(StructuredModel):
                 classifier = make_mostfreq_featurizing_estimator()
                 classifier.fit(pcs, labels)
             else:
-                per_conn = sklearn.clone(self.base_per_conn_classifier)
-                if FLAGS.filter_scale_C:
-                    per_conn.named_steps['per_conn_classifier'].C = (
-                        math.sqrt(num_per_conn_training / 5.0))
-                mostfreq = sklearn.clone(self.base_mostfreq_classifier)
-                for new_classifier in per_conn, mostfreq:
-                    try:
-                        new_classifier.fit(per_conn_training,
-                                           per_conn_training_labels)
-                    except ValueError:
-                        classification_pipeline = new_classifier.steps[1][1]
-                        feature_selector = classification_pipeline.steps[0][1]
-                        feature_selector.k = 'all'
-                        new_classifier.fit(per_conn_training,
-                                           per_conn_training_labels)
-                   
-                classifier = AutoWeightedVotingClassifier(
-                    estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
-                                ('global_causality', self.general_classifier)],
-                    voting='soft' if self.soft_voting else 'hard',
-                    score_probas=self.soft_voting, score_fn=score_fn)
-                classifier.fit_weights(pcs, labels) # use train + dev for tuning
-                # print classifier.weights, connective
+                classifier = self._make_classifier_for_connective(
+                    pcs, labels, per_conn_training, per_conn_training_labels,
+                    score_fn)
 
             self.classifiers[connective] = classifier
 
