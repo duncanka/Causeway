@@ -28,6 +28,9 @@ try:
     DEFINE_bool('reader_directory_recurse', False,
                 'Whether DirectoryReaders should recurse into their'
                 ' subdirectories')
+    DEFINE_bool('reader_ignore_overlapping', True,
+                'Whether, when reading causality data, instances with an'
+                ' accompanying overlapping relation should be ignored')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -431,8 +434,8 @@ class CausalityStandoffReader(DocumentReader):
         try:
             _line_id, coref_str = line_parts
             coref_args = coref_str.split()[1:]
-            from_arg_id, to_arg_id = [arg_str.split(':')[1]
-                                      for arg_str in coref_args]
+            _from_arg_id, to_arg_id = [arg_str.split(':')[1]
+                                       for arg_str in coref_args]
         except ValueError:
             logging.warn('Skipping incorrectly formatted coref line.'
                          ' (Line: %s)' % line.rstrip())
@@ -496,6 +499,9 @@ class CausalityStandoffReader(DocumentReader):
                 annotation_type not in CausationInstance.CausationTypes
                 and not is_noncausal,
                 "Skipping text annotation with invalid causation type")
+            if is_noncausal and FLAGS.reader_ignore_overlapping:
+                return
+
             try:
                 connective = self._find_tokens_for_annotation(
                     containing_sentence, annotation)
@@ -508,6 +514,7 @@ class CausalityStandoffReader(DocumentReader):
                 ids_to_instances[line_id] = instance
             except ValueError as e: # No tokens found for annotation
                 raise UserWarning(e.message)
+
         elif annotation_type == 'Argument':
             unused_arg_ids.add(line_id)
 
@@ -590,7 +597,11 @@ class CausalityStandoffReader(DocumentReader):
                 lines_to_reprocess.append(line)
                 ids_to_reprocess.add(line_id)
                 ids_needed_to_reprocess.add(id_to_modify)
-        else:
+        else: # It's an overlapping relation attribute.
+            if FLAGS.reader_ignore_overlapping:
+                logging.info("Ignoring attribute: %s", line)
+                return
+
             self.__raise_warning_if(
                 len(attr_parts) != 2,
                 "Skipping attribute line lacking 2 space-separated components")
