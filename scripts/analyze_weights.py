@@ -41,7 +41,7 @@ def get_per_connective_weights(pipeline):
             weight_dicts[connective] = None
         else:
             weight_dicts[connective] = get_weights_for_classifier(
-                dict(classifier.estimators)['per_conn'])
+                dict(classifier.estimators)['perconn'])
 
     return weight_dicts
 

@@ -60,7 +60,7 @@ try:
                    'Specifies how many features to keep in feature selection'
                    ' for per-connective causality filters. -1 means no feature'
                    ' selection.')
-    DEFINE_float('filter_prob_cutoff', 0.45,
+    DEFINE_float('filter_prob_cutoff', 0.4,
                  'Probability threshold for instances to mark as causal',
                  0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
@@ -82,15 +82,15 @@ try:
                  'Slope parameter for the logistic function used in weighting'
                  ' classifiers. If None, no logistic function is used; the'
                  ' probabilities of the correct answers are summed directly.')
-    DEFINE_enum('filter_classifiers', 'global,mostfreq,per_conn',
+    DEFINE_enum('filter_classifiers', 'global,mostfreq,perconn',
                  [','.join(sorted(x)) # alphabetize
-                  for x in powerset(['global', 'per_conn', 'mostfreq']) if x],
+                  for x in powerset(['global', 'perconn', 'mostfreq']) if x],
                 'Which classifiers should be trained and allowed to vote for'
                 ' each connective type')
-    DEFINE_bool('filter_auto_weight', True,
+    DEFINE_bool('filter_auto_weight', False,
                 'Whether to automatically weight classifiers for each'
                 ' connective')
-    DEFINE_bool('filter_global_for_all_same', False,
+    DEFINE_bool('filter_global_for_all_same', True,
                 'Whether to include the global classifier for connectives where'
                 ' all training instances have the same label. If False, only'
                 ' the mostfreq classifier is used.')
@@ -671,7 +671,7 @@ class PatternBasedCausationFilter(StructuredModel):
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
             '.per_conn_and_shared_feature_extractors',
-            FLAGS.filter_features, 'per_conn_classifier')
+            FLAGS.filter_features, 'perconn_classifier')
 
         # TODO: provide this filtering as a general-purpose function somewhere?
         general_extractor_names = [
@@ -781,11 +781,11 @@ class PatternBasedCausationFilter(StructuredModel):
         if use_per_conn:
             per_conn = sklearn.clone(self.base_per_conn_classifier)
             if FLAGS.filter_scale_C:
-                per_conn.named_steps['per_conn_classifier'].C = math.sqrt(
+                per_conn.named_steps['perconn_classifier'].C = math.sqrt(
                     num_per_conn_training / 5.0)
             self._fit_allowing_feature_selection(per_conn, per_conn_training,
                                                  per_conn_training_labels)
-            estimators.append(('per_conn', per_conn))
+            estimators.append(('perconn', per_conn))
 
         if use_mostfreq:
             mostfreq = sklearn.clone(self.base_mostfreq_classifier)
@@ -798,7 +798,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 mf_classifier.classes_ = np.array(
                     [False, True], dtype=mf_classifier.classes_.dtype)
                 mf_classifier.class_prior_ = np.array(
-                    [not class_label, class_label],
+                    [class_label == False, class_label == True],
                     dtype=mf_classifier.class_prior_.dtype)
             estimators.append(('mostfreq', mostfreq))
 
@@ -808,7 +808,7 @@ class PatternBasedCausationFilter(StructuredModel):
         classifier_types = FLAGS.filter_classifiers.split(',')
         auto_weight = FLAGS.filter_auto_weight
         use_global, use_per_conn, use_mostfreq = [
-            t in classifier_types for t in ['global', 'per_conn', 'mostfreq']]
+            t in classifier_types for t in ['global', 'perconn', 'mostfreq']]
 
         all_pcs = list(chain.from_iterable(parts_by_sentence))
         if use_global:
