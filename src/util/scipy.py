@@ -565,9 +565,10 @@ class AutoWeightedVotingClassifier(VotingClassifier):
     on how accurate each is on the training data.
     """
     def __init__(self, estimators, voting='hard', weights=None,
-                 score_fn=accuracy, score_probas=False):
+                 score_fn=accuracy, score_probas=False, autofit_weights=True):
         self.score_fn = score_fn
         self.score_probas = score_probas
+        self.autofit_weights = autofit_weights
         super(AutoWeightedVotingClassifier, self).__init__(estimators,
                                                            voting, weights)
 
@@ -589,7 +590,8 @@ class AutoWeightedVotingClassifier(VotingClassifier):
 
     def fit(self, X, y):
         retval = super(AutoWeightedVotingClassifier, self).fit(X, y)
-        self.fit_weights(X, y)
+        if self.autofit_weights:
+            self.fit_weights(X, y)
         return retval
 
 
