@@ -1,13 +1,24 @@
 #!/bin/bash
 
-python main.py --train_paths=/var/www/brat/data/finished --eval_with_cv --seed=3357830226 --pipeline_type=tregex --cv_folds=20 > ../outputs/tregex_20f.txt
-python main.py --train_paths=/var/www/brat/data/finished --eval_with_cv --seed=3357830226 --pipeline_type=regex --cv_folds=20 > ../outputs/regex_20f.txt
-python main.py --train_paths=/var/www/brat/data/finished --eval_with_cv --seed=3357830226 --pipeline_type=baseline+tregex --cv_folds=20 > ../outputs/tregex+baseline_20f.txt
-python main.py --train_paths=/var/www/brat/data/finished --eval_with_cv --seed=3357830226 --pipeline_type=baseline+regex --cv_folds=20 > ../outputs/regex+baseline_20f.txt
-python main.py --train_paths=/var/www/brat/data/finished --eval_with_cv --seed=3357830226 --pipeline_type=baseline --cv_folds=20 > ../outputs/baseline_20f.txt
+SEED=2961393773
+OUT_DIR=../outputs/final
+DATA_DIR=/var/www/brat/data/finished
+PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
 
-python main.py --train_paths=/var/www/brat/data/Jeremy/PTB --eval_with_cv --seed=3357830226 --pipeline_type=regex --cv_folds=20 > ../outputs/ptb_regex_20f.txt
-python main.py --train_paths=/var/www/brat/data/Jeremy/PTB --eval_with_cv --seed=3357830226 --pipeline_type=tregex --cv_folds=20 > ../outputs/ptb_tregex_20f.txt
+python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=baseline                                                 > $OUT_DIR/baseline_20f.txt &
 
-python main.py --train_paths=/var/www/brat/data/Jeremy/PTB --eval_with_cv --seed=3357830226 --reader_gold_parses --pipeline_type=regex --cv_folds=20 > ../outputs/ptb_regex_20f_gold.txt
-python main.py --train_paths=/var/www/brat/data/Jeremy/PTB --eval_with_cv --seed=3357830226 --reader_gold_parses --pipeline_type=tregex --cv_folds=20 > ../outputs/ptb_tregex_20f_gold.txt
+for PIPELINE_TYPE in regex tregex; do
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE                                       > $OUT_DIR/${PIPELINE_TYPE}_20f.txt &
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=mostfreq         > $OUT_DIR/${PIPELINE_TYPE}_mostfreq_20f.txt &
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=global           > $OUT_DIR/${PIPELINE_TYPE}_global_20f.txt &
+    wait
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=perconn          > $OUT_DIR/${PIPELINE_TYPE}_perconn_20f.txt &
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=global,mostfreq  > $OUT_DIR/${PIPELINE_TYPE}_no_perconn_20f.txt &
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=global,perconn   > $OUT_DIR/${PIPELINE_TYPE}_no_mostfreq_20f.txt &
+    wait
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --filter_classifiers=mostfreq,perconn > $OUT_DIR/${PIPELINE_TYPE}_no_global_20f.txt &
+    python main.py --train_paths=$DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=${PIPELINE_TYPE}+baseline                            > $OUT_DIR/${PIPELINE_TYPE}+baseline_20f.txt &
+    python main.py --train_paths=$PTB_DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE                                   > $OUT_DIR/ptb_${PIPELINE_TYPE}_20f.txt &
+    python main.py --train_paths=$PTB_DATA_DIR --eval_with_cv --seed=$SEED --cv_folds=20 --pipeline_type=$PIPELINE_TYPE --reader_gold_parses              > $OUT_DIR/ptb_${PIPELINE_TYPE}_20f_gold.txt &
+    wait
+done
