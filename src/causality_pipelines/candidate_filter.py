@@ -60,7 +60,7 @@ try:
                    'Specifies how many features to keep in feature selection'
                    ' for per-connective causality filters. -1 means no feature'
                    ' selection.')
-    DEFINE_float('filter_prob_cutoff', 0.4,
+    DEFINE_float('filter_prob_cutoff', 0.45,
                  'Probability threshold for instances to mark as causal',
                  0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
