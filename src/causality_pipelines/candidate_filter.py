@@ -772,7 +772,7 @@ class PatternBasedCausationFilter(StructuredModel):
         unique_labels = set(per_conn_training_labels)
         all_same_class = len(unique_labels) < 2
         if all_same_class:
-            use_global = FLAGS.filter_global_for_all_same
+            use_global = use_global and FLAGS.filter_global_for_all_same
             use_per_conn = False
             use_mostfreq = True
 
