@@ -31,7 +31,7 @@ def get_weights_for_classifier(classifier_pipeline):
 
 def get_general_classifier_weights(pipeline):
     stage = pipeline.stages[3]
-    return get_weights_for_classifier(stage.model.general_classifier)
+    return get_weights_for_classifier(stage.model.global_classifier)
 
 def get_per_connective_weights(pipeline):
     stage = pipeline.stages[3]

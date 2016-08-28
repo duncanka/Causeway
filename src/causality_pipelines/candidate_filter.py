@@ -1,6 +1,6 @@
 from collections import Counter, defaultdict
 from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
-                    DuplicateFlagError, DEFINE_float)
+                    DuplicateFlagError, DEFINE_float, DEFINE_enum)
 from itertools import chain, product
 import logging
 import math
@@ -25,6 +25,7 @@ from pipeline.featurization import (
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
+from util import powerset
 from util.diff import SequenceDiff
 from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
                         prob_sum_score)
@@ -59,7 +60,7 @@ try:
                    'Specifies how many features to keep in feature selection'
                    ' for per-connective causality filters. -1 means no feature'
                    ' selection.')
-    DEFINE_float('filter_prob_cutoff', 0.5,
+    DEFINE_float('filter_prob_cutoff', 0.45,
                  'Probability threshold for instances to mark as causal',
                  0.0, 1.0)
     DEFINE_bool('filter_record_raw_accuracy', True,
@@ -81,6 +82,11 @@ try:
                  'Slope parameter for the logistic function used in weighting'
                  ' classifiers. If None, no logistic function is used; the'
                  ' probabilities of the correct answers are summed directly.')
+    DEFINE_enum('filter_classifiers', 'global,mostfreq,per_conn',
+                 [','.join(sorted(x)) # alphabetize
+                  for x in powerset(['global', 'per_conn', 'mostfreq']) if x],
+                'Which classifiers should be trained and allowed to vote for'
+                ' each connective type')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -109,7 +115,7 @@ class PatternFilterPart(object):
 class CausalClassifierModel(object):
     @staticmethod
     def _get_gold_labels(classifier_parts):
-        return [part.connective_correct for part in classifier_parts]
+        return [int(part.connective_correct) for part in classifier_parts]
 
     #############################
     # Feature extraction methods
@@ -643,14 +649,14 @@ class PatternBasedCausationFilter(StructuredModel):
 
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
-            general_classifier = sklearn.clone(classifier)
+            global_classifier = sklearn.clone(classifier)
         else:
             k_best = SelectKBest(chi2, FLAGS.filter_feature_select_k)
             base_per_conn_classifier = SKLPipeline([
                 ('feature_selection', k_best),
                 ('classification', sklearn.clone(classifier))
             ])
-            general_classifier = sklearn.clone(base_per_conn_classifier)
+            global_classifier = sklearn.clone(base_per_conn_classifier)
 
         self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
             'most_freq_classifier')
@@ -670,8 +676,8 @@ class PatternBasedCausationFilter(StructuredModel):
             feature for feature in FLAGS.filter_features
             if feature == 'all' or all(name in general_extractor_names for name
                                        in feature.split(conjoined_sep))]
-        self.general_classifier = make_featurizing_estimator(
-            general_classifier,
+        self.global_classifier = make_featurizing_estimator(
+            global_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
             '.general_and_shared_feature_extractors', general_selected_features,
             'global_causality_classifier')
@@ -726,35 +732,75 @@ class PatternBasedCausationFilter(StructuredModel):
     def reset(self):
         super(PatternBasedCausationFilter, self).reset()
         self.classifiers = {}
+        
+    @staticmethod
+    def _fit_allowing_feature_selection(classifier, data, labels):
+        try:
+            classifier.fit(data, labels)
+        except ValueError: # feature selection failed b/c too few features
+            classification_pipeline = classifier.steps[1][1]
+            feature_selector = classification_pipeline.steps[0][1]
+            feature_selector.k = 'all'
+            classifier.fit(data, labels)
 
-    def _make_classifier_for_connective(self, pcs, labels, per_conn_training,
-                                        per_conn_training_labels, score_fn):
-        per_conn = sklearn.clone(self.base_per_conn_classifier)
-        if FLAGS.filter_scale_C:
-            per_conn.named_steps['per_conn_classifier'].C = math.sqrt(
-                len(per_conn_training) / 5.0)
-        mostfreq = sklearn.clone(self.base_mostfreq_classifier)
-        for new_classifier in per_conn, mostfreq:
-            try:
-                new_classifier.fit(per_conn_training, per_conn_training_labels)
-            except ValueError:
-                classification_pipeline = new_classifier.steps[1][1]
-                feature_selector = classification_pipeline.steps[0][1]
-                feature_selector.k = 'all'
-                new_classifier.fit(per_conn_training, per_conn_training_labels)
+    def _get_estimators_for_connective(self, pcs, labels, use_global,
+                                       use_per_conn, use_mostfreq):
+        # Don't use all the training data when training the per-connective
+        # classifier. Instead, reserve some of it for tuning classifier
+        # weights.
+        num_per_conn_training = int(math.ceil(len(pcs)
+                                              * FLAGS.filter_tuning_pct))
+        per_conn_training = pcs[:num_per_conn_training]
+        per_conn_training_labels = labels[:num_per_conn_training]
 
-        classifier = AutoWeightedVotingClassifier(
-            estimators=[('per_conn', per_conn), ('mostfreq', mostfreq),
-                ('global_causality', self.general_classifier)],
-            voting='soft' if self.soft_voting else 'hard',
-            score_probas=self.soft_voting, score_fn=score_fn)
-        classifier.fit_weights(pcs, labels) # use train + dev for tuning
-        return classifier
+        # Some estimators don't deal well with all labels being the same.
+        # If this is the case and we're doing per-connective classifiers, it
+        # should just default to majority-class anyway, so just do that.
+        unique_labels = set(per_conn_training_labels)
+        all_same_class = len(unique_labels) < 2
+        if all_same_class:
+            use_global = False
+            use_per_conn = False
+            use_mostfreq = True
+
+        estimators = [('global', self.global_classifier)] if use_global else []
+
+        if use_per_conn:
+            per_conn = sklearn.clone(self.base_per_conn_classifier)
+            if FLAGS.filter_scale_C:
+                per_conn.named_steps['per_conn_classifier'].C = math.sqrt(
+                    len(per_conn_training) / 5.0)
+            self._fit_allowing_feature_selection(per_conn, per_conn_training,
+                                                 per_conn_training_labels)
+            estimators.append(('per_conn', per_conn))
+
+        if use_mostfreq:
+            mostfreq = sklearn.clone(self.base_mostfreq_classifier)
+            mostfreq.fit(per_conn_training, per_conn_training_labels)
+            if all_same_class:
+                # Manually inform most-frequent classifier of other class.
+                mf_classifier = mostfreq.steps[-1][-1]
+                mf_classifier.n_classes_ = 2
+                class_label = mf_classifier.classes_[0]
+                mf_classifier.classes_ = np.array(
+                    [False, True], dtype=mf_classifier.classes_.dtype)
+                mf_classifier.class_prior_ = np.array(
+                    [not class_label, class_label],
+                    dtype=mf_classifier.class_prior_.dtype)
+            estimators.append(('mostfreq', mostfreq))
+
+        return estimators
 
     def _train_structured(self, sentences, parts_by_sentence):
+        classifier_types = FLAGS.filter_classifiers.split(',')
+        use_global, use_per_conn, use_mostfreq = [
+            t in classifier_types for t in ['global', 'per_conn', 'mostfreq']]
+
         all_pcs = list(chain.from_iterable(parts_by_sentence))
-        all_labels = CausalClassifierModel._get_gold_labels(all_pcs)
-        self.general_classifier.fit(all_pcs, all_labels)
+        if use_global:
+            all_labels = CausalClassifierModel._get_gold_labels(all_pcs)
+            self._fit_allowing_feature_selection(self.global_classifier,
+                                                 all_pcs, all_labels)
 
         pcs_by_connective = defaultdict(list)
         for pc in all_pcs:
@@ -774,25 +820,13 @@ class PatternBasedCausationFilter(StructuredModel):
             pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
             pcs = pcs_with_both_args # train only on instances with 2 args
             labels = CausalClassifierModel._get_gold_labels(pcs)
-
-            # Don't use all the training data when training the per-connective
-            # classifier. Instead, reserve some of it for tuning classifier
-            # weights.
-            num_per_conn_training = int(math.ceil(len(pcs)
-                                                  * FLAGS.filter_tuning_pct))
-            per_conn_training = pcs[:num_per_conn_training]
-            per_conn_training_labels = labels[:num_per_conn_training]
-
-            # Some classifiers don't deal well with all labels being the same.
-            # If this is the case, it should just default to majority class
-            # anyway, so just do that.
-            if len(set(per_conn_training_labels)) < 2:
-                classifier = make_mostfreq_featurizing_estimator()
-                classifier.fit(pcs, labels)
-            else:
-                classifier = self._make_classifier_for_connective(
-                    pcs, labels, per_conn_training, per_conn_training_labels,
-                    score_fn)
+            estimators = self._get_estimators_for_connective(
+                pcs, labels, use_global, use_per_conn, use_mostfreq)
+            classifier = AutoWeightedVotingClassifier(
+                estimators=estimators,
+                voting='soft' if self.soft_voting else 'hard',
+                score_probas=self.soft_voting, score_fn=score_fn)
+            classifier.fit_weights(pcs, labels) # use train + dev for tuning
 
             self.classifiers[connective] = classifier
 
@@ -801,19 +835,16 @@ class PatternBasedCausationFilter(StructuredModel):
             scores = []
             for pc in possible_causations:
                 classifier = self.classifiers[stringify_connective(pc)]
+                true_class_index = classifier.le_.transform(1)
                 try:
-                    true_class_index = classifier.le_.transform(True)
-                    pc_scores = [c.predict_proba([pc])[0, true_class_index] for c in
-                                 [classifier] + classifier.estimators_]
-                except AttributeError: # no label encoder: non-voting classifier
-                    try:
-                        true_class_index = np.where(
-                            classifier.classes_ == True)[0][0]
-                        predicted_probas = classifier.predict_proba([pc])
-                        score = predicted_probas[0, true_class_index]
-                    except IndexError: # True not in list
-                        score = 0.0
-                    pc_scores = [score] + [np.nan] * 3
+                    pc_scores = [classifier.predict_proba(
+                                     [pc])[0, true_class_index]]
+                except ZeroDivisionError: # happens if all scores are 0
+                    pc_scores = [0]
+                # TODO: Make this add NaNs to the right places depending on
+                # which estimators are present.
+                pc_scores += [c.predict_proba([pc])[0, true_class_index]
+                              for c in classifier.estimators_]
                 scores.append(pc_scores)
             return scores
         else:
