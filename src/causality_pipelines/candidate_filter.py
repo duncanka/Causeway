@@ -87,6 +87,13 @@ try:
                   for x in powerset(['global', 'per_conn', 'mostfreq']) if x],
                 'Which classifiers should be trained and allowed to vote for'
                 ' each connective type')
+    DEFINE_bool('filter_auto_weight', True,
+                'Whether to automatically weight classifiers for each'
+                ' connective')
+    DEFINE_bool('filter_global_for_all_same', False,
+                'Whether to include the global classifier for connectives where'
+                ' all training instances have the same label. If False, only'
+                ' the mostfreq classifier is used.')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -744,14 +751,20 @@ class PatternBasedCausationFilter(StructuredModel):
             classifier.fit(data, labels)
 
     def _get_estimators_for_connective(self, pcs, labels, use_global,
-                                       use_per_conn, use_mostfreq):
-        # Don't use all the training data when training the per-connective
-        # classifier. Instead, reserve some of it for tuning classifier
-        # weights.
-        num_per_conn_training = int(math.ceil(len(pcs)
-                                              * FLAGS.filter_tuning_pct))
-        per_conn_training = pcs[:num_per_conn_training]
-        per_conn_training_labels = labels[:num_per_conn_training]
+                                       use_per_conn, use_mostfreq, auto_weight):
+        if auto_weight:
+            # Don't use all the training data when training the per-connective
+            # classifier. Instead, reserve some of it for tuning classifier
+            # weights.
+            num_per_conn_training = int(math.ceil(len(pcs)
+                                                  * FLAGS.filter_tuning_pct))
+            per_conn_training = pcs[:num_per_conn_training]
+            per_conn_training_labels = labels[:num_per_conn_training]
+        else:
+            # We won't be auto-weighting, so no need to reserve any tuning data.
+            num_per_conn_training = len(pcs)
+            per_conn_training = pcs
+            per_conn_training_labels = labels
 
         # Some estimators don't deal well with all labels being the same.
         # If this is the case and we're doing per-connective classifiers, it
@@ -759,7 +772,7 @@ class PatternBasedCausationFilter(StructuredModel):
         unique_labels = set(per_conn_training_labels)
         all_same_class = len(unique_labels) < 2
         if all_same_class:
-            use_global = False
+            use_global = FLAGS.filter_global_for_all_same
             use_per_conn = False
             use_mostfreq = True
 
@@ -769,7 +782,7 @@ class PatternBasedCausationFilter(StructuredModel):
             per_conn = sklearn.clone(self.base_per_conn_classifier)
             if FLAGS.filter_scale_C:
                 per_conn.named_steps['per_conn_classifier'].C = math.sqrt(
-                    len(per_conn_training) / 5.0)
+                    num_per_conn_training / 5.0)
             self._fit_allowing_feature_selection(per_conn, per_conn_training,
                                                  per_conn_training_labels)
             estimators.append(('per_conn', per_conn))
@@ -793,6 +806,7 @@ class PatternBasedCausationFilter(StructuredModel):
 
     def _train_structured(self, sentences, parts_by_sentence):
         classifier_types = FLAGS.filter_classifiers.split(',')
+        auto_weight = FLAGS.filter_auto_weight
         use_global, use_per_conn, use_mostfreq = [
             t in classifier_types for t in ['global', 'per_conn', 'mostfreq']]
 
@@ -821,12 +835,16 @@ class PatternBasedCausationFilter(StructuredModel):
             pcs = pcs_with_both_args # train only on instances with 2 args
             labels = CausalClassifierModel._get_gold_labels(pcs)
             estimators = self._get_estimators_for_connective(
-                pcs, labels, use_global, use_per_conn, use_mostfreq)
+                pcs, labels, use_global, use_per_conn, use_mostfreq,
+                auto_weight)
             classifier = AutoWeightedVotingClassifier(
                 estimators=estimators,
                 voting='soft' if self.soft_voting else 'hard',
                 score_probas=self.soft_voting, score_fn=score_fn)
-            classifier.fit_weights(pcs, labels) # use train + dev for tuning
+            if auto_weight:
+                classifier.fit_weights(pcs, labels) # use train + dev for tuning
+            else: # weight evenly
+                classifier.weights = [1.0 / len(estimators)] * len(estimators)
 
             self.classifiers[connective] = classifier
 
