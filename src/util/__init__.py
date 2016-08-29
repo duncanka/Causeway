@@ -247,3 +247,25 @@ def powerset(iterable):
     xs = list(iterable)
     # note we return an iterator rather than a list
     return chain.from_iterable(combinations(xs, n) for n in range(len(xs) + 1))
+
+
+class MinMaxRange(object):
+    """
+    Simple class to track the min and max of a series of observed values.
+    """
+    def __init__(self, initial_min=np.inf, initial_max=-np.inf,
+                 initial_values=None):
+        self.min = initial_min
+        self.max = initial_max
+        if initial_values is not None:
+            self.update(initial_values)
+
+    def update(self, values):
+        try:
+            self.min = min(self.min, np.min(values))
+            self.max = max(self.max, np.max(values))
+        except ValueError: # Happens with zero-size values
+            pass
+
+    def __repr__(self):
+        return 'MinMaxRange(%f, %f)' % (self.min, self.max)
