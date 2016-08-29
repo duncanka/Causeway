@@ -2,7 +2,7 @@
 
 SEED=2961393773
 OUT_DIR=../outputs/final
-DATA_DIR=/var/www/brat/data/Jesse/Test/finished
+DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
 SHARED_FLAGS="--eval_with_cv --seed=$SEED --cv_folds=20"
 
