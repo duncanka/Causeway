@@ -849,20 +849,36 @@ class PatternBasedCausationFilter(StructuredModel):
             self.classifiers[connective] = classifier
 
     def _score_parts(self, sentence, possible_causations):
+        using_global = 'global' in FLAGS.filter_classifiers.split(',')
         if self.soft_voting:
             scores = []
             for pc in possible_causations:
-                classifier = self.classifiers[stringify_connective(pc)]
-                true_class_index = classifier.le_.transform(1)
                 try:
-                    pc_scores = [classifier.predict_proba(
-                                     [pc])[0, true_class_index]]
-                except ZeroDivisionError: # happens if all scores are 0
-                    pc_scores = [0]
-                # TODO: Make this add NaNs to the right places depending on
-                # which estimators are present.
-                pc_scores += [c.predict_proba([pc])[0, true_class_index]
-                              for c in classifier.estimators_]
+                    classifier = self.classifiers[stringify_connective(pc)]
+                    true_class_index = classifier.le_.transform(1)
+                    try:
+                        pc_scores = [classifier.predict_proba(
+                                         [pc])[0, true_class_index]]
+                    except ZeroDivisionError: # happens if all scores are 0
+                        pc_scores = [0]
+                    # TODO: Make this add NaNs to the right places depending on
+                    # which estimators are present.
+                    pc_scores += [c.predict_proba([pc])[0, true_class_index]
+                                  for c in classifier.estimators_]
+                except KeyError:
+                    # We didn't encounter any 2-argument instances of this
+                    # pattern in training, so we have no classifier for it.
+                    connective_text = ' '.join(t.lemma for t in pc.connective)
+                    if using_global:
+                        global_score = self.global_classifier.predict_proba(
+                            [pc])[0, true_class_index]
+                        logging.warn("No classifier for '%s';"
+                                     " using only global", connective_text)
+                        pc_scores = [global_score, global_score, 0.0, 0.0]
+                    else:
+                        logging.warn("No classifier for '%s'; scoring as 0.0",
+                                     connective_text)
+                        pc_scores = [0.0] * 4
                 scores.append(pc_scores)
             return scores
         else:
