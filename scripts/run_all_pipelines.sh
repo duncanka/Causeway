@@ -32,3 +32,5 @@ for PIPELINE in regex tregex; do
     done
     tsp -n -L "${PIPELINE}+baseline" bash -c "python main.py --train_paths=$DATA_DIR $SHARED_FLAGS  --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}+baseline $FLAGS > $OUT_DIR/${PIPELINE}+baseline.txt 2>$OUT_DIR/${PIPELINE}+baseline.log"
 done
+
+tsp -l
