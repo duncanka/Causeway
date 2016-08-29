@@ -23,6 +23,7 @@ ptb_all3      $PTB_DATA_DIR
 ptb_all3_gold $PTB_DATA_DIR --reader_gold_parses
 EOM
 
+echo -e "Pipeline: baseline"
 tsp -n -L baseline bash -c "python main.py --train_paths=$DATA_DIR $SHARED_FLAGS --pipeline_type=baseline > $OUT_DIR/baseline.txt 2> $LOG_DIR/baseline.log"
 
 for PIPELINE in regex tregex; do
