@@ -810,7 +810,9 @@ class PatternBasedCausationFilter(StructuredModel):
         use_global, use_per_conn, use_mostfreq = [
             t in classifier_types for t in ['global', 'perconn', 'mostfreq']]
 
-        all_pcs = list(chain.from_iterable(parts_by_sentence))
+        all_pcs = [pc for pc in chain.from_iterable(parts_by_sentence)
+                   if pc.cause and pc.effect] # train only on 2-arg instances
+
         if use_global:
             all_labels = CausalClassifierModel._get_gold_labels(all_pcs)
             self._fit_allowing_feature_selection(self.global_classifier,
@@ -831,8 +833,6 @@ class PatternBasedCausationFilter(StructuredModel):
             score_fn = accuracy
 
         for connective, pcs in pcs_by_connective.iteritems():
-            pcs_with_both_args = [pc for pc in pcs if pc.cause and pc.effect]
-            pcs = pcs_with_both_args # train only on instances with 2 args
             labels = CausalClassifierModel._get_gold_labels(pcs)
             estimators = self._get_estimators_for_connective(
                 pcs, labels, use_global, use_per_conn, use_mostfreq,
@@ -1002,9 +1002,8 @@ class CausationPatternFilterStage(Stage):
                 diff = diff_binary_vectors(self._decoder._labels_for_eval,
                                            self._decoder._gold_labels_for_eval,
                                            count_tns=False)
-                connective_metrics = (
-                    self._without_partial_metrics.connective_metrics)
-                connective_metrics.raw_classifier_metrics += diff
+                metrics = self._without_partial_metrics
+                metrics.connective_metrics.raw_classifier_metrics += diff
                 
         def _convert_classification_metrics(self, classification_metrics):
             new_metrics = object.__new__(

@@ -25,14 +25,16 @@ class MostFreqSenseFilterModel(StructuredModel, StructuredDecoder):
         
         for key in self.frequencies_dict:
             negative, positive = self.frequencies_dict[key]
-            self.frequencies_dict[key] = positive > negative
+            self.frequencies_dict[key] = float(positive) / (positive + negative)
 
     def _score_parts(self, sentence, possible_causations):
-        return [self.frequencies_dict[stringify_connective(pc)]
+        return [(self.frequencies_dict[stringify_connective(pc)]
+                 if pc.cause and pc.effect else 0.0)
                 for pc in possible_causations]
 
     def decode(self, sentence, possible_causations, scores):
-        return [pc for pc, score in zip(possible_causations, scores) if score]
+        return [pc for pc, score in zip(possible_causations, scores)
+                if score > FLAGS.filter_prob_cutoff]
 
     def reset(self):
         self.frequencies_dict = defaultdict(lambda: [0, 0])
