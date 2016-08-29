@@ -190,5 +190,9 @@ if __name__ == '__main__':
         elif FLAGS.test_paths:
             causality_pipeline.test()
 
+    if FLAGS.filter_record_feature_weights:
+        print "Feature extractor weights:"
+        print causality_pipeline.stages[3].model.feature_weights
+
 #if __name__ == '__main__':
 #    main(sys.argv)
