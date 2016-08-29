@@ -5,7 +5,7 @@ OUT_DIR=../outputs/final
 LOG_DIR=$OUT_DIR/logs
 DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
-SHARED_FLAGS="--eval_with_cv --seed=$SEED --cv_folds=20"
+BASE_CMD="python main.py --eval_with_cv --seed=$SEED --cv_folds=20"
 
 tsp -S 4
 
@@ -24,15 +24,16 @@ ptb_all3_gold $PTB_DATA_DIR --reader_gold_parses
 EOM
 
 echo -e "Pipeline: baseline"
-tsp -n -L baseline bash -c "python main.py --train_paths=$DATA_DIR $SHARED_FLAGS --pipeline_type=baseline > $OUT_DIR/baseline.txt 2> $LOG_DIR/baseline.log"
+tsp -n -L baseline bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=baseline > $OUT_DIR/baseline.txt 2> $LOG_DIR/baseline.log"
 
 for PIPELINE in regex tregex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
         read NAME DIR FLAGS <<<$line
         echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
-        tsp -n -L "${PIPELINE}_${NAME}" bash -c "python main.py --train_paths=$DIR $SHARED_FLAGS --pipeline_type=$PIPELINE --models_dir=../models/${PIPELINE}_${NAME} $FLAGS > $OUT_DIR/${PIPELINE}_${NAME}.txt 2> $LOG_DIR/${PIPELINE}_${NAME}.log"
+        tsp -n -L "${PIPELINE} ${NAME}" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir=../models/${PIPELINE}_${NAME} $FLAGS > $OUT_DIR/${PIPELINE}_${NAME}.txt 2> $LOG_DIR/${PIPELINE}_${NAME}.log"
     done
-    tsp -n -L "${PIPELINE}+baseline" bash -c "python main.py --train_paths=$DATA_DIR $SHARED_FLAGS --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}+baseline $FLAGS > $OUT_DIR/${PIPELINE}+baseline.txt 2> $LOG_DIR/${PIPELINE}+baseline.log"
+    tsp -n -L "${PIPELINE}+baseline" bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}+baseline > $OUT_DIR/${PIPELINE}+baseline.txt 2> $LOG_DIR/${PIPELINE}+baseline.log"
+    tsp -n -L "${PIPELINE} mostfreq_sep" bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}_mostfreq > $OUT_DIR/${PIPELINE}_mostfreq_sep.txt 2> $LOG_DIR/${PIPELINE}_mostfreq_sep.log"
 done
 
 tsp -l
