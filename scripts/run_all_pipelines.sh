@@ -30,7 +30,7 @@ for PIPELINE in regex tregex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
         read NAME DIR FLAGS <<<$line
         echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
-        tsp -n -L $NAME bash -c "python main.py --train_paths=$DIR $SHARED_FLAGS --pipeline_type=$PIPELINE --models_dir=../models/${PIPELINE}_${NAME} $FLAGS > $OUT_DIR/${PIPELINE}_${NAME}.txt 2> $LOG_DIR/${PIPELINE}_${NAME}.log"
+        tsp -n -L "${PIPELINE}_${NAME}" bash -c "python main.py --train_paths=$DIR $SHARED_FLAGS --pipeline_type=$PIPELINE --models_dir=../models/${PIPELINE}_${NAME} $FLAGS > $OUT_DIR/${PIPELINE}_${NAME}.txt 2> $LOG_DIR/${PIPELINE}_${NAME}.log"
     done
     tsp -n -L "${PIPELINE}+baseline" bash -c "python main.py --train_paths=$DATA_DIR $SHARED_FLAGS --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}+baseline $FLAGS > $OUT_DIR/${PIPELINE}+baseline.txt 2> $LOG_DIR/${PIPELINE}+baseline.log"
 done
