@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, OrderedDict
 from gflags import (DEFINE_list, DEFINE_integer, DEFINE_bool, FLAGS,
                     DuplicateFlagError, DEFINE_float, DEFINE_enum)
 from itertools import chain, product
@@ -94,6 +94,9 @@ try:
                 'Whether to include the global classifier for connectives where'
                 ' all training instances have the same label. If False, only'
                 ' the mostfreq classifier is used.')
+    DEFINE_bool('filter_record_feature_weights', False,
+                'Whether to record the range of classifier feature weights for'
+                ' each feature type') # only works for LR classifier
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
 
@@ -739,7 +742,7 @@ class PatternBasedCausationFilter(StructuredModel):
     def reset(self):
         super(PatternBasedCausationFilter, self).reset()
         self.classifiers = {}
-        
+
     @staticmethod
     def _fit_allowing_feature_selection(classifier, data, labels):
         try:
@@ -838,7 +841,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 pcs, labels, use_global, use_per_conn, use_mostfreq,
                 auto_weight)
             classifier = AutoWeightedVotingClassifier(
-                estimators=estimators,
+                estimators=estimators, autofit_weights=auto_weight,
                 voting='soft' if self.soft_voting else 'hard',
                 score_probas=self.soft_voting, score_fn=score_fn)
             if auto_weight:
@@ -847,6 +850,35 @@ class PatternBasedCausationFilter(StructuredModel):
                 classifier.weights = [1.0 / len(estimators)] * len(estimators)
 
             self.classifiers[connective] = classifier
+
+        if FLAGS.filter_record_feature_weights:
+            self._record_feature_weights()
+
+    def _record_feature_weights(self):
+        if not hasattr(self, 'feature_weights'):
+            self.feature_weights = defaultdict(list)
+
+        feature_sep = FLAGS.conjoined_feature_sep
+
+        lr_pipelines = [self.global_classifier]
+        for classifier in self.classifiers.values():
+            try:
+                lr_pipelines.append(dict(classifier.estimators)['perconn'])
+            except KeyError: # no 'perconn' classifier
+                continue
+
+        for lr_pipeline in lr_pipelines:
+            updates_by_extractor = defaultdict(list)
+            feature_weights = get_weights_for_lr_classifier(lr_pipeline, False)
+            for feature_name, weight in feature_weights.iteritems():
+                conjoined_names = feature_name.split(feature_sep)
+                extractor_name = feature_sep.join([name.split('=')[0]
+                                                   for name in conjoined_names])
+                updates_by_extractor[extractor_name].append(abs(weight))
+
+            for extractor_name, updates in updates_by_extractor.iteritems():
+                extractor_weights = self.feature_weights[extractor_name]
+                extractor_weights.extend(updates)
 
     def _score_parts(self, sentence, possible_causations):
         using_global = 'global' in FLAGS.filter_classifiers.split(',')
@@ -1006,7 +1038,7 @@ class CausationPatternFilterStage(Stage):
                                            count_tns=False)
                 metrics = self._without_partial_metrics
                 metrics.connective_metrics.raw_classifier_metrics += diff
-                
+
         def _convert_classification_metrics(self, classification_metrics):
             new_metrics = object.__new__(
                 CausationPatternFilterStage.FilterMetrics)
@@ -1014,7 +1046,7 @@ class CausationPatternFilterStage(Stage):
             new_metrics.raw_classifier_metrics = ClassificationMetrics(
                 finalize=False)
             return new_metrics
-            
+
 
         # Aggregation automatically handled by average() above.
 
@@ -1042,3 +1074,28 @@ class CausationPatternFilterStage(Stage):
         return self.ClassifierIAAEvaluator(self.model.decoder, False, False,
                                            FLAGS.filter_print_test_instances,
                                            True, True)
+
+
+def get_weights_for_lr_classifier(classifier_pipeline, sort_weights=True):
+    classifier = classifier_pipeline.steps[1][1]
+    featurizer = classifier_pipeline.steps[0][1].featurizer
+    feature_name_dict = featurizer.feature_name_dictionary
+
+    if FLAGS.filter_feature_select_k == -1:
+        # All features in feature dictionary are selected.
+        feature_indices = range(len(feature_name_dict))
+        lr = classifier
+    else:
+        feature_indices = classifier.named_steps[
+            'feature_selection'].get_support().nonzero()[0]
+        lr = classifier.named_steps['classification'].classifier
+
+    weights = [(feature_name_dict.ids_to_names[ftnum], lr.coef_[0][i])
+               for i, ftnum in enumerate(feature_indices)
+               if lr.coef_[0][i] != 0.0]
+    if sort_weights:
+        # Sort by weights' absolute values.
+        weights.sort(key=lambda tup: abs(tup[1]))
+        return OrderedDict(weights)
+    else:
+        return dict(weights)
