@@ -37,6 +37,10 @@ for src_file, sentence_count in zip(src_files, sentence_counts):
     to_keep.append(src_file)
     sentences_kept += sentence_count
 
+try:
+    os.makedirs(target)
+except OSError: # already exists
+    pass
 for src_file in to_keep:
     shutil.copy2(src_file, target)
     shutil.copy2(src_file[:-4] + '.parse', target)
