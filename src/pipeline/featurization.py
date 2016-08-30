@@ -218,6 +218,39 @@ class Featurizer(object):
     dictionary, and actually runs extractors to produce a feature matrix.
     '''
     @staticmethod
+    def selected_features_for_featurizer(selected_features,
+                                         extractors_for_featurizer):
+        """
+        From a list of selected features, return only the ones relevant to a
+        particular Featurizer's extractor list. (Only the extractor list is
+        required, not the Featurizer.)
+        """
+        conjoined_sep = FLAGS.conjoined_feature_sep
+        extractor_names = [e.name for e in extractors_for_featurizer]
+        selected_features = [
+            feature for feature in selected_features
+            if feature == 'all' or all(
+                name in extractor_names for name in
+                Featurizer.separate_conjoined_feature_names(feature,
+                                                            conjoined_sep))]
+        return selected_features
+        
+    @staticmethod
+    def check_selected_features_list(selected_features, all_extractors):
+        """
+        Check selected features against a complete list of all available
+        features. Useful in cases where individual Featurizers don't have
+        access to all FeatureExtractors to check the list of names.
+        """
+        conjoined_sep = FLAGS.conjoined_feature_sep
+        extractor_names = [e.name for e in all_extractors]
+        for feature in selected_features:
+            if not all(name in extractor_names for name in
+                       Featurizer.separate_conjoined_feature_names(
+                            feature, conjoined_sep)):
+                raise FeaturizationError("Invalid feature name: %s" % feature)
+
+    @staticmethod
     def escape_conjoined_name(feature_name, sep):
         return feature_name.replace(sep, sep * 2)
 
