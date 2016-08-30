@@ -26,7 +26,7 @@ EOM
 echo -e "Pipeline: baseline"
 tsp -n -L baseline bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=baseline > $OUT_DIR/baseline.txt 2> $LOG_DIR/baseline.log"
 
-for PIPELINE in regex tregex; do
+for PIPELINE in tregex regex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
         read NAME DIR FLAGS <<<$line
         echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
