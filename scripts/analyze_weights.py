@@ -8,7 +8,7 @@ from causality_pipelines.candidate_filter import get_weights_for_lr_classifier
 from util import print_indented
 
 
-def get_general_classifier_weights(pipeline):
+def get_global_classifier_weights(pipeline):
     stage = pipeline.stages[3]
     return get_weights_for_lr_classifier(stage.model.global_classifier)
 

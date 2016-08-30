@@ -21,7 +21,7 @@ from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
     VectorValuedFeatureExtractor, NestedFeatureExtractor,
-    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor)
+    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor, Featurizer)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
@@ -404,7 +404,7 @@ class CausalClassifierModel(object):
 
     all_feature_extractors = []
     per_conn_and_shared_feature_extractors = []
-    general_and_shared_feature_extractors = []
+    global_and_shared_feature_extractors = []
 
 
 Numerical = FeatureExtractor.FeatureTypes.Numerical
@@ -418,9 +418,10 @@ CausalClassifierModel.per_connective_feature_extractors = [
                                             for t in part.connective])),
     FeatureExtractor('cn_lemmas',
                      lambda part: ' '.join([t.lemma
-                                            for t in part.connective])), ]
+                                            for t in part.connective]))
+]
 
-CausalClassifierModel.general_feature_extractors = [
+CausalClassifierModel.global_feature_extractors = [
     SetValuedFeatureExtractor(
         'cause_hypernyms',
         lambda part: CausalClassifierModel.extract_wn_hypernyms(
@@ -527,7 +528,7 @@ CausalClassifierModel.shared_feature_extractors = [
         lambda part: part.sentence.get_domination_relation(
         part.cause_head, part.effect_head),
         range(len(StanfordParsedSentence.DOMINATION_DIRECTION))),
-    # TODO: remove for general classifier? (Too construction-specific)
+    # TODO: remove for global classifier? (Too construction-specific)
     KnownValuesFeatureExtractor(
         'cause_ner',
         lambda part: StanfordNERStage.NER_TYPES[part.cause_head.ner_tag],
@@ -639,13 +640,13 @@ CausalClassifierModel.per_conn_and_shared_feature_extractors = (
     CausalClassifierModel.per_connective_feature_extractors
     + CausalClassifierModel.shared_feature_extractors)
 
-CausalClassifierModel.general_and_shared_feature_extractors = (
-    CausalClassifierModel.general_feature_extractors
+CausalClassifierModel.global_and_shared_feature_extractors = (
+    CausalClassifierModel.global_feature_extractors
     + CausalClassifierModel.shared_feature_extractors)
 
 CausalClassifierModel.all_feature_extractors = (
     CausalClassifierModel.per_connective_feature_extractors
-    + CausalClassifierModel.general_feature_extractors
+    + CausalClassifierModel.global_feature_extractors
     + CausalClassifierModel.shared_feature_extractors)
 
 
@@ -656,7 +657,11 @@ class PatternBasedCausationFilter(StructuredModel):
                                       FLAGS.filter_save_scored))
 
         self.soft_voting = hasattr(classifier, 'predict_proba')
+        self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
+            'most_freq_classifier')
 
+        Featurizer.check_selected_features_list(
+            FLAGS.filter_features, CausalClassifierModel.all_feature_extractors)
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
             global_classifier = sklearn.clone(classifier)
@@ -668,28 +673,22 @@ class PatternBasedCausationFilter(StructuredModel):
             ])
             global_classifier = sklearn.clone(base_per_conn_classifier)
 
-        self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
-            'most_freq_classifier')
+        per_conn_selected = Featurizer.selected_features_for_featurizer(
+            FLAGS.filter_features,
+            CausalClassifierModel.per_conn_and_shared_feature_extractors)
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
             '.per_conn_and_shared_feature_extractors',
-            FLAGS.filter_features, 'perconn_classifier')
+            per_conn_selected, 'perconn_classifier')
 
-        # TODO: provide this filtering as a general-purpose function somewhere?
-        general_extractor_names = [
-            e.name for e in
-            CausalClassifierModel.general_feature_extractors
-                + CausalClassifierModel.shared_feature_extractors]
-        conjoined_sep = FLAGS.conjoined_feature_sep
-        general_selected_features = [
-            feature for feature in FLAGS.filter_features
-            if feature == 'all' or all(name in general_extractor_names for name
-                                       in feature.split(conjoined_sep))]
+        global_selected = Featurizer.selected_features_for_featurizer(
+            FLAGS.filter_features,
+            CausalClassifierModel.global_and_shared_feature_extractors)
         self.global_classifier = make_featurizing_estimator(
             global_classifier,
             'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.general_and_shared_feature_extractors', general_selected_features,
+            '.global_and_shared_feature_extractors', global_selected,
             'global_causality_classifier')
 
         self.classifiers = {}
