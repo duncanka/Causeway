@@ -909,10 +909,10 @@ class PatternBasedCausationFilter(StructuredModel):
                 except KeyError:
                     # We didn't encounter any 2-argument instances of this
                     # pattern in training, so we have no classifier for it.
-                    true_class_index = np.where(self.global_classifier.classes_
-                                                == True)[0][0]
                     connective_text = ' '.join(t.lemma for t in pc.connective)
                     if using_global:
+                        true_class_index = np.where(
+                            self.global_classifier.classes_ == True)[0][0]
                         global_score = self.global_classifier.predict_proba(
                             [pc])[0, true_class_index]
                         logging.warn("No classifier for '%s';"
