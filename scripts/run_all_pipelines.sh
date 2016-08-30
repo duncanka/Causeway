@@ -23,17 +23,24 @@ ptb_all3      $PTB_DATA_DIR
 ptb_all3_gold $PTB_DATA_DIR --reader_gold_parses
 EOM
 
-echo -e "Pipeline: baseline"
-tsp -n -L baseline bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=baseline > $OUT_DIR/baseline.txt 2> $LOG_DIR/baseline.log"
+run_pipeline() {
+	PIPELINE=$1
+	NAME=$2
+	DIR=$3
+	FLAGS=$4
+    echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
+    tsp -n -L "$NAME" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir='../models/$NAME' $FLAGS > '$OUT_DIR/$NAME.txt' 2> '$LOG_DIR/$NAME.log'"
+}
 
-for PIPELINE in tregex regex; do
+run_pipeline baseline baseline $DATA_DIR
+
+for PIPELINE_TYPE in tregex regex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
-        read NAME DIR FLAGS <<<$line
-        echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
-        tsp -n -L "${PIPELINE} ${NAME}" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir=../models/${PIPELINE}_${NAME} $FLAGS > $OUT_DIR/${PIPELINE}_${NAME}.txt 2> $LOG_DIR/${PIPELINE}_${NAME}.log"
+        read RUN_TYPE DIR FLAGS <<<$line
+        run_pipeline "$PIPELINE_TYPE" "${PIPELINE_TYPE}_${RUN_TYPE}" $DIR $FLAGS
     done
-    tsp -n -L "${PIPELINE}+baseline" bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}+baseline > $OUT_DIR/${PIPELINE}+baseline.txt 2> $LOG_DIR/${PIPELINE}+baseline.log"
-    tsp -n -L "${PIPELINE} mostfreq_sep" bash -c "$BASE_CMD --train_paths=$DATA_DIR --pipeline_type=${PIPELINE}+baseline --models_dir=../models/${PIPELINE}_mostfreq > $OUT_DIR/${PIPELINE}_mostfreq_sep.txt 2> $LOG_DIR/${PIPELINE}_mostfreq_sep.log"
+    run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $DIR
+	run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $DIR
 done
 
 tsp -l
