@@ -36,17 +36,17 @@ from nltk.metrics.scores import accuracy
 try:
     DEFINE_list(
         'filter_features',
-        'cn_words,cause_hypernyms,effect_hypernyms,cause_vector,effect_vector,'
+        'cause_hypernyms,effect_hypernyms,cause_ner:effect_ner,' # world knowl.
         'cause_pos,effect_pos,cause_pos_gen,effect_pos_gen,cause_tense,'
         'effect_tense,cn_incoming_dep,cause_daughter_deps,effect_daughter_deps,'
         'verb_children_deps,cn_parent_pos,all_effect_closed_children,'
         'all_cause_closed_children,heads_rel_pos,cause_closed_children,'
-        'effect_closed_children,commas_btw,args_rel_pos,deplen,'
+        'effect_closed_children,commas_btw,args_rel_pos,deplen,cn_words,'
         'all_cause_closed_children_deps,cause_closed_children_deps,'
         'all_effect_closed_children_deps,effect_closed_children_deps,'
         'cause_prep_start,effect_prep_start,cause_pos_skipgrams,'
         'effect_pos_skipgrams,cause_lemma_skipgrams,effect_lemma_skipgrams,'
-        'cause_tense:effect_tense,cause_ner:effect_ner'.split(','),
+        'cause_tense:effect_tense'.split(','),
         'Features to use for pattern-based candidate classifier model')
     DEFINE_list('filter_features_to_cancel', [],
                 'Features from the features list to cancel (useful with'
