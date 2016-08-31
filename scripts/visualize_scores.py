@@ -6,7 +6,7 @@ def plot_saved_scores(causality_pipeline):
     model = causality_pipeline.stages[3].model
     saved_scores = model.decoder.saved
     positives, negatives = [
-        [score for label, score in saved_scores if label == desired_label]
+        [score for label, _pc, score in saved_scores if label == desired_label]
         for desired_label in [True, False]]
 
     plt.xlim([-0.18, 1])

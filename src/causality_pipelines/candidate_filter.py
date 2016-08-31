@@ -960,7 +960,8 @@ class PatternBasedFilterDecoder(StructuredDecoder):
 
         if self.save_scored:
             self.saved.extend([
-                (bool(p.possible_causation.true_causation_instance), probs)
+                (bool(p.possible_causation.true_causation_instance),
+                 p.possible_causation, probs)
                 for p, probs in zip(classifier_parts, scores)])
 
         cutoff = FLAGS.filter_prob_cutoff
