@@ -19,6 +19,7 @@ perconn       $DATA_DIR     --filter_classifiers=perconn
 no_perconn    $DATA_DIR     --filter_classifiers=global,mostfreq
 no_mostfreq   $DATA_DIR     --filter_classifiers=global,perconn
 no_global     $DATA_DIR     --filter_classifiers=mostfreq,perconn
+no_world_knol $DATA_DIR     --filter_features_to_cancel=cause_ner:effect_ner,cause_hypernyms,effect_hypernyms,cause_lemma_skipgrams,effect_lemma_skipgrams
 ptb_all3      $PTB_DATA_DIR
 ptb_all3_gold $PTB_DATA_DIR --reader_gold_parses
 EOM
