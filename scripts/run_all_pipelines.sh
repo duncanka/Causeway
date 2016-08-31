@@ -32,6 +32,9 @@ run_pipeline() {
     tsp -n -L "$NAME" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir='../models/$NAME' $FLAGS > '$OUT_DIR/$NAME.txt' 2> '$LOG_DIR/$NAME.log'"
 }
 
+mkdir -p $OUT_DIR
+mkdir -p $LOG_DIR
+
 run_pipeline baseline baseline $DATA_DIR
 
 for PIPELINE_TYPE in tregex regex; do
