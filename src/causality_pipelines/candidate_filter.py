@@ -48,6 +48,9 @@ try:
         'effect_pos_skipgrams,cause_lemma_skipgrams,effect_lemma_skipgrams,'
         'cause_tense:effect_tense,cause_ner:effect_ner'.split(','),
         'Features to use for pattern-based candidate classifier model')
+    DEFINE_list('filter_features_to_cancel', [],
+                'Features from the features list to cancel (useful with'
+                ' default features list)')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max")
@@ -86,7 +89,8 @@ try:
                    ' for it to be considered as a skipgram feature')
     DEFINE_float('filter_tuning_pct', 0.5,
                  'Fraction of training data to devote to tuning classifier'
-                 ' weights instead of training per-connective classifiers',
+                 ' weights instead of training per-connective classifiers'
+                 ' (when auto-weighting is enabled)',
                  0.0, 1.0)
     DEFINE_float('filter_wt_score_slope', None,
                  'Slope parameter for the logistic function used in weighting'
@@ -670,8 +674,11 @@ class PatternBasedCausationFilter(StructuredModel):
         self.base_mostfreq_classifier = make_mostfreq_featurizing_estimator(
             'most_freq_classifier')
 
+        selected_features = (set(FLAGS.filter_features)
+                             - set(FLAGS.filter_features_to_cancel))
+
         Featurizer.check_selected_features_list(
-            FLAGS.filter_features, CausalClassifierModel.all_feature_extractors)
+            selected_features, CausalClassifierModel.all_feature_extractors)
         if FLAGS.filter_feature_select_k == -1:
             base_per_conn_classifier = sklearn.clone(classifier)
             global_classifier = sklearn.clone(classifier)
@@ -684,7 +691,7 @@ class PatternBasedCausationFilter(StructuredModel):
             global_classifier = sklearn.clone(base_per_conn_classifier)
 
         per_conn_selected = Featurizer.selected_features_for_featurizer(
-            FLAGS.filter_features,
+            selected_features,
             CausalClassifierModel.per_conn_and_shared_feature_extractors)
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
@@ -693,7 +700,7 @@ class PatternBasedCausationFilter(StructuredModel):
             per_conn_selected, 'perconn_classifier')
 
         global_selected = Featurizer.selected_features_for_featurizer(
-            FLAGS.filter_features,
+            selected_features,
             CausalClassifierModel.global_and_shared_feature_extractors)
         self.global_classifier = make_featurizing_estimator(
             global_classifier,
