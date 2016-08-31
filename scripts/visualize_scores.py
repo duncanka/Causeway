@@ -11,14 +11,16 @@ def plot_saved_scores(causality_pipeline):
 
     plt.xlim([-0.18, 1])
     plt.gca().get_yaxis().set_visible(False)
-    classifier_names = ['Weighted', 'Per-connective', 'Most-frequent', 'Global']
+    classifier_names = ['Weighted', 'Global', 'Most-frequent', 'Per-connective']
     for i, classifier_name in zip(range(4), classifier_names):
         offset = .3 * (i + 1)
         plt.text(-0.1, -offset - 0.045, classifier_name)
 
         pos = [p[i] for p in positives if not np.isnan(p[i])]
-        plt.plot(pos, np.zeros_like(pos) - offset, 'b+',)
+        plt.plot(pos, np.zeros_like(pos) - offset, marker='o', color='blue',
+                 fillstyle='none')
         neg = [n[i] for n in negatives if not np.isnan(n[i])]
-        plt.plot(neg, np.zeros_like(neg) - offset - 0.08, 'rx',)
+        plt.plot(neg, np.zeros_like(neg) - offset - 0.08, marker='D', color='red',
+                 fillstyle='none')
 
     plt.show(block=False)

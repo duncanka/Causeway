@@ -797,15 +797,6 @@ class PatternBasedCausationFilter(StructuredModel):
 
         estimators = [('global', self.global_classifier)] if use_global else []
 
-        if use_per_conn:
-            per_conn = sklearn.clone(self.base_per_conn_classifier)
-            if FLAGS.filter_scale_C:
-                per_conn.named_steps['perconn_classifier'].C = math.sqrt(
-                    num_per_conn_training / 5.0)
-            self._fit_allowing_feature_selection(per_conn, per_conn_training,
-                                                 per_conn_training_labels)
-            estimators.append(('perconn', per_conn))
-
         if use_mostfreq:
             mostfreq = sklearn.clone(self.base_mostfreq_classifier)
             mostfreq.fit(per_conn_training, per_conn_training_labels)
@@ -820,6 +811,15 @@ class PatternBasedCausationFilter(StructuredModel):
                     [class_label == False, class_label == True],
                     dtype=mf_classifier.class_prior_.dtype)
             estimators.append(('mostfreq', mostfreq))
+
+        if use_per_conn:
+            per_conn = sklearn.clone(self.base_per_conn_classifier)
+            if FLAGS.filter_scale_C:
+                per_conn.named_steps['perconn_classifier'].C = math.sqrt(
+                    num_per_conn_training / 5.0)
+            self._fit_allowing_feature_selection(per_conn, per_conn_training,
+                                                 per_conn_training_labels)
+            estimators.append(('perconn', per_conn))
 
         return estimators
 
@@ -897,6 +897,9 @@ class PatternBasedCausationFilter(StructuredModel):
                 extractor_weights.extend(updates)
 
     def _score_parts(self, sentence, possible_causations):
+        # Scores produces a 4-tuple for each possible causation:
+        # (overall score, global classifier score, mostfreq classifier score,
+        #  per-conn classifer score).
         using_global = 'global' in FLAGS.filter_classifiers.split(',')
         if self.soft_voting:
             scores = []
@@ -909,10 +912,14 @@ class PatternBasedCausationFilter(StructuredModel):
                                          [pc])[0, true_class_index]]
                     except ZeroDivisionError: # happens if all scores are 0
                         pc_scores = [0]
-                    # TODO: Make this add NaNs to the right places depending on
-                    # which estimators are present.
-                    pc_scores += [c.predict_proba([pc])[0, true_class_index]
-                                  for c in classifier.estimators_]
+
+                    for cls_type in ['global', 'mostfreq', 'perconn']:
+                        try:
+                            subcls = classifier.named_estimators[cls_type]
+                            pc_scores.append(subcls.predict_proba(
+                                [pc])[0, true_class_index])
+                        except KeyError: # this classifier wasn't in use
+                            pc_scores.append(np.nan)
                 except KeyError:
                     # We didn't encounter any 2-argument instances of this
                     # pattern in training, so we have no classifier for it.
@@ -933,8 +940,8 @@ class PatternBasedCausationFilter(StructuredModel):
             return scores
         else:
             # Predictions will be 1 or 0, which we can treat as just extreme
-            # scores. (Don't worry about including all the scores, since there
-            # are none of interest.)
+            # scores. (Don't worry about including all the subscores, since
+            # we're never going to care about them.)
             return [self.classifiers[stringify_connective(pc)].predict([pc])[0]
                     for pc in possible_causations]
 
