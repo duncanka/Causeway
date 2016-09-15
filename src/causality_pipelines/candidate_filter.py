@@ -21,7 +21,8 @@ from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
     VectorValuedFeatureExtractor, NestedFeatureExtractor,
-    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor, Featurizer)
+    MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor, Featurizer,
+    BinnedFeatureExtractor)
 from pipeline.models.structured import StructuredDecoder, StructuredModel
 from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
@@ -51,6 +52,9 @@ try:
     DEFINE_list('filter_features_to_cancel', [],
                 'Features from the features list to cancel (useful with'
                 ' default features list)')
+    DEFINE_bool('filter_global_conjoined_features', False,
+                'Whether global classifier should include all features'
+                ' conjoined with the connective')
     DEFINE_integer('filter_max_wordsbtw', 10,
                    "Maximum number of words between phrases before just making"
                    " the value the max")
@@ -417,6 +421,7 @@ class CausalClassifierModel(object):
         return Counter(' '.join(skipgram) for skipgram in lemma_skipgrams)
 
     all_feature_extractors = []
+    all_binned_feature_extractors = []
     per_conn_and_shared_feature_extractors = []
     global_and_shared_feature_extractors = []
 
@@ -663,8 +668,26 @@ CausalClassifierModel.all_feature_extractors = (
     + CausalClassifierModel.global_feature_extractors
     + CausalClassifierModel.shared_feature_extractors)
 
+CausalClassifierModel.all_binned_feature_extractors = (
+    BinnedFeatureExtractor.bin_all_numeric(
+        CausalClassifierModel.all_feature_extractors,
+        lambda x: round(math.log(10 * (x + 1)))))
+
 
 class PatternBasedCausationFilter(StructuredModel):
+    def _get_selected_features_with_conjunctions(self, selected_features):
+        sep = FLAGS.conjoined_feature_sep
+        all_selected = Featurizer.selected_features_for_featurizer(
+            selected_features, CausalClassifierModel.all_feature_extractors)
+        per_conn_names = [e.name for e in (CausalClassifierModel.
+                                           per_connective_feature_extractors)]
+        for selected in all_selected[:-1]: # prevent infinite loop
+            if selected in per_conn_names:
+                continue
+            names = ['cn_lemmas', selected]
+            all_selected.append(Featurizer.conjoin_feature_names(names, sep))
+        return all_selected
+
     def __init__(self, classifier, labels_for_eval, gold_labels_for_eval):
         super(PatternBasedCausationFilter, self).__init__(
             PatternBasedFilterDecoder(labels_for_eval, gold_labels_for_eval,
@@ -699,14 +722,23 @@ class PatternBasedCausationFilter(StructuredModel):
             '.per_conn_and_shared_feature_extractors',
             per_conn_selected, 'perconn_classifier')
 
-        global_selected = Featurizer.selected_features_for_featurizer(
-            selected_features,
-            CausalClassifierModel.global_and_shared_feature_extractors)
-        self.global_classifier = make_featurizing_estimator(
-            global_classifier,
-            'causality_pipelines.candidate_filter.CausalClassifierModel'
-            '.global_and_shared_feature_extractors', global_selected,
-            'global_causality_classifier')
+        if FLAGS.filter_global_conjoined_features:
+            global_selected = self._get_selected_features_with_conjunctions(
+                selected_features)
+            self.global_classifier = make_featurizing_estimator(
+                global_classifier,
+                'causality_pipelines.candidate_filter.CausalClassifierModel'
+                '.all_binned_feature_extractors',
+                global_selected, 'global_causality_classifier')
+        else:
+            global_selected = Featurizer.selected_features_for_featurizer(
+                selected_features,
+                CausalClassifierModel.global_and_shared_feature_extractors)
+            self.global_classifier = make_featurizing_estimator(
+                global_classifier,
+                'causality_pipelines.candidate_filter.CausalClassifierModel'
+                '.global_and_shared_feature_extractors',
+                global_selected, 'global_causality_classifier')
 
         self.classifiers = {}
         comparator = make_annotation_comparator(
