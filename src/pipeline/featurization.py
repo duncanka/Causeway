@@ -482,8 +482,8 @@ class Featurizer(object):
             features = [{} for _ in instances]
 
         fresh_featurized_cache = dict.fromkeys(
-            self._unselected_base_extractors + self._selected_base_extractors,
-            None)
+            self._unselected_base_extractors.union(
+                self._selected_base_extractors), None)
         sep = FLAGS.conjoined_feature_sep
 
         for instance_index, instance in enumerate(instances):
@@ -552,11 +552,11 @@ class Featurizer(object):
         raise KeyError
 
     def _initialize_feature_extractors(self, selected_features):
-        self._unselected_base_extractors = []
-        self._selected_base_extractors = []
+        self._unselected_base_extractors = set()
+        self._selected_base_extractors = set()
         # TODO: should we make things slightly more efficient by not caching
         # base features that aren't part of some conjoined feature?
-        self._conjoined_extractors = []
+        self._conjoined_extractors = set()
         sep = FLAGS.conjoined_feature_sep
 
         if 'all' in selected_features:
@@ -582,16 +582,16 @@ class Featurizer(object):
 
                 conjoined = self.ConjoinedFeatureExtractor(feature_name,
                                                            extractors)
-                self._conjoined_extractors.append(conjoined)
+                self._conjoined_extractors.add(conjoined)
 
                 for extractor in extractors:
                     if extractor.name not in selected_features:
-                        self._unselected_base_extractors.append(extractor)
+                        self._unselected_base_extractors.add(extractor)
 
             else:
                 try:
                     extractor = self.__get_extractor_by_name(feature_name)
-                    self._selected_base_extractors.append(extractor)
+                    self._selected_base_extractors.add(extractor)
                 except KeyError:
                     raise FeaturizationError("Invalid feature name: %s"
                                              % feature_name)
