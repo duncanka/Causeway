@@ -196,6 +196,7 @@ class ThresholdedFeatureExtractor(FeatureExtractor):
         self.name = base_extractor.name
         self.base_extractor = base_extractor
         self.threshold = threshold
+        self.feature_type = base_extractor.feature_type
 
     def extract_subfeature_names(self, instances):
         names_to_counts = Counter()
@@ -228,8 +229,8 @@ class Featurizer(object):
     def selected_features_for_featurizer(selected_features,
                                          extractors_for_featurizer):
         """
-        From a list of selected features, return only the ones relevant to a
-        particular Featurizer's extractor list. (Only the extractor list is
+        From a list of selected feature names, return only the ones relevant to
+        a particular Featurizer's extractor list. (Only the extractor list is
         required, not the Featurizer.)
         """
         conjoined_sep = FLAGS.conjoined_feature_sep
