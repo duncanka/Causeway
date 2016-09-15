@@ -2,7 +2,7 @@ from collections import Counter
 from copy import copy
 from cPickle import PicklingError
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
-import itertools
+from itertools import chain, product
 import logging
 import numpy as np
 from scipy.sparse import lil_matrix
@@ -141,6 +141,9 @@ class NestedFeatureExtractor(FeatureExtractor):
     def __init__(self, name, subextractors):
         self.name = name
         self.subextractors = subextractors
+        self.feature_type = subextractors[0].feature_type
+        if not all(e.feature_type == self.feature_type for e in subextractors):
+            self.feature_type = -1 # undefined...
 
     def extract_subfeature_names(self, instances):
         names_by_subextractor = [
@@ -148,7 +151,7 @@ class NestedFeatureExtractor(FeatureExtractor):
              for subextractor_subfeature_name
              in subextractor.extract_subfeature_names(instances)]
             for subextractor in self.subextractors]
-        return list(itertools.chain.from_iterable(names_by_subextractor))
+        return list(chain.from_iterable(names_by_subextractor))
 
     def extract(self, part):
         features_by_subextractor = [
@@ -295,7 +298,7 @@ class Featurizer(object):
             subfeature_name_components = [
                 names_by_extractor[extractor] for extractor in self._extractors]
             return [Featurizer.conjoin_feature_names(cmpts, self.sep) for
-                    cmpts in itertools.product(*subfeature_name_components)]
+                    cmpts in product(*subfeature_name_components)]
 
         # NOTE: likewise for this one -- it overrides the default signature.
         def extract(self, instance, featurized_cache=None):
@@ -321,7 +324,7 @@ class Featurizer(object):
                     [Featurizer.escape_conjoined_name(name, self.sep)
                      for name in extractor_result]
                     for extractor_result in extractor_results]
-            cartesian_product = itertools.product(*extractor_results)
+            cartesian_product = product(*extractor_results)
             return {self.sep.join(subfeature_names): 1.0
                     for subfeature_names in cartesian_product}
 
