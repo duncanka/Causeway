@@ -189,17 +189,28 @@ class MultiNumericalFeatureExtractor(FeatureExtractor):
         return '='.join([self.name, feature_name])
 
 
-class ThresholdedFeatureExtractor(FeatureExtractor):
+class _MetaFeatureExtractor(FeatureExtractor):
+    """
+    Base type for feature extractors that transform other feature extractors.
+    """
+    def __init__(self, base_extractor):
+        self.feature_type = base_extractor.feature_type
+        self.name = base_extractor.name
+        self.base_extractor = base_extractor
+
+    def extract(self, part):
+        return self.base_extractor.extract(part)
+
+
+class ThresholdedFeatureExtractor(_MetaFeatureExtractor):
     """
     Takes another FeatureExtractor and turns it into one that only extracts
     features that appear at least a given number of times in the training data.
     This class doesn't respect the base extractor's extract_subfeature_names.
     """
     def __init__(self, base_extractor, threshold):
-        self.name = base_extractor.name
-        self.base_extractor = base_extractor
+        super(ThresholdedFeatureExtractor, self).__init__(base_extractor)
         self.threshold = threshold
-        self.feature_type = base_extractor.feature_type
 
     def extract_subfeature_names(self, instances):
         names_to_counts = Counter()
@@ -209,11 +220,44 @@ class ThresholdedFeatureExtractor(FeatureExtractor):
         return [k for k, v in names_to_counts.iteritems()
                 if v >= self.threshold]
 
+    # Don't worry about extracting things that didn't appear often enough.
+    # Features not meeting the threshold will just be ignored as unknown
+    # features.
+
+
+class BinnedFeatureExtractor(_MetaFeatureExtractor):
+    """
+    Takes a numerical FeatureExtractor and turns it into a categorical feature
+    extractor with bins for the values.
+    """
+    DEFAULT_BIN_FN = lambda x: [int(x), int(x) + 1]
+
+    def __init__(self, base_extractor, bin_fn=DEFAULT_BIN_FN):
+        if base_extractor.feature_type != self.FeatureTypes.Numerical:
+            raise FeaturizationError("Can't bin non-numerical feature %s"
+                                     % base_extractor.name)
+        base_extractor = copy(base_extractor) # avoid overwriting extractor fn
+        super(BinnedFeatureExtractor, self).__init__(base_extractor)
+        self.feature_type = self.FeatureTypes.Categorical
+        self.bin_fn = bin_fn
+
     def extract(self, part):
-        # Don't worry about extracting things that didn't appear often enough.
-        # Features not meeting the threshold will just be ignored as unknonwn
-        # features.
-        return self.base_extractor.extract(part)
+        return {self._get_binned_feature_name(k, self.bin_fn(v)): 1
+                for k, v in self.base_extractor.extract(part).iteritems()}
+
+    def extract_subfeature_names(self, instances):
+        x = list(set(chain(*[self.extract(part).keys() for part in instances])))
+        return x
+
+    @staticmethod
+    def _get_binned_feature_name(base_name, bin_range):
+        return u'%s<%s' % (base_name, bin_range)
+
+    @staticmethod
+    def bin_all_numeric(extractors, bin_fn=DEFAULT_BIN_FN):
+        return [(e if e.feature_type != FeatureExtractor.FeatureTypes.Numerical
+                 else BinnedFeatureExtractor(e, bin_fn))
+                for e in extractors]
 
 
 class Featurizer(object):
