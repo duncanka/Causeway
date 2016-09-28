@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from bidict._bidict import bidict
+import collections
 from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
 import io
 import logging
@@ -12,7 +13,7 @@ from iaa import stringify_connective
 from util import recursively_list_files
 from util.streams import read_stream_until, CharacterTrackingStreamWrapper
 from data import (StanfordParsedSentence, Annotation, CausationInstance,
-                  SentencesDocument, OverlappingRelationInstance)
+                  SentencesDocument, OverlappingRelationInstance, Token)
 
 try:
     DEFINE_bool('reader_binarize_degrees', True,
@@ -915,3 +916,123 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
 
         for overlapping_instance in sentence.overlapping_rel_instances:
             self._write_overlapping(overlapping_instance)
+
+
+class CausalityOracleTransitionWriter(InstancesDocumentWriter):
+    def _write_instance(self, document, sentence):
+        tokens = [token for token in sentence.tokens[1:] # skip ROOT
+                  if token.pos not in Token.PUNCT_TAGS]
+
+        # Initialize state. lambda_1 is unexamined tokens to the left of the
+        # current token; lambda_2 is examined tokens to the left; and likewise
+        # for lambda_4 and lambda_3, respectively, to the right.
+        lambda_1 = []
+        lambda_2 = collections.deque() # we'll be moving stuff onto the left end
+        lambda_3 = []
+        # We'll be moving stuff off of the left end of lambda_4.
+        lambda_4 = collections.deque(tokens)
+        lambdas = [lambda_1, lambda_2, lambda_3, lambda_4]
+        rels = []
+
+        # TODO: allow for multiple instances that share the same connective
+        # token.
+        connectives_to_instances = {}
+        for causation in sentence.causation_instances:
+            for connective_token in causation.connective:
+                connectives_to_instances[connective_token] = causation
+        for current_token in tokens:
+            instance_under_construction = None
+            try:
+                connective_instance = connectives_to_instances[current_token]
+
+                instance_under_construction = self._compare_with_conn(
+                    lambdas, lambda_1, lambda_2, current_token, rels, True,
+                    connective_instance, instance_under_construction,
+                    connectives_to_instances)
+                self._compare_with_conn(
+                    lambdas, lambda_4, lambda_3, current_token, rels, False,
+                    connective_instance, instance_under_construction,
+                    connectives_to_instances)
+                self._write_transition(lambdas, current_token, rels, 'SHIFT')
+
+            except KeyError:
+                self._write_transition(lambdas, current_token, rels, "NO-CONN")
+
+            if current_token is not tokens[-1]:
+                lambda_1.extend(lambda_2)
+                lambda_2.clear()
+                lambda_1.append(current_token)
+                if lambda_3: # we processed some right-side tokens
+                    lambda_4.extend(lambda_3[1:]) # skip copy of current_token
+                    del lambda_3[:]
+                else: # current_token was a no-conn
+                    lambda_4.popleft()
+
+    def _compare_with_conn(self, lambdas, uncompared, compared, current_token,
+                           rels, dir_is_left, connective_instance,
+                           instance_under_construction, conns_to_instances):
+        if dir_is_left:
+            arc_direction = 'LEFT'
+            first_uncompared_index = -1
+        else:
+            arc_direction = 'RIGHT'
+            first_uncompared_index = 0
+
+        while uncompared:
+            token_to_compare = uncompared[first_uncompared_index]
+            has_arc = False
+            for arc_type in ['cause', 'effect']:
+                if token_to_compare in getattr(connective_instance, arc_type):
+                    self._write_transition(
+                        lambdas, current_token, rels,
+                        "{}-ARC({})".format(arc_direction, arc_type.title()))
+                    if instance_under_construction is None:
+                        instance_under_construction = CausationInstance(
+                            connective_instance.sentence, cause=[], effect=[],
+                            connective=[current_token])
+                        rels.append(instance_under_construction)
+                    getattr(instance_under_construction, arc_type).append(
+                        token_to_compare)
+                    has_arc = True
+                    break
+            if (not has_arc and token_to_compare is not current_token
+                and token_to_compare in connective_instance.connective):
+                self._write_transition(lambdas, current_token, rels,
+                                       "CONN-FRAG-{}".format(arc_direction))
+                instance_under_construction.connective.append(token_to_compare)
+                del conns_to_instances[token_to_compare] # don't re-add
+                has_arc = True
+            if not has_arc:
+                self._write_transition(lambdas, current_token, rels,
+                                       "NO-ARC-{}".format(arc_direction))
+
+            if dir_is_left:
+                compared.appendleft(uncompared.pop())
+            else:
+                compared.append(uncompared.popleft())
+
+        return instance_under_construction # make update visible
+
+    def _write_transition(self, lambdas, current_token, rels, transition):
+        stringified_lambdas = [self._stringify_token_list(l) for l in lambdas]
+        state_line = u"{} {} {token} {} {}".format(
+            *stringified_lambdas, token=self._stringify_token(current_token))
+        rels_line = self._stringify_rels(rels)
+        self._file_stream.writelines(line + u'\n' for line in
+                                     [state_line, rels_line, transition])
+
+    def _stringify_token(self, token):
+        return '{}-{}'.format(token.original_text, token.index)
+
+    def _stringify_token_list(self, token_list):
+        token_strings = [self._stringify_token(t) for t in token_list]
+        return '[{}]'.format(', '.join(token_strings))
+
+    def _stringify_rels(self, rels):
+        instance_strings = [
+            '{}({}, {})'.format('/'.join([self._stringify_token(c)
+                                          for c in instance.connective]),
+                                self._stringify_token_list(instance.cause),
+                                self._stringify_token_list(instance.effect))
+            for instance in rels]
+        return '{{{}}}'.format(', '.join(instance_strings))
