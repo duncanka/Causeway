@@ -842,13 +842,14 @@ class _RelationMetrics(object):
             values = [property_enum[getattr(instance, property_name)]
                       for instance in [instance_1, instance_2]]
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
+            encoded_instance = _wrapped_sentence_highlighting_instance(
+                instance_1).encode('utf-8')
             print_indented(
                 indent, property_name, 's for connective "',
                 StanfordParsedSentence.get_annotation_text(
                     instance_1.connective).encode('utf-8)'),
-                '" differ: ', values[0], ' vs. ', values[1],
-                ' (', filename, ':', sentence_num, ': "',
-                _wrapped_sentence_highlighting_instance(instance_1), '")',
+                '" differ: ', values[0], ' vs. ', values[1], ' ',
+                '(', filename, ':', sentence_num, ': "', encoded_instance, '")',
                 sep='', file=log_file)
 
 
