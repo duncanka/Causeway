@@ -296,10 +296,14 @@ class ConfusionMatrix(confusionmatrix.ConfusionMatrix):
     def _get_f1_stats_arrays(self):
         # Which axis we call gold and which we call test is pretty arbitrary.
         # It doesn't matter, because F1 is symmetric.
-        tp = self._confusion.diagonal()
-        fp = self._confusion.sum(0) - tp
-        fn = self._confusion.sum(1) - tp
-        return (tp, fp, fn)
+        try:
+            tp = self._confusion.diagonal()
+            fp = self._confusion.sum(0) - tp
+            fn = self._confusion.sum(1) - tp
+            return (tp, fp, fn)
+        except ValueError:
+            logging.warn("Tried to get F1 stats for empty confusion matrix")
+            return (np.full((self._confusion.shape[0],), np.nan),) * 3
 
     def f1_micro(self):
         _, fp, fn = self._get_f1_stats_arrays()
