@@ -63,7 +63,7 @@ class HeadFindingTests(unittest.TestCase):
             'sufficient replacement for the discipline of a lender not lending'
             ' to a borrower',
             24, 'lending')
-        
+
     def testXcompWithSubjectHeadFinding(self):
         sentence = self.sentences[3]
         self._check_head(
@@ -77,7 +77,7 @@ class HeadFindingTests(unittest.TestCase):
         self._check_head(
             sentence.tokens[6:10] + [sentence.tokens[1]],
             'to find my daughter I', 7, 'find')
-        
+
     def testHeadDuplicatedAsChildsArg(self):
         sentence = self.sentences[4]
         # Duplicate passive subject.
@@ -154,4 +154,3 @@ class DependencyPathTests(unittest.TestCase):
         self.assertEqual(
             domination,
             StanfordParsedSentence.DOMINATION_DIRECTION.Independent)
-
