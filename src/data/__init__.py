@@ -876,6 +876,16 @@ class StanfordParsedSentence(object):
             self.edge_graph[start, end] = 1.0
         self.edge_graph = self.edge_graph.tocsr()
 
+    def __unicode__(self):
+        parse_lines = [u'%s(%s-%d, %s-%d)'
+                       % (label, self.tokens[edge[0]].lemma, edge[0],
+                          self.tokens[edge[1]].lemma, edge[1])
+                       for edge, label in sorted(self.edge_labels.iteritems())]
+        return u'%s\n\n%s' % (self.original_text, u'\n'.join(parse_lines))
+
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+
 StanfordParsedSentence.PTB_UNESCAPE_MAP = {
     v: k for k, v in StanfordParsedSentence.PTB_ESCAPE_MAP.items()
 }
