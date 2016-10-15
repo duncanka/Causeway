@@ -101,10 +101,10 @@ class DocumentReader(DocumentStream):
     '''
 
     def __iter__(self):
-        next_instance = self.get_next()
-        while next_instance is not None:
-            yield next_instance
-            next_instance = self.get_next()
+        next_document = self.get_next()
+        while next_document is not None:
+            yield next_document
+            next_document = self.get_next()
 
     def open(self, filepath):
         self.close()
