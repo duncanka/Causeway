@@ -1,11 +1,13 @@
 from __future__ import absolute_import
 
 from bidict._bidict import bidict
+from copy import deepcopy
 import collections
 from gflags import FLAGS, DEFINE_bool, DEFINE_string, DuplicateFlagError
 import io
 import logging
 import os
+from nltk.util import flatten
 import numpy as np
 import re
 
@@ -926,100 +928,171 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         # Initialize state. lambda_1 is unexamined tokens to the left of the
         # current token; lambda_2 is examined tokens to the left; and likewise
         # for lambda_4 and lambda_3, respectively, to the right.
-        lambda_1 = []
-        lambda_2 = collections.deque() # we'll be moving stuff onto the left end
-        lambda_3 = []
+        self.lambda_1 = []
+        self.lambda_2 = collections.deque() # we'll be appending to the left end
+        self.lambda_3 = []
         # We'll be moving stuff off of the left end of lambda_4.
-        lambda_4 = collections.deque(tokens)
-        lambdas = [lambda_1, lambda_2, lambda_3, lambda_4]
-        rels = []
+        self.lambda_4 = collections.deque(tokens)
+        self.lambdas = [self.lambda_1, self.lambda_2, self.lambda_3,
+                        self.lambda_4]
+        self.rels = []
+        self._last_op = None
 
-        # TODO: allow for multiple instances that share the same connective
-        # token.
-        connectives_to_instances = {}
+        connectives_to_instances = collections.defaultdict(list)
         for causation in sentence.causation_instances:
-            for connective_token in causation.connective:
-                connectives_to_instances[connective_token] = causation
+            first_conn_token = causation.connective[0]
+            connectives_to_instances[first_conn_token].append(causation)
+
+        # Make sure the instances for each token are sorted by order of
+        # appearance.
+        for _, causations in connectives_to_instances.iteritems():
+            causations.sort(key=lambda instance: tuple(t.index for t in
+                                                       instance.connective))
+
         for current_token in tokens:
             instance_under_construction = None
-            try:
-                connective_instance = connectives_to_instances[current_token]
-
+            token_instances = connectives_to_instances[current_token]
+            if token_instances: # some connective starts with this token
                 instance_under_construction = self._compare_with_conn(
-                    lambdas, lambda_1, lambda_2, current_token, rels, True,
-                    connective_instance, instance_under_construction,
-                    connectives_to_instances)
-                self._compare_with_conn(
-                    lambdas, lambda_4, lambda_3, current_token, rels, False,
-                    connective_instance, instance_under_construction,
-                    connectives_to_instances)
-                self._write_transition(lambdas, current_token, rels, 'SHIFT')
-
-            except KeyError:
-                self._write_transition(lambdas, current_token, rels, "NO-CONN")
+                    current_token, True, token_instances,
+                    instance_under_construction)
+                self._compare_with_conn(current_token, False, token_instances,
+                                        instance_under_construction)
+                self._write_transition(current_token, 'SHIFT')
+            else:
+                self._write_transition(current_token, "NO-CONN")
 
             if current_token is not tokens[-1]:
-                lambda_1.extend(lambda_2)
-                lambda_2.clear()
-                lambda_1.append(current_token)
-                if lambda_3: # we processed some right-side tokens
-                    lambda_4.extend(lambda_3[1:]) # skip copy of current_token
-                    del lambda_3[:]
+                self.lambda_1.extend(self.lambda_2)
+                self.lambda_2.clear()
+                self.lambda_1.append(current_token)
+                if self.lambda_3: # we processed some right-side tokens
+                    # Skip copy of current token.
+                    self.lambda_4.extend(self.lambda_3[1:])
+                    # If we didn't use del here, we'd have to reconstruct
+                    # self.lambdas.
+                    del self.lambda_3[:]
                 else: # current_token was a no-conn
-                    lambda_4.popleft()
+                    self.lambda_4.popleft()
+        self._file_stream.write(u'\n') # Final blank line
 
-    def _compare_with_conn(self, lambdas, uncompared, compared, current_token,
-                           rels, dir_is_left, connective_instance,
-                           instance_under_construction, conns_to_instances):
+        (self.lambda_1, self.lambda_2, self.lambda_3, self.lambda_4,
+         self.lambdas, self.rels) = [None] * 6 # Reset; release memory
+
+    def _do_shift(self, current_token, last_modified_arg, token_to_compare,
+                  instance_under_construction):
+        self._write_transition(current_token, 'SPLIT')
+
+        # Figure out where in the connective the token we're replacing is.
+        conn_token_index = None
+        for i, conn_token in enumerate(instance_under_construction.connective):
+            if conn_token.lemma == token_to_compare.lemma:
+                conn_token_index = i
+        if conn_token_index is None:
+            logging.warn("Didn't find a shared word when splitting connective;"
+                         " sharing only the first word")
+            conn_token_index = 1
+        arg_cutoff_index = instance_under_construction.connective[
+            conn_token_index].index
+
+        instance_under_construction = deepcopy(instance_under_construction)
+        self.rels.append(instance_under_construction)
+
+        # We need to know which tokens to keep from the argument we were
+        # building when we encountered this new connective token. We assume that
+        # we should keep any token preceding the connective fragment we're
+        # replacing.
+        new_argument = [t for t in getattr(instance_under_construction,
+                                           last_modified_arg)
+                        if t.index < arg_cutoff_index]
+        setattr(instance_under_construction, last_modified_arg,
+                new_argument)
+
+        instance_under_construction.connective = (
+            instance_under_construction.connective[:conn_token_index])
+        instance_under_construction.connective.append(token_to_compare)
+        # other_connective_tokens.remove(token_to_compare)
+        return instance_under_construction
+
+    def _compare_with_conn(self, current_token, dir_is_left,
+                           connective_instances, instance_under_construction):
         if dir_is_left:
             arc_direction = 'LEFT'
             first_uncompared_index = -1
+            compared = self.lambda_2
+            uncompared = self.lambda_1
         else:
             arc_direction = 'RIGHT'
             first_uncompared_index = 0
+            compared = self.lambda_3
+            uncompared = self.lambda_4
 
+        conn_instance_index = 0
+        conn_instance = connective_instances[conn_instance_index]
+        other_connective_tokens = set(flatten(
+            [i.connective for i in connective_instances[1:]]))
+        other_connective_tokens -= set(conn_instance.connective)
+        last_modified_arc_type = None
         while uncompared:
             token_to_compare = uncompared[first_uncompared_index]
             has_arc = False
-            for arc_type in ['cause', 'effect']:
-                if token_to_compare in getattr(connective_instance, arc_type):
-                    self._write_transition(
-                        lambdas, current_token, rels,
-                        "{}-ARC({})".format(arc_direction, arc_type.title()))
-                    if instance_under_construction is None:
-                        instance_under_construction = CausationInstance(
-                            connective_instance.sentence, cause=[], effect=[],
-                            connective=[current_token])
-                        rels.append(instance_under_construction)
-                    getattr(instance_under_construction, arc_type).append(
+
+            # First, see if we should split. But don't split on leftward tokens.
+            if (not dir_is_left and token_to_compare in other_connective_tokens
+                and self._last_op != 'SPLIT'):
+                instance_under_construction = self._do_shift(
+                    current_token, last_modified_arc_type, token_to_compare,
+                    instance_under_construction)
+                # Move to next
+                conn_instance_index += 1
+                conn_instance = connective_instances[conn_instance_index]
+                # Leave current token to be compared with new connective.
+            else:
+                # TODO: Is it a problem that we can't add a token to both the
+                # argument and the connective? Do we need to add an operation?
+                for arc_type in ['cause', 'effect']:
+                    if token_to_compare in getattr(conn_instance, arc_type):
+                        trans = "{}-ARC({})".format(arc_direction,
+                                                    arc_type.title())
+                        self._write_transition(current_token, trans)
+                        if instance_under_construction is None:
+                            instance_under_construction = CausationInstance(
+                                conn_instance.sentence, cause=[], effect=[],
+                                connective=[current_token])
+                            self.rels.append(instance_under_construction)
+                        getattr(instance_under_construction, arc_type).append(
+                            token_to_compare)
+                        has_arc = True
+                        last_modified_arc_type = arc_type
+                        break
+                if (not has_arc and token_to_compare is not current_token
+                    and self._last_op != 'SPLIT' # no fragments after splits
+                    and token_to_compare in conn_instance.connective):
+                    self._write_transition(current_token,
+                                           "CONN-FRAG-{}".format(arc_direction))
+                    instance_under_construction.connective.append(
                         token_to_compare)
                     has_arc = True
-                    break
-            if (not has_arc and token_to_compare is not current_token
-                and token_to_compare in connective_instance.connective):
-                self._write_transition(lambdas, current_token, rels,
-                                       "CONN-FRAG-{}".format(arc_direction))
-                instance_under_construction.connective.append(token_to_compare)
-                del conns_to_instances[token_to_compare] # don't re-add
-                has_arc = True
-            if not has_arc:
-                self._write_transition(lambdas, current_token, rels,
-                                       "NO-ARC-{}".format(arc_direction))
+                if not has_arc:
+                    self._write_transition(current_token,
+                                           "NO-ARC-{}".format(arc_direction))
 
-            if dir_is_left:
-                compared.appendleft(uncompared.pop())
-            else:
-                compared.append(uncompared.popleft())
+                if dir_is_left:
+                    compared.appendleft(uncompared.pop())
+                else:
+                    compared.append(uncompared.popleft())
 
         return instance_under_construction # make update visible
 
-    def _write_transition(self, lambdas, current_token, rels, transition):
-        stringified_lambdas = [self._stringify_token_list(l) for l in lambdas]
+    def _write_transition(self, current_token, transition):
+        stringified_lambdas = [self._stringify_token_list(l)
+                               for l in self.lambdas]
         state_line = u"{} {} {token} {} {}".format(
             *stringified_lambdas, token=self._stringify_token(current_token))
-        rels_line = self._stringify_rels(rels)
+        rels_line = self._stringify_rels()
         self._file_stream.writelines(line + u'\n' for line in
                                      [state_line, rels_line, transition])
+        self._last_op = transition
 
     def _stringify_token(self, token):
         return '{}-{}'.format(token.original_text, token.index)
@@ -1028,11 +1101,11 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         token_strings = [self._stringify_token(t) for t in token_list]
         return '[{}]'.format(', '.join(token_strings))
 
-    def _stringify_rels(self, rels):
+    def _stringify_rels(self):
         instance_strings = [
             '{}({}, {})'.format('/'.join([self._stringify_token(c)
                                           for c in instance.connective]),
                                 self._stringify_token_list(instance.cause),
                                 self._stringify_token_list(instance.effect))
-            for instance in rels]
+            for instance in self.rels]
         return '{{{}}}'.format(', '.join(instance_strings))
