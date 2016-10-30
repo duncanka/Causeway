@@ -51,3 +51,6 @@ class StanfordParsedSentenceReaderTest(unittest.TestCase):
             StanfordParsedSentenceReader, 'DataTest', 'data_test.txt')
         self.assertEqual(1, len(documents))
         self.assertEqual(5, len(documents[0].sentences))
+
+
+# TODO: add Oracle transition writer tests

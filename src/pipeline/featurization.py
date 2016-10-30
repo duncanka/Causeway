@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from copy import copy
 from cPickle import PicklingError
 from gflags import DEFINE_string, FLAGS, DuplicateFlagError
@@ -25,6 +25,12 @@ class FeaturizationError(Exception):
 
 class FeatureExtractor(object):
     FeatureTypes = Enum(['Categorical', 'Numerical', 'Binary'])
+    '''
+    Whether extract() can return features not registered by
+    extract_subfeature_names when run on the same set of instances. Should be
+    overridden in extractor classes where this is true.
+    '''
+    _EXTRACT_PRODUCES_VALUES_TO_IGNORE = False
 
     def __init__(self, name, extractor_fn, feature_type=None):
         if feature_type is None:
@@ -208,6 +214,9 @@ class ThresholdedFeatureExtractor(_MetaFeatureExtractor):
     features that appear at least a given number of times in the training data.
     This class doesn't respect the base extractor's extract_subfeature_names.
     """
+
+    _EXTRACT_PRODUCES_VALUES_TO_IGNORE = True
+
     def __init__(self, base_extractor, threshold):
         super(ThresholdedFeatureExtractor, self).__init__(base_extractor)
         self.threshold = threshold
@@ -246,12 +255,28 @@ class BinnedFeatureExtractor(_MetaFeatureExtractor):
                 for k, v in self.base_extractor.extract(part).iteritems()}
 
     def extract_subfeature_names(self, instances):
-        x = list(set(chain(*[self.extract(part).keys() for part in instances])))
-        return x
+        # We need to know the actual values to know what the bins will be.
+        names = set()
+        if self.base_extractor._EXTRACT_PRODUCES_VALUES_TO_IGNORE:
+            # Well, great. Now we have to run extraction twice, to get the bin
+            # values and to filter to extracted features that we actually care
+            # about.
+            valid_names = set(self.base_extractor.extract_subfeature_names(
+                instances))
+            for part in instances:
+                for k, v in self.base_extractor.extract(part).iteritems():
+                    if k in valid_names:
+                        names.add(
+                            self._get_binned_feature_name(k, self.bin_fn(v)))
+        else:
+            for part in instances:
+                names.update(self.extract(part).keys())
+
+        return names
 
     @staticmethod
-    def _get_binned_feature_name(base_name, bin_range):
-        return u'%s<%s' % (base_name, bin_range)
+    def _get_binned_feature_name(base_name, bin_id):
+        return u'%s<%s' % (base_name, bin_id)
 
     @staticmethod
     def bin_all_numeric(extractors, bin_fn=DEFAULT_BIN_FN):
