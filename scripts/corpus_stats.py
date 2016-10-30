@@ -1,9 +1,12 @@
 from collections import Counter
+from itertools import chain
+import matplotlib.pyplot as plt
 
 from data import Token
 from data.io import CausalityStandoffReader, DirectoryReader
 from util import listify
 from read_all import read_all
+
 
 def not_contiguous(instance):
     connective = instance.connective
@@ -36,13 +39,19 @@ def mwe(instance):
     return False
 
 
-def count(documents, criterion):
-    return sum([sum([len([i for i in s.causation_instances if criterion(i)])
-                     for s in d.sentences])
-                for d in documents])
+def count(documents, criterion, print_matching=False):
+    matching = 0
+    for d in documents:
+        for s in d.sentences:
+            for i in s.causation_instances:
+                if criterion(i):
+                    matching += 1
+                    if print_matching:
+                        print i
+    return matching
 
 
-def count_from_files(paths, criterion):
+def count_from_files(paths, criterion, print_matching=False):
     reader = DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
                              CausalityStandoffReader())
     paths = listify(paths)
@@ -50,8 +59,9 @@ def count_from_files(paths, criterion):
     for path in paths:
         reader.open(path)
         docs = reader.get_all()
-        total += count(docs, criterion)
+        total += count(docs, criterion, print_matching)
     return total
+
 
 def arg_deps(instances, pairwise=True):
     cause_deps = Counter()
@@ -69,7 +79,8 @@ def arg_deps(instances, pairwise=True):
                 deps[incoming_dep] += 1
     return cause_deps, effect_deps
 
-def arg_length_dist(instances, pairwise=True):
+
+def arg_lengths(instances, pairwise=True):
     cause_lengths = Counter()
     effect_lengths = Counter()
     for i in instances:
@@ -81,3 +92,24 @@ def arg_length_dist(instances, pairwise=True):
         for arg, sizes in zip([cause, effect], [cause_lengths, effect_lengths]):
             sizes[len(arg)] += 1
     return cause_lengths, effect_lengths
+
+
+def plot_arg_lengths(cause_lengths, effect_lengths):
+    min_bin, max_bin = 1, 21
+    bins = range(min_bin, max_bin)
+    causes, effects = [list(chain.from_iterable([i] * l[i] for i in bins))
+                       for l in cause_lengths, effect_lengths]
+    plt.hist(causes, bins=bins, color='#4b79b4')
+    plt.hist(effects, bins=bins, color='#FA8072', alpha=0.7)
+
+    ax = plt.gca()
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    plt.tick_params(axis='both', labelsize=15, length=0)
+    plt.xlim(min_bin, max_bin-1)
+    plt.xlabel('Argument length', fontsize=16)
+    plt.ylabel('Count', fontsize=16)
+    plt.text(3.3, 125, 'Causes', color='#4b79b4', fontsize=18)
+    plt.text(7.3, 85, 'Effects', color='#f96353', fontsize=18)
+    plt.show(False)
