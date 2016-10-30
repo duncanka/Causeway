@@ -2,7 +2,7 @@ from collections import defaultdict
 from gflags import DEFINE_integer, FLAGS, DuplicateFlagError
 from itertools import product
 
-from causality_pipelines import IAAEvaluator, PossibleCausation, get_causation_tuple
+from causeway import IAAEvaluator, PossibleCausation, get_causation_tuple
 from data import StanfordParsedSentence
 import logging
 from pipeline import Stage

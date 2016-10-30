@@ -1,8 +1,8 @@
 import logging
 import sys
 
-from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
-from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
+from causeway.regex_based.regex_stage import RegexConnectiveStage
+from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
 from gflags import FLAGS, FlagsError, DEFINE_enum, DuplicateFlagError
 from data.io import DirectoryReader, CausalityStandoffReader
 from pipeline import Pipeline

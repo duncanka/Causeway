@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import os
 
-from causality_pipelines import IAAEvaluator, RELATIVE_POSITIONS
+from causeway import IAAEvaluator, RELATIVE_POSITIONS
 from pipeline.models.structured import CRFModel
 from pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
 from pipeline import Stage

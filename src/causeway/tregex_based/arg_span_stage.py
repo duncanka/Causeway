@@ -2,7 +2,7 @@ from gflags import FLAGS
 from itertools import permutations, chain
 import logging
 
-from causality_pipelines import IAAEvaluator
+from causeway import IAAEvaluator
 from pipeline import Stage
 from pipeline.models import Model
 

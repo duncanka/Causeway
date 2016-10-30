@@ -12,8 +12,7 @@ import sklearn
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
-from causality_pipelines import (IAAEvaluator, StanfordNERStage,
-                                 RELATIVE_POSITIONS)
+from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
 from data import Token, StanfordParsedSentence, CausationInstance
 from iaa import make_annotation_comparator, stringify_connective
 from nlp.senna import SennaEmbeddings
@@ -718,7 +717,7 @@ class PatternBasedCausationFilter(StructuredModel):
             CausalClassifierModel.per_conn_and_shared_feature_extractors)
         self.base_per_conn_classifier = make_featurizing_estimator(
             base_per_conn_classifier,
-            'causality_pipelines.candidate_filter.CausalClassifierModel'
+            'causeway.candidate_filter.CausalClassifierModel'
             '.per_conn_and_shared_feature_extractors',
             per_conn_selected, 'perconn_classifier')
 
@@ -727,7 +726,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 selected_features)
             self.global_classifier = make_featurizing_estimator(
                 global_classifier,
-                'causality_pipelines.candidate_filter.CausalClassifierModel'
+                'causeway.candidate_filter.CausalClassifierModel'
                 '.all_binned_feature_extractors',
                 global_selected, 'global_causality_classifier')
         else:
@@ -736,7 +735,7 @@ class PatternBasedCausationFilter(StructuredModel):
                 CausalClassifierModel.global_and_shared_feature_extractors)
             self.global_classifier = make_featurizing_estimator(
                 global_classifier,
-                'causality_pipelines.candidate_filter.CausalClassifierModel'
+                'causeway.candidate_filter.CausalClassifierModel'
                 '.global_and_shared_feature_extractors',
                 global_selected, 'global_causality_classifier')
 

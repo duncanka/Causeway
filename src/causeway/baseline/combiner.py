@@ -1,7 +1,7 @@
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 
-from causality_pipelines import IAAEvaluator
+from causeway import IAAEvaluator
 from pipeline import Stage
 from pipeline.models.structured import StructuredModel, StructuredDecoder
 

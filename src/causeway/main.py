@@ -9,18 +9,17 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
-from causality_pipelines import (remove_smaller_matches, StanfordNERStage,
-                                 IAAEvaluator)
-from causality_pipelines.baseline import BaselineStage
-from causality_pipelines.baseline.combiner import BaselineCombinerStage
-from causality_pipelines.baseline.most_freq_filter import (
+from causeway import remove_smaller_matches, StanfordNERStage, IAAEvaluator
+from causeway.baseline import BaselineStage
+from causeway.baseline.combiner import BaselineCombinerStage
+from causeway.baseline.most_freq_filter import (
     MostFreqSenseFilterStage)
-from causality_pipelines.candidate_filter import (CausationPatternFilterStage,
-                                                  CausalClassifierModel)
-from causality_pipelines.regex_based.crf_stage import ArgumentLabelerStage
-from causality_pipelines.regex_based.regex_stage import RegexConnectiveStage
-from causality_pipelines.tregex_based.arg_span_stage import ArgSpanStage
-from causality_pipelines.tregex_based.tregex_stage import TRegexConnectiveStage
+from causeway.candidate_filter import (CausationPatternFilterStage,
+                                                 CausalClassifierModel)
+from causeway.regex_based.crf_stage import ArgumentLabelerStage
+from causeway.regex_based.regex_stage import RegexConnectiveStage
+from causeway.tregex_based.arg_span_stage import ArgSpanStage
+from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
 from data.io import DirectoryReader, CausalityStandoffReader
 from pipeline import Pipeline, SimpleStage
 from pipeline.models import ClassBalancingClassifierWrapper

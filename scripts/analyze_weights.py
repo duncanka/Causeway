@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.pipeline import Pipeline
 import sys
 
-from causality_pipelines.candidate_filter import get_weights_for_lr_classifier
+from causeway.candidate_filter import get_weights_for_lr_classifier
 from util import print_indented
 
 

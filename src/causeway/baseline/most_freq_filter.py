@@ -1,10 +1,9 @@
 from collections import defaultdict
 from gflags import FLAGS
 
-from causality_pipelines import IAAEvaluator
+from causeway import IAAEvaluator
 from iaa import stringify_connective
 from pipeline import Stage
-from pipeline.models import Model
 from pipeline.models.structured import StructuredModel, StructuredDecoder
 
 

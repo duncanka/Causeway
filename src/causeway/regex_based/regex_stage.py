@@ -4,7 +4,7 @@ import logging
 import re
 import time
 
-from causality_pipelines import PossibleCausation, IAAEvaluator
+from causeway import PossibleCausation, IAAEvaluator
 from pipeline import Stage
 from pipeline.models import Model
 from util import Enum
