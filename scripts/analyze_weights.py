@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.pipeline import Pipeline
 import sys
@@ -49,3 +50,9 @@ def print_per_connective_weights(pipeline, file=sys.stdout):
         else:
             print(connective, ':', sep='', file=file)
             print_ordered_dict(weights, 1, file=file)
+
+def plot_hist(d, key, color='blue', show=True):
+    plt.hist(d[key], bins='auto', color=color, alpha=0.7)
+    plt.title(key)
+    if show:
+        plt.show()
