@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+
 from gflags import (DEFINE_list, DEFINE_bool, DEFINE_integer,
                     DuplicateFlagError, FlagsError, FLAGS)
 import itertools
 import logging
 import sys
 
-from data.io import DirectoryReader, CausalityStandoffReader
+from causeway.because_data import CausalityStandoffReader
+from data.io import DirectoryReader
 from iaa import CausalityMetrics, print_indented
+
 
 try:
     DEFINE_list(

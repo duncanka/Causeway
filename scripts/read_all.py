@@ -1,6 +1,8 @@
 from itertools import chain
 
-from data.io import CausalityStandoffReader, DirectoryReader
+from causeway.because_data import CausalityStandoffReader
+from data.io import DirectoryReader
+
 
 def get_reader():
     return DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),

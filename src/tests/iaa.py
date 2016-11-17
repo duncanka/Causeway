@@ -1,13 +1,14 @@
 from __future__ import absolute_import
 
-from copy import deepcopy, copy
+from copy import deepcopy
 import gflags
 import unittest
 
-from data.io import CausalityStandoffReader
+from causeway.data import CausalityStandoffReader
 from iaa import CausalityMetrics
 from tests import get_sentences_from_file
 from util.metrics import ClassificationMetrics, AccuracyMetrics
+
 
 class CausalityMetricsTest(unittest.TestCase):
     @classmethod

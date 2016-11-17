@@ -1,4 +1,6 @@
 """
+A module of stream-reading utilities that get sped up noticeably when compiled.
+
 To compile:
 cython -a streams.pyx
 gcc -shared -pthread -fPIC -fwrapv -O2 -Wall -fno-strict-aliasing \

@@ -2,8 +2,9 @@ from collections import defaultdict
 from itertools import chain
 import logging
 
+from causeway.because_data import CausalityStandoffReader
 from causeway.tregex_based.tregex_stage import TRegexConnectiveModel
-from data.io import DirectoryReader, CausalityStandoffReader
+from data.io import DirectoryReader
 from iaa import stringify_connective
 from util import print_indented
 

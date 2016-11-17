@@ -4,8 +4,9 @@ from os import path
 import shutil
 import sys
 
-from data.io import (CausalityStandoffReader, CausalityStandoffWriter,
-                     StanfordParsedSentenceReader)
+from causeway.because_data import CausalityStandoffReader, CausalityStandoffWriter
+from data.io import StanfordParsedSentenceReader
+
 
 try:
     DEFINE_integer('start_sentence', 0, 'Sentence at which to start copying')

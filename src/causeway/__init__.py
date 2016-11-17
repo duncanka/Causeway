@@ -7,7 +7,7 @@ from nltk.tag.stanford import StanfordNERTagger
 import operator
 from os import path
 
-from data import StanfordParsedSentence, CausationInstance
+from causeway.because_data import CausationInstance
 from iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented, Enum, make_getter, make_setter

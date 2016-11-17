@@ -2,10 +2,10 @@ from collections import Counter
 from itertools import chain
 import matplotlib.pyplot as plt
 
+from causeway.because_data import CausalityStandoffReader
 from data import Token
-from data.io import CausalityStandoffReader, DirectoryReader
+from data.io import DirectoryReader
 from util import listify
-from read_all import read_all
 
 
 def not_contiguous(instance):

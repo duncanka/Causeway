@@ -5,6 +5,7 @@ from itertools import chain, product
 import logging
 import math
 from nltk.corpus import wordnet
+from nltk.metrics.scores import accuracy
 from nltk.util import skipgrams
 import numpy as np
 from scipy.spatial import distance
@@ -13,7 +14,8 @@ from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
 from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
-from data import Token, StanfordParsedSentence, CausationInstance
+from causeway.because_data import Token, CausationInstance
+from data import StanfordParsedSentence
 from iaa import make_annotation_comparator, stringify_connective
 from nlp.senna import SennaEmbeddings
 from pipeline import Stage
@@ -27,10 +29,9 @@ from skpipeline import (make_featurizing_estimator,
                         make_mostfreq_featurizing_estimator)
 from util import powerset
 from util.diff import SequenceDiff
+from util.metrics import ClassificationMetrics, diff_binary_vectors
 from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
                         prob_sum_score)
-from util.metrics import ClassificationMetrics, diff_binary_vectors
-from nltk.metrics.scores import accuracy
 
 
 try:

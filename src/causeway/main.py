@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import absolute_import
+
 from gflags import (FLAGS, DEFINE_enum, DEFINE_bool, DEFINE_integer,
                     DEFINE_float, DEFINE_string, DuplicateFlagError, FlagsError)
 import logging
@@ -12,22 +14,21 @@ import sys
 from causeway import remove_smaller_matches, StanfordNERStage, IAAEvaluator
 from causeway.baseline import BaselineStage
 from causeway.baseline.combiner import BaselineCombinerStage
-from causeway.baseline.most_freq_filter import (
-    MostFreqSenseFilterStage)
+from causeway.baseline.most_freq_filter import MostFreqSenseFilterStage
 from causeway.candidate_filter import (CausationPatternFilterStage,
-                                                 CausalClassifierModel)
+                                       CausalClassifierModel)
+from causeway.because_data import CausalityStandoffReader
 from causeway.regex_based.crf_stage import ArgumentLabelerStage
 from causeway.regex_based.regex_stage import RegexConnectiveStage
 from causeway.tregex_based.arg_span_stage import ArgSpanStage
 from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
-from data.io import DirectoryReader, CausalityStandoffReader
+from data.io import DirectoryReader
 from pipeline import Pipeline, SimpleStage
 from pipeline.models import ClassBalancingClassifierWrapper
 from util import print_indented
 
 
 # TODO: factor out a generic driver function?
-
 try:
     DEFINE_enum('classifier_model', 'logistic',
                 ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
@@ -55,8 +56,8 @@ try:
                   "Directory in which to save models and from which to load"
                   " them. Relative to the working directory. Defaults to"
                   " ../models/<pipeline type>.")
-except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+except DuplicateFlagError:
+    logging.warn('Ignoring redefinition of flag')
 
 
 def get_stages(candidate_classifier):

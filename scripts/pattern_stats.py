@@ -1,11 +1,13 @@
+from gflags import FLAGS, FlagsError, DEFINE_enum, DuplicateFlagError
 import logging
 import sys
 
+from causeway.because_data import CausalityStandoffReader
 from causeway.regex_based.regex_stage import RegexConnectiveStage
 from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
-from gflags import FLAGS, FlagsError, DEFINE_enum, DuplicateFlagError
-from data.io import DirectoryReader, CausalityStandoffReader
+from data.io import DirectoryReader
 from pipeline import Pipeline
+
 
 try:
     DEFINE_enum('pattern_type', 'tregex', ['tregex', 'regex'],
