@@ -4,7 +4,9 @@ from os import path
 import shutil
 import sys
 
-from causeway.because_data import CausalityStandoffReader, CausalityStandoffWriter
+from causeway.because_data import (
+    CausalityStandoffReader, CausalityStandoffWriter, 
+    CausewaySentence)
 from data.io import StanfordParsedSentenceReader
 
 
@@ -40,7 +42,8 @@ if __name__ == '__main__':
     else:
         start_copying_char = 0
 
-    sentence_reader = StanfordParsedSentenceReader(in_txt_name)
+    sentence_reader = StanfordParsedSentenceReader(in_txt_name,
+                                                   CausewaySentence)
     for i in range(FLAGS.start_sentence):
         sentence_reader.get_next_sentence()
 

@@ -1,9 +1,8 @@
 '''
-Define basic causality datatypes
+Define basic NLP datatypes
 '''
 
 from bidict import bidict
-from copy import copy, deepcopy
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 from nltk.tree import ImmutableParentedTree, Tree
@@ -148,7 +147,6 @@ class DependencyPathError(ValueError):
 
 
 class StanfordParsedSentence(object):
-    # TODO: Split this class into general and causality-specific
     PTB_ESCAPE_MAP = {'*': '\\*', '. . .': '...', '(': '-LRB-', ')': '-RRB-',
                       '{': '-LCB-', '}': '-RCB-', '[': '-LSB-', ']': '-RSB-'}
     PTB_UNESCAPE_MAP = {} # filled in later from PTB_ESCAPE_MAP below
@@ -161,25 +159,6 @@ class StanfordParsedSentence(object):
         "([A-Za-z_\\-/\\.':]+)\\((.+)-(\\d+)('*), (.+)-(\\d+)('*)\\)")
     DEPTH_EXCLUDED_EDGE_LABELS = ['ref']
 
-    @staticmethod
-    def unescape_token_text(token_text):
-        token_text = token_text.replace(u'\xa0', ' ')
-        return StanfordParsedSentence.PTB_UNESCAPE_MAP.get(token_text,
-                                                           token_text)
-
-    @staticmethod
-    def escape_token_text(token_text):
-        token_text = token_text.replace(' ', u'\xa0')
-        return StanfordParsedSentence.PTB_ESCAPE_MAP.get(token_text, token_text)
-
-    @staticmethod
-    def get_annotation_text(annotation_tokens):
-        try:
-            return ' '.join([token.original_text
-                             for token in annotation_tokens])
-        except TypeError: # Happens if None is passed
-            return ''
-
     def __init__(self, tokenized_text, tagged_lemmas, penn_tree, edges,
                  document_text):
         '''
@@ -190,6 +169,8 @@ class StanfordParsedSentence(object):
          `util.streams.CharacterTrackingStreamWrapper`. (Built-in stream types
          will *not* work.)
         '''
+        # TODO: move much of the initialization functionality, particularly
+        # aligning tokens to text, into the reader class.
         self.tokens = []
         self.edge_labels = {} # maps (n1_index, n2_index) tuples to labels
         try:
@@ -222,8 +203,24 @@ class StanfordParsedSentence(object):
             self.constituency_graph = None
             self.constituent_heads = None
 
-        self.causation_instances = []
-        self.overlapping_rel_instances = []
+    @staticmethod
+    def unescape_token_text(token_text):
+        token_text = token_text.replace(u'\xa0', ' ')
+        return StanfordParsedSentence.PTB_UNESCAPE_MAP.get(token_text,
+                                                           token_text)
+
+    @staticmethod
+    def escape_token_text(token_text):
+        token_text = token_text.replace(' ', u'\xa0')
+        return StanfordParsedSentence.PTB_ESCAPE_MAP.get(token_text, token_text)
+
+    @staticmethod
+    def get_text_for_tokens(annotation_tokens):
+        try:
+            return ' '.join([token.original_text
+                             for token in annotation_tokens])
+        except TypeError: # Happens if None is passed
+            return ''
 
     def get_depth(self, token):
         return self.__depths[token.index]
@@ -272,16 +269,6 @@ class StanfordParsedSentence(object):
             logging.warn('Returning null head for tokens %s'
                          % tokens);
         return head
-
-    def add_causation_instance(self, *args, **kwargs):
-        instance = CausationInstance(self, *args, **kwargs)
-        self.causation_instances.append(instance)
-        return instance
-
-    def add_overlapping_instance(self, *args, **kwargs):
-        instance = OverlappingRelationInstance(self, *args, **kwargs)
-        self.overlapping_rel_instances.append(instance)
-        return instance
 
     def count_words_between(self, token1, token2):
         ''' Counts words between tokens based purely on the token IDs,
@@ -422,78 +409,6 @@ class StanfordParsedSentence(object):
 
         return closest, min_distance
 
-    def dep_to_ptb_tree_string(self):
-        # Collapsed dependencies can have cycles, so we need to avoid infinite
-        # recursion.
-        visited = set()
-        def convert_node(node, incoming_arc_label):
-            # If we've already visited the node before, don't recurse on it --
-            # just re-output its own string. In the vast majority of cases,
-            # this will match the patterns just fine, since they're only
-            # matching heads anyway. And since we're duplicating the node name,
-            # we'll know later what real node matched.
-            recurse = node not in visited
-            visited.add(node)
-            lemma = self.escape_token_text(node.lemma)
-            node_str = '(%s_%d %s %s' % (lemma, node.index,
-                                         incoming_arc_label, node.pos)
-
-            for child_arc_label, child in sorted(
-                self.get_children(node),
-                key=lambda pair: pair[1].start_offset):
-                if recurse and child_arc_label != 'ref':
-                    node_str += ' ' + convert_node(child, child_arc_label)
-            node_str += ')'
-            return node_str
-
-        return '(ROOT %s)' % convert_node(
-            self.get_children(self.tokens[0], 'root')[0], 'root')
-
-
-    @staticmethod
-    def _sentence_graph_from_ptb_str(ptb_str, num_tokens):
-        # We need to have num_tokens provided here, or else we won't know for
-        # sure how big the graph should be. (There can be tokens missing from
-        # the graph, and even if there aren't it would take more processing
-        # than it's worth to find the max node index in the PTB tree.)
-        tree = ImmutableParentedTree.fromstring(ptb_str)
-        edge_graph = lil_matrix((num_tokens, num_tokens), dtype='float')
-        edge_labels = {}
-        excluded_edges = []
-
-        def convert_node(parent_index, node):
-            # Node index is whatever's after the last underscore.
-            node_label = node.label()
-            node_index = int(node_label[node_label.rindex('_') + 1:])
-            edge_label = node[0]  # 0th child is always edge label
-            if edge_label in StanfordParsedSentence.DEPTH_EXCLUDED_EDGE_LABELS:
-                excluded_edges.append((parent_index, node_index))
-            else:
-                edge_graph[parent_index, node_index] = 1.0
-            edge_labels[parent_index, node_index] = edge_label
-
-            for child in node[2:]: # Skip edge label (child 0) & POS (child 1).
-                convert_node(node_index, child)
-
-        for root_child in tree:
-            convert_node(0, root_child) # initial parent index is 0 for root
-        return edge_graph.tocsr(), edge_labels, excluded_edges
-
-    def substitute_dep_ptb_graph(self, ptb_str):
-        '''
-        Returns a copy of the StanfordParsedSentence object, whose edge graph
-        has been replaced by the one represented in `ptb_str`. Uses
-        `shallow_copy_with_sentences_fixed` to get a mostly shallow copy, but
-        with correctly parented CausationInstance and Token objects.
-        '''
-        edge_graph, edge_labels, excluded_edges = (
-            self._sentence_graph_from_ptb_str(ptb_str, len(self.tokens)))
-        new_sentence = self.shallow_copy_with_sentences_fixed(self)
-        new_sentence.edge_graph = edge_graph
-        new_sentence.edge_labels = edge_labels
-        new_sentence.__initialize_graph(excluded_edges)
-        return new_sentence
-
     def get_constituency_node_for_tokens(self, tokens):
         # Token indices include ROOT, so we subtract 1 to get indices that will
         # match NLTK's leaf indices.
@@ -524,76 +439,6 @@ class StanfordParsedSentence(object):
         else:
             raise ValueError("Somehow you passed a node whose leaf isn't under"
                              " its root. Wow.")
-
-    @staticmethod
-    def shallow_copy_with_sentences_fixed(sentence):
-        '''
-        Creates a shallow copy of sentence, but with causation_instances and
-        Tokens on the new object set to shallow copies of the original objects,
-        so that they can know their correct source sentence.
-        '''
-        cls = sentence.__class__
-        new_sentence = cls.__new__(cls)
-        new_sentence.__dict__.update(sentence.__dict__)
-
-        new_sentence.tokens = []
-        for token in sentence.tokens:
-            new_token = object.__new__(token.__class__)
-            new_token.__dict__.update(token.__dict__)
-            new_token.parent_sentence = new_sentence
-            new_sentence.tokens.append(new_token)
-
-        new_sentence.causation_instances = []
-        for causation_instance in sentence.causation_instances:
-            new_instance = copy(causation_instance)
-            new_instance.sentence = new_sentence
-            # Update connective/cause/effect tokens to the ones that point to
-            # the new sentence object.
-            if causation_instance.connective:
-                new_instance.connective = [new_sentence.tokens[t.index] for t
-                                           in causation_instance.connective]
-            if causation_instance.cause:
-                new_instance.cause = [new_sentence.tokens[t.index] for t
-                                      in causation_instance.cause]
-            if causation_instance.effect:
-                new_instance.effect = [new_sentence.tokens[t.index] for t
-                                       in causation_instance.effect]
-            new_sentence.causation_instances.append(new_instance)
-        return new_sentence
-
-    def get_auxiliaries_string(self, head):
-        # If it's not a copular construction and it's a noun phrase, the whole
-        # argument is a noun phrase, so the notion of tense doesn't apply.
-        copulas = self.get_children(head, 'cop')
-        if not copulas and head.pos in Token.NOUN_TAGS:
-            return '<NOM>'
-
-        auxiliaries = self.get_children(head, 'aux')
-        passive_auxes = self.get_children(head, 'auxpass')
-        auxes_plus_head = auxiliaries + passive_auxes + copulas + [head]
-        auxes_plus_head.sort(key=lambda token: token.start_offset)
-
-        CONTRACTION_DICT = {
-            "'s": 'is',
-             "'m": 'am',
-             "'d": 'would',
-             "'re": 'are',
-             'wo': 'will', # from "won't"
-             'ca': 'can' # from "can't"
-        }
-        aux_token_strings = []
-        for token in auxes_plus_head:
-            if token is head:
-                aux_token_strings.append(token.pos)
-            else:
-                if token in copulas:
-                    aux_token_strings.append('COP.' + token.pos)
-                else:
-                    aux_token_strings.append(
-                         CONTRACTION_DICT.get(token.lowered_text,
-                                              token.lowered_text))
-
-        return '_'.join(aux_token_strings)
 
     DOMINATION_DIRECTION = Enum(['Dominates', 'DominatedBy', 'Independent'])
     def get_domination_relation(self, token1, token2):
@@ -807,7 +652,7 @@ class StanfordParsedSentence(object):
         self.edge_graph = lil_matrix((num_nodes, num_nodes), dtype='float')
         graph_excluded_edges = [] # edges that shouldn't be used for graph algs
         for match_result in matches:
-            (relation, arg1_lemma, arg1_index, arg1_copy, arg2_lemma,
+            (relation, _arg1_lemma, arg1_index, arg1_copy, _arg2_lemma,
              arg2_index, arg2_copy) = match_result.group(*range(1,8))
             arg1_index = int(arg1_index)
             arg2_index = int(arg2_index)
@@ -821,9 +666,9 @@ class StanfordParsedSentence(object):
                 graph_excluded_edges.append((token_1_idx, token_2_idx))
             else:
                 self.edge_graph[token_1_idx, token_2_idx] = 1.0
-        self.__initialize_graph(graph_excluded_edges)
+        self._initialize_graph(graph_excluded_edges)
 
-    def __initialize_graph(self, graph_excluded_edges):
+    def _initialize_graph(self, graph_excluded_edges):
         # Convert to CSR for shortest path (which would do it anyway) and to
         # make self.get_children() below work.
         self.edge_graph = self.edge_graph.tocsr()

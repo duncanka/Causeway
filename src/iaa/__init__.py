@@ -813,7 +813,7 @@ class _RelationMetrics(object):
 
         for instance_1, instance_2, sentence_num in self.argument_differences:
             filename = os.path.split(instance_1.sentence.source_file_path)[-1]
-            connective_text = StanfordParsedSentence.get_annotation_text(
+            connective_text = StanfordParsedSentence.get_text_for_tokens(
                     instance_1.connective).encode('utf-8)')
             print_indented(
                 indent, 'Arguments differ for connective "', connective_text,
@@ -847,7 +847,7 @@ class _RelationMetrics(object):
                 instance_1).encode('utf-8')
             print_indented(
                 indent, property_name, 's for connective "',
-                StanfordParsedSentence.get_annotation_text(
+                StanfordParsedSentence.get_text_for_tokens(
                     instance_1.connective).encode('utf-8)'),
                 '" differ: ', values[0], ' vs. ', values[1], ' ',
                 '(', filename, ':', sentence_num, ': "', encoded_instance, '")',

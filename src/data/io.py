@@ -116,8 +116,12 @@ class StanfordParsedSentenceReader(DocumentReader):
     for that file. Returns one SentencesDocument of StanfordParsedSentences per
     file.
     '''
-    def __init__(self, filepath=None):
+    def __init__(self, filepath=None, sentence_class=StanfordParsedSentence):
+        if not issubclass(sentence_class, StanfordParsedSentence):
+            raise TypeError("StanfordParsedSentenceReader can only parse to"
+                            " subclasses of StanfordParsedSentence")
         self._parse_file = None
+        self.sentence_class = sentence_class
         super(StanfordParsedSentenceReader, self).__init__(filepath)
 
     def open(self, filepath):
@@ -177,9 +181,8 @@ class StanfordParsedSentenceReader(DocumentReader):
             'Invalid parse file: expected blank line after lemmas: %s'
             % lemmas).encode('ascii', 'replace')
 
-        # If the sentence was unparsed, don't return a new
-        # StanfordParsedSentence for it, but do advance the stream past the
-        # unparsed words.
+        # If the sentence was unparsed, don't return a new sentence object for
+        # it, but do advance the stream past the unparsed words.
         # NOTE: This relies on the printWordsForUnparsed flag we introduced to
         # the Stanford parser.
         if lemmas == '(())':
@@ -207,7 +210,7 @@ class StanfordParsedSentenceReader(DocumentReader):
         # of a file, it won't make us think there's another entry coming.
 
         # Now create the sentence from the read data + the text file.
-        sentence = StanfordParsedSentence(
+        sentence = self.sentence_class(
             tokenized, lemmas, constituency_parse, parse_lines,
             self._file_stream)
         assert (len(sentence.original_text) ==

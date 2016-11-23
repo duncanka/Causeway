@@ -4,7 +4,7 @@ from copy import deepcopy
 import gflags
 import unittest
 
-from causeway.data import CausalityStandoffReader
+from causeway.because_data import CausalityStandoffReader
 from iaa import CausalityMetrics
 from tests import get_sentences_from_file
 from util.metrics import ClassificationMetrics, AccuracyMetrics
