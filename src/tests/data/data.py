@@ -2,7 +2,6 @@ from __future__ import absolute_import
 
 import unittest
 
-from causeway.because_data import CausewaySentenceReader
 from data import StanfordParsedSentence
 from data.io import StanfordParsedSentenceReader
 from tests import get_sentences_from_file
@@ -11,7 +10,7 @@ from tests import get_sentences_from_file
 class HeadFindingTests(unittest.TestCase):
     def setUp(self):
         self.sentences = get_sentences_from_file(
-            CausewaySentenceReader, 'DataTest', 'data_test.txt')
+            StanfordParsedSentenceReader, 'DataTest', 'data_test.txt')
 
     def _check_head(self, tokens, text, correct_head_index, correct_head_text):
         # Sanity check: make sure we grabbed the intended tokens.

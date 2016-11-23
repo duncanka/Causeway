@@ -10,12 +10,11 @@ import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 
-from util import Enum, merge_dicts, listify, make_getter, make_setter
+from util import Enum, merge_dicts, listify
 from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
 from util.scipy import bfs_shortest_path_costs
 from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
                           is_at_eof, peek_and_revert_unless, read_stream_until)
-from textwrap import TextWrapper
 
 
 try:
@@ -734,125 +733,3 @@ class StanfordParsedSentence(object):
 StanfordParsedSentence.PTB_UNESCAPE_MAP = {
     v: k for k, v in StanfordParsedSentence.PTB_ESCAPE_MAP.items()
 }
-
-
-class _RelationInstance(object):
-    _num_args = 2
-
-    def __init__(self, source_sentence, connective, arg0=None, arg1=None,
-                 rel_type=None, annotation_id=None):
-        assert source_sentence is not None
-        for token in listify(connective) + listify(arg0) + listify(arg1):
-            if token is None:
-                continue
-            assert token.parent_sentence is source_sentence
-
-        self.sentence = source_sentence
-        self.connective = connective
-        self.arg0 = arg0
-        self.arg1 = arg1
-        self.type = rel_type
-        self.id = annotation_id
-
-    @classmethod
-    def get_arg_types(klass, convert=False):
-        arg_types = ['arg%d' % i for i in range(klass._num_args)]
-        if convert:
-            return [klass.arg_names[name] for name in arg_types]
-        else:
-            return arg_types
-
-    def get_args(self):
-        return [getattr(self, arg_name) for arg_name in self.get_arg_types()]
-
-    def get_named_args(self, convert=False):
-        return {arg_name: getattr(self, arg_name)
-                for arg_name in self.get_arg_types(convert)}
-
-    def get_argument_heads(self, head_sort_key=None):
-        """
-        head_sort_key is a function that takes an argument and returns a key by
-        which to sort it. If this parameter is provided, argument heads are
-        returned in the resulting order.
-        """
-        arg_heads = [self.sentence.get_head(arg) if arg else None
-                     for arg in self.get_args()]
-        if head_sort_key:
-            arg_heads.sort(key=head_sort_key)
-        return arg_heads
-
-    __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
-
-    @staticmethod
-    def pprint(instance):
-        # TODO: replace with same code as IAA?
-        connective = ' '.join([t.original_text for t in instance.connective])
-        named_args = instance.get_named_args(convert=True)
-        arg_strings = [
-             '{arg_name}={txt}'.format(
-                arg_name=arg_name,
-                txt=' '.join([t.original_text for t in annotation]
-                             if annotation else ['<None>']))
-             for arg_name, annotation in sorted(named_args.iteritems())]
-        if instance.type is not None:
-            type_str = instance._types[instance.type]
-        else: 
-            type_str = "UNKNOWN"
-        self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
-            typename=instance.__class__.__name__, conn=connective,
-            args=', '.join(arg_strings), type=type_str)
-        return '\n'.join(_RelationInstance.__wrapper.wrap(self_str))
-
-    def __repr__(self):
-        return self.pprint(self)
-    
-    arg_names = bidict({'arg0': 'arg0', 'arg1': 'arg1'})
-
-
-class CausationInstance(_RelationInstance):
-    Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
-    CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
-                           'Purpose'])
-    _types = CausationTypes
-    _num_args = 3
-
-    def __init__(self, source_sentence, degree=None, causation_type=None,
-                 connective=None, cause=None, effect=None, means=None,
-                 annotation_id=None):
-        if degree is None:
-            degree = len(self.Degrees)
-        if causation_type is None:
-            degree = len(self.CausationTypes)
-
-        super(CausationInstance, self).__init__(source_sentence, connective,
-                                                cause, effect, causation_type,
-                                                annotation_id)
-        self.degree = degree
-        self.arg2 = means
-
-    # Map argument attribute names to arg_i attributes.
-    arg_names = bidict({'arg0': 'cause', 'arg1': 'effect', 'arg2': 'means'})
-
-for arg_attr_name in ['cause', 'effect', 'means']:
-    underlying_property_name = CausationInstance.arg_names.inv[arg_attr_name]
-    getter = make_getter(underlying_property_name)
-    setter = make_setter(underlying_property_name)
-    setattr(CausationInstance, arg_attr_name, property(getter, setter))
-
-
-# TODO: should this have any common object hierarchy with CausationInstance?
-class OverlappingRelationInstance(_RelationInstance):
-    RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
-                          'Obligation_permission', 'Creation_termination',
-                          'Extremity_sufficiency', 'Circumstance'])
-    _types = RelationTypes
-
-    def __init__(self, source_sentence, rel_type=None, connective=None,
-                 arg0=None, arg1=None, annotation_id=None,
-                 attached_causation=None):
-        all_args = locals().copy()
-        del all_args['self']
-        del all_args['attached_causation']
-        super(OverlappingRelationInstance, self).__init__(**all_args)
-
-        self.attached_causation = attached_causation

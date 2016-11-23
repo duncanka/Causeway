@@ -16,8 +16,8 @@ import os
 import sys
 from textwrap import wrap
 
-from data import (CausationInstance, StanfordParsedSentence, Token,
-                  OverlappingRelationInstance)
+from causeway.because_data import CausationInstance, OverlappingRelationInstance
+from data import StanfordParsedSentence, Token
 from util import (Enum, print_indented, truncated_string, get_terminal_size,
                   merge_dicts, make_setter, make_getter)
 from util.diff import SequenceDiff
@@ -331,7 +331,7 @@ class _RelationMetrics(object):
             gold_only_instances.extend(sentence_gold_only)
             predicted_only_instances.extend(sentence_predicted_only)
 
-        if (self.ids_considered == 
+        if (self.ids_considered ==
             _RelationMetrics.IDsConsidered.GivenOnly):
             assert len(matching_instances) == len(
                 FLAGS.iaa_given_connective_ids), (
@@ -379,7 +379,7 @@ class _RelationMetrics(object):
                 for i1, i2 in matching_instances]
 
         return (connective_metrics, matching_instances)
-    
+
     def _get_jaccard(self, matches, arg_property_name):
         '''
         Returns average Jaccard index across `matches` for property
@@ -463,7 +463,7 @@ class _RelationMetrics(object):
                 heads_match = (arg_1_head.index == arg_2_head.index)
 
         return spans_match, heads_match
-    
+
     @staticmethod
     def _filter_punct_tokens(tokens):
         return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
@@ -489,7 +489,7 @@ class _RelationMetrics(object):
                     first_arg, second_arg = [
                         self._filter_punct_tokens(arg) if arg else None
                         for arg in [i1_args[arg_num], i2_args[arg_num]]]
-    
+
                 args_match, arg_heads_match = self._match_instance_args(
                     first_arg, second_arg)
                 correct_args[arg_num] += args_match
@@ -691,7 +691,7 @@ class _RelationMetrics(object):
                     matrices = property_matrices[matrix_attr_name]
                     if matrices is not None:
                         matrices.append(getattr(m, matrix_attr_name))
-        
+
         for matrix_name, matrices in property_matrices.iteritems():
             try:
                 aggregated_matrix = reduce(operator.add, matrices)
@@ -756,7 +756,7 @@ class _RelationMetrics(object):
         Prints sentences annotated according to a particular instance.
         Connectives are printed in ALL CAPS. If run from a TTY, arguments are
         printed in color; otherwise, they're indicated as '/arg0/' and
-        '*arg1*' (and _arg2_, if applicable). 
+        '*arg1*' (and _arg2_, if applicable).
         '''
         def get_printable_word(token):
             word = token.original_text
@@ -768,7 +768,7 @@ class _RelationMetrics(object):
                     word = token_start + word + token_end
                     break
             return word
-            
+
         tokens = instance.sentence.tokens[1:] # skip ROOT
         # TODO: should this be checking out_file?
         if sys.stdout.isatty() or FLAGS.iaa_force_color:
@@ -1050,4 +1050,3 @@ class OverlappingRelMetrics(_RelationMetrics):
 
 def stringify_connective(instance):
     return ' '.join(t.lemma for t in instance.connective)
-

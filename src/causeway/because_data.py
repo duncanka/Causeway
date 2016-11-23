@@ -5,7 +5,7 @@ corpus.
 
 from __future__ import absolute_import
 
-import bidict
+from bidict import bidict
 import collections
 from copy import copy, deepcopy
 from gflags import FLAGS, DuplicateFlagError, DEFINE_bool
@@ -16,11 +16,11 @@ import numpy as np
 import os
 from scipy.sparse.lil import lil_matrix
 
-from data import (Annotation, CausationInstance, OverlappingRelationInstance,
-                  Token, StanfordParsedSentence)
+from data import Annotation, Token, StanfordParsedSentence
 from data.io import (DocumentReader, StanfordParsedSentenceReader,
                      InstancesDocumentWriter)
-from iaa import stringify_connective
+from util import listify, Enum, make_getter, make_setter
+from textwrap import TextWrapper
 
 
 try:
@@ -31,14 +31,14 @@ try:
                 ' accompanying overlapping relation should be ignored')
 except DuplicateFlagError as e:
     logging.warn('Ignoring redefinition of flag %s' % e.flagname)
-    
-    
+
+
 class CausewaySentence(StanfordParsedSentence):
     def __init__(self, *args, **kwargs):
         super(CausewaySentence, self).__init__(*args, **kwargs)
         self.causation_instances = []
         self.overlapping_rel_instances = []
-    
+
     def add_causation_instance(self, *args, **kwargs):
         instance = CausationInstance(self, *args, **kwargs)
         self.causation_instances.append(instance)
@@ -48,7 +48,7 @@ class CausewaySentence(StanfordParsedSentence):
         instance = OverlappingRelationInstance(self, *args, **kwargs)
         self.overlapping_rel_instances.append(instance)
         return instance
-    
+
     def dep_to_ptb_tree_string(self):
         # Collapsed dependencies can have cycles, so we need to avoid infinite
         # recursion.
@@ -191,11 +191,132 @@ class CausewaySentence(StanfordParsedSentence):
         return new_sentence
 
 
+class _RelationInstance(object):
+    _num_args = 2
+
+    def __init__(self, source_sentence, connective, arg0=None, arg1=None,
+                 rel_type=None, annotation_id=None):
+        assert source_sentence is not None
+        for token in listify(connective) + listify(arg0) + listify(arg1):
+            if token is None:
+                continue
+            assert token.parent_sentence is source_sentence
+
+        self.sentence = source_sentence
+        self.connective = connective
+        self.arg0 = arg0
+        self.arg1 = arg1
+        self.type = rel_type
+        self.id = annotation_id
+
+    @classmethod
+    def get_arg_types(klass, convert=False):
+        arg_types = ['arg%d' % i for i in range(klass._num_args)]
+        if convert:
+            return [klass.arg_names[name] for name in arg_types]
+        else:
+            return arg_types
+
+    def get_args(self):
+        return [getattr(self, arg_name) for arg_name in self.get_arg_types()]
+
+    def get_named_args(self, convert=False):
+        return {arg_name: getattr(self, arg_name)
+                for arg_name in self.get_arg_types(convert)}
+
+    def get_argument_heads(self, head_sort_key=None):
+        """
+        head_sort_key is a function that takes an argument and returns a key by
+        which to sort it. If this parameter is provided, argument heads are
+        returned in the resulting order.
+        """
+        arg_heads = [self.sentence.get_head(arg) if arg else None
+                     for arg in self.get_args()]
+        if head_sort_key:
+            arg_heads.sort(key=head_sort_key)
+        return arg_heads
+
+    __wrapper = TextWrapper(80, subsequent_indent='    ', break_long_words=True)
+
+    @staticmethod
+    def pprint(instance):
+        # TODO: replace with same code as IAA?
+        connective = ' '.join([t.original_text for t in instance.connective])
+        named_args = instance.get_named_args(convert=True)
+        arg_strings = [
+             '{arg_name}={txt}'.format(
+                arg_name=arg_name,
+                txt=' '.join([t.original_text for t in annotation]
+                             if annotation else ['<None>']))
+             for arg_name, annotation in sorted(named_args.iteritems())]
+        if instance.type is not None:
+            type_str = instance._types[instance.type]
+        else:
+            type_str = "UNKNOWN"
+        self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
+            typename=instance.__class__.__name__, conn=connective,
+            args=', '.join(arg_strings), type=type_str)
+        return '\n'.join(_RelationInstance.__wrapper.wrap(self_str))
+
+    def __repr__(self):
+        return self.pprint(self)
+
+    arg_names = bidict({'arg0': 'arg0', 'arg1': 'arg1'})
+
+
+class CausationInstance(_RelationInstance):
+    Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
+    CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
+                           'Purpose'])
+    _types = CausationTypes
+    _num_args = 3
+
+    def __init__(self, source_sentence, degree=None, causation_type=None,
+                 connective=None, cause=None, effect=None, means=None,
+                 annotation_id=None):
+        if degree is None:
+            degree = len(self.Degrees)
+        if causation_type is None:
+            degree = len(self.CausationTypes)
+
+        super(CausationInstance, self).__init__(source_sentence, connective,
+                                                cause, effect, causation_type,
+                                                annotation_id)
+        self.degree = degree
+        self.arg2 = means
+
+    # Map argument attribute names to arg_i attributes.
+    arg_names = bidict({'arg0': 'cause', 'arg1': 'effect', 'arg2': 'means'})
+
+for arg_attr_name in ['cause', 'effect', 'means']:
+    underlying_property_name = CausationInstance.arg_names.inv[arg_attr_name]
+    getter = make_getter(underlying_property_name)
+    setter = make_setter(underlying_property_name)
+    setattr(CausationInstance, arg_attr_name, property(getter, setter))
+
+
+class OverlappingRelationInstance(_RelationInstance):
+    RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
+                          'Obligation_permission', 'Creation_termination',
+                          'Extremity_sufficiency', 'Circumstance'])
+    _types = RelationTypes
+
+    def __init__(self, source_sentence, rel_type=None, connective=None,
+                 arg0=None, arg1=None, annotation_id=None,
+                 attached_causation=None):
+        all_args = locals().copy()
+        del all_args['self']
+        del all_args['attached_causation']
+        super(OverlappingRelationInstance, self).__init__(**all_args)
+
+        self.attached_causation = attached_causation
+
+
 # Useful shorthand. It's not really a type, but it can be used like one to
 # create new reader objects.
 CausewaySentenceReader = lambda: StanfordParsedSentenceReader(
     sentence_class=CausewaySentence)
-    
+
 
 class CausalityStandoffReader(DocumentReader):
     '''
@@ -247,6 +368,7 @@ class CausalityStandoffReader(DocumentReader):
             for sentence in document:
                 for ovl_instance in sentence.overlapping_rel_instances:
                     if ovl_instance.type is None:
+                        from iaa import stringify_connective
                         logging.warn(
                             "No relation type for non-causal instance %s (%s)",
                             ovl_instance.id, stringify_connective(ovl_instance))
@@ -652,13 +774,13 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         # The real work was already done in instance_complete.
         # Now reset internals.
         self.reset()
-        
+
     def _reset(self):
         self._next_event_id = 1
         self._next_annotation_id = 1
         self._next_attribute_id = 1
         self._objects_to_ids = bidict()
-        
+
     @staticmethod
     def _get_annotation_bounds(tokens):
         sentence = tokens[0].parent_sentence
@@ -694,7 +816,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
 
         except StopIteration:
             bounds.append((span_start, span_end))
-        
+
         return bounds
 
     def _get_bounds_and_text_strings(self, tokens, annotation_type_str):
@@ -709,7 +831,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
             [sentence.original_text[span_start:span_end]
              for span_start, span_end in bounds])
         return (bounds_str, text_str)
-    
+
     def _make_id_for(self, obj, next_id_attr_name, id_prefix):
         if id(obj) in self._objects_to_ids:
             raise KeyError('Attempted to write object %s twice' % obj)
@@ -720,7 +842,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
                 return obj.id
         except AttributeError: # No id attribute
             pass
-        
+
         # No saved ID; make up a new one, making sure not to clash with any that
         # have already been assigned.
         next_id_num = getattr(self, next_id_attr_name)
@@ -737,7 +859,7 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
         except AttributeError: # this wasn't an instance object with an ID
             pass
         return new_id
-    
+
     def _make_attribute_id(self):
         # Attributes can never be shared, so don't worry about reuse with
         # self._objects_to_ids.
