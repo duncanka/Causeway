@@ -66,9 +66,12 @@ except DuplicateFlagError as e:
 
 
 def make_annotation_comparator(allow_partial):
-    min_partial_overlap = [1.0, FLAGS.iaa_min_partial_overlap][allow_partial]
-
     def match_annotations(token_list_1, token_list_2):
+        if allow_partial:
+            min_partial_overlap = FLAGS.iaa_min_partial_overlap
+        else:
+            min_partial_overlap = 1.0
+
         # Just in case we accidentally added tokens to an annotation in the
         # wrong order, sort by token position.
         sort_key = lambda token: token.index

@@ -8,7 +8,7 @@ import operator
 from os import path
 
 from causeway.because_data import CausationInstance
-from iaa import CausalityMetrics
+from causeway.because_data.iaa import CausalityMetrics
 from pipeline import Stage, Evaluator
 from util import listify, print_indented, Enum, make_getter, make_setter
 

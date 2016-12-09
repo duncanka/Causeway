@@ -1,9 +1,33 @@
+import gflags
+import inspect
 import numpy as np
 from os import path
+import sys
 import unittest
 
+gflags.FLAGS([]) # Prevent UnparsedFlagAccessError
+
+
 def get_resources_dir():
-    return path.join(path.dirname(__file__), 'resources')
+    # UGLY HACK to figure out where the caller is located, find the closest
+    # enclosing "tests" directory, and grab its "resources" directory.
+    stack_i = 0
+    frame = inspect.stack()[stack_i][0]
+    while frame.f_globals['__file__'] == __file__:
+        stack_i += 1
+        frame = inspect.stack()[stack_i][0]
+
+    caller_path = frame.f_globals['__file__']
+    caller_root_tests_module_path = caller_path
+    head, tail = path.split(caller_root_tests_module_path)
+    # Keep splitting off the final directory until the final directory is called
+    # "tests". Then, use the directory that "tests" was split from.
+    while tail != 'tests':
+        if not tail:
+            raise IOError('No "tests" directory above ' + caller_path)
+        caller_root_tests_module_path = head
+        head, tail = path.split(caller_root_tests_module_path)
+    return path.join(caller_root_tests_module_path, 'resources')
 
 def get_documents_from_file(reader_type, subdir, filename):
         reader = reader_type()

@@ -5,9 +5,11 @@ import gflags
 import unittest
 
 from causeway.because_data import CausalityStandoffReader
-from iaa import CausalityMetrics
+from causeway.because_data.iaa import CausalityMetrics
 from tests import get_sentences_from_file
 from util.metrics import ClassificationMetrics, AccuracyMetrics
+
+gflags.FLAGS([]) # Prevent UnparsedFlagAccessError
 
 
 class CausalityMetricsTest(unittest.TestCase):

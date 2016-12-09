@@ -368,7 +368,8 @@ class CausalityStandoffReader(DocumentReader):
             for sentence in document:
                 for ovl_instance in sentence.overlapping_rel_instances:
                     if ovl_instance.type is None:
-                        from iaa import stringify_connective
+                        from causeway.because_data.iaa import (
+                            stringify_connective)
                         logging.warn(
                             "No relation type for non-causal instance %s (%s)",
                             ovl_instance.id, stringify_connective(ovl_instance))
