@@ -29,16 +29,19 @@ def get_resources_dir():
         head, tail = path.split(caller_root_tests_module_path)
     return path.join(caller_root_tests_module_path, 'resources')
 
-def get_documents_from_file(reader_type, subdir, filename):
-        reader = reader_type()
-        reader.open(path.join(get_resources_dir(), subdir, filename))
-        documents = reader.get_all()
-        reader.close()
-        return documents
+def get_documents_from_file(reader_type, subdir, filename, resources_dir=None):
+    if not resources_dir:
+        resources_dir = get_resources_dir()
+    reader = reader_type()
+    reader.open(path.join(resources_dir, subdir, filename))
+    documents = reader.get_all()
+    reader.close()
+    return documents
 
-def get_sentences_from_file(reader_type, subdir, filename):
+def get_sentences_from_file(reader_type, subdir, filename, resources_dir=None):
     sentences = []
-    for document in get_documents_from_file(reader_type, subdir, filename):
+    for document in get_documents_from_file(reader_type, subdir, filename,
+                                            resources_dir):
         sentences.extend(document.sentences)
     return sentences
 
