@@ -27,7 +27,7 @@ try:
                 'Whether to read in and save an accessible version of the CRF'
                 ' model parameters in the model (useful for debugging)')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class ArgumentLabelerModel(CRFModel):

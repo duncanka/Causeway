@@ -30,7 +30,7 @@ try:
                 'Whether, when reading causality data, instances with an'
                 ' accompanying overlapping relation should be ignored')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class CausewaySentence(StanfordParsedSentence):

@@ -24,7 +24,7 @@ try:
                 'Include a comparison that counts partial overlap of spans as a'
                 ' match.')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 def compare_instance_lists(gold, predicted, indent=0):

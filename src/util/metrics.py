@@ -11,7 +11,7 @@ try:
     DEFINE_bool('metrics_log_raw_counts', False,
                 "Log raw counts (TP, FP, etc.) for evaluation or IAA metrics.");
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 def safe_divide(dividend, divisor):

@@ -14,7 +14,7 @@ try:
                 'Whether to include POS tags in the strings matched by regex')
 
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class RegexConnectiveModel(Model):

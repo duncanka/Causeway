@@ -62,7 +62,7 @@ try:
     DEFINE_bool('iaa_compute_overlapping', True,
                 "Compute overlapping relations as part of causality IAA stats")
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 def make_annotation_comparator(allow_partial):

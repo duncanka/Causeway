@@ -9,7 +9,7 @@ try:
     DEFINE_bool('combiner_print_test_instances', False,
                 'Whether to print differing IAA results during evaluation')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class BaselineCombinerModel(StructuredModel):

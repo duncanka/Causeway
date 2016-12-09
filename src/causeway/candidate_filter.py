@@ -116,7 +116,7 @@ try:
                 'Whether to record the range of classifier feature weights for'
                 ' each feature type') # only works for LR classifier
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class PatternFilterPart(object):

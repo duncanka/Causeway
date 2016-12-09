@@ -24,7 +24,7 @@ try:
                 'Whether DirectoryReaders should recurse into their'
                 ' subdirectories')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class DocumentStream(object):

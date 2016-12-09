@@ -57,7 +57,7 @@ try:
                    ' printed if this stage is true. Causes all stages to'
                    ' default to being tested at train time on training data.')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class Pipeline(object):

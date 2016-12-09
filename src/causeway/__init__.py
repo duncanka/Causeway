@@ -30,7 +30,7 @@ try:
                 'Whether to print differing IAA results during evaluation of'
                 ' argument labelling stage')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class PossibleCausation(CausationInstance):

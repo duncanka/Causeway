@@ -9,7 +9,7 @@ try:
     DEFINE_string('senna_dir', '/home/jesse/Documents/Work/Research/senna/',
                   'Directory containing the SENNA installation')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class SennaEmbeddings(object):

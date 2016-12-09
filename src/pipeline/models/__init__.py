@@ -18,7 +18,7 @@ try:
         'rebalance_stochastically', False,
         'Rebalance classes by stochastically choosing samples to replicate')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class Model(object):

@@ -13,7 +13,7 @@ try:
     DEFINE_bool('pycrfsuite_verbose', False,
                 'Verbose logging output from python-crfsuite trainer')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class StructuredModel(Model):

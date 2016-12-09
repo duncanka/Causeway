@@ -16,7 +16,7 @@ try:
                   ' This character can still be used in conjoined feature names'
                   ' by doubling it (e.g., "f1=:::f2=x").')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class FeaturizationError(Exception):

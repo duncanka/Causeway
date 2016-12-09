@@ -36,7 +36,7 @@ try:
                 'Type of tree to generate and run TRegex patterns with')
 
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 class TRegexConnectiveModel(Model):
     def __init__(self, *args, **kwargs):

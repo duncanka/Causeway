@@ -12,7 +12,7 @@ try:
                    'Maximum number of parse links within which to allow the'
                    ' baseline to look for causes/effects')
 except DuplicateFlagError as e:
-    logging.warn('Ignoring redefinition of flag %s' % e.flagname)
+    logging.warn('Ignoring flag redefinitions; assuming module reload')
 
 
 class BaselineModel(Model):
