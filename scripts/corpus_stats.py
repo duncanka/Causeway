@@ -1,5 +1,6 @@
 from collections import Counter
 from itertools import chain
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from causeway.because_data import CausalityStandoffReader
@@ -95,21 +96,24 @@ def arg_lengths(instances, pairwise=True):
 
 
 def plot_arg_lengths(cause_lengths, effect_lengths):
+    mpl.rc('font',**{'family':'serif','serif':['Times']})
+    mpl.rc('text', usetex=True)
+
     min_bin, max_bin = 1, 21
     bins = range(min_bin, max_bin)
     causes, effects = [list(chain.from_iterable([i] * l[i] for i in bins))
                        for l in cause_lengths, effect_lengths]
-    plt.hist(causes, bins=bins, color='#4b79b4')
+    plt.hist(causes, bins=bins, color='#6f93c3')
     plt.hist(effects, bins=bins, color='#FA8072', alpha=0.7)
 
     ax = plt.gca()
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-    plt.tick_params(axis='both', labelsize=15, length=0)
+    plt.tick_params(axis='both', labelsize=20, length=0)
     plt.xlim(min_bin, max_bin-1)
-    plt.xlabel('Argument length', fontsize=16)
-    plt.ylabel('Count', fontsize=16)
-    plt.text(3.3, 125, 'Causes', color='#4b79b4', fontsize=18)
-    plt.text(7.3, 85, 'Effects', color='#f96353', fontsize=18)
+    plt.xlabel('Argument length', fontsize=22)
+    plt.ylabel('Count', fontsize=22)
+    plt.text(3.3, 125, 'Causes', color='#3c6090', fontsize=24)
+    plt.text(7.3, 85, 'Effects', color='#e84330', fontsize=24)
     plt.show(False)
