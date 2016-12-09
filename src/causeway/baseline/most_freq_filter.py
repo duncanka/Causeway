@@ -2,7 +2,7 @@ from collections import defaultdict
 from gflags import FLAGS
 
 from causeway import IAAEvaluator
-from iaa import stringify_connective
+from causeway.because_data.iaa import stringify_connective
 from pipeline import Stage
 from pipeline.models.structured import StructuredModel, StructuredDecoder
 

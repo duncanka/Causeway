@@ -9,6 +9,7 @@ from scipy.sparse import lil_matrix
 import time
 
 from util import Enum, NameDictionary, get_object_by_fqname, merge_dicts
+from pandas.core.algorithms import isin
 
 try:
     DEFINE_string('conjoined_feature_sep', ':',
@@ -218,10 +219,17 @@ class ThresholdedFeatureExtractor(_MetaFeatureExtractor):
     _EXTRACT_PRODUCES_VALUES_TO_IGNORE = True
 
     def __init__(self, base_extractor, threshold):
+        """
+        If threshold is a string, it will be treated as a flag name to be read
+        from FLAGS the first time it is needed.
+        """
         super(ThresholdedFeatureExtractor, self).__init__(base_extractor)
         self.threshold = threshold
 
     def extract_subfeature_names(self, instances):
+        if isinstance(self.threshold, basestring):
+            self.threshold = getattr(FLAGS, self.threshold)
+
         names_to_counts = Counter()
         for instance in instances:
             for k in self.base_extractor.extract(instance).keys():

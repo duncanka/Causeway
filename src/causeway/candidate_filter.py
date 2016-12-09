@@ -16,7 +16,8 @@ from sklearn.pipeline import Pipeline as SKLPipeline
 from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
 from causeway.because_data import Token, CausationInstance
 from data import StanfordParsedSentence
-from iaa import make_annotation_comparator, stringify_connective
+from causeway.because_data.iaa import (make_annotation_comparator,
+                                       stringify_connective)
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
@@ -646,13 +647,13 @@ CausalClassifierModel.shared_feature_extractors = [
         MultiNumericalFeatureExtractor(
             'cause_lemma_skipgrams',
             lambda part: CausalClassifierModel.get_lemma_skipgrams(part.cause)),
-        FLAGS.filter_sg_lemma_threshold),
+        'filter_sg_lemma_threshold'),
     ThresholdedFeatureExtractor(
         MultiNumericalFeatureExtractor(
             'effect_lemma_skipgrams',
             lambda part: CausalClassifierModel.get_lemma_skipgrams(
                              part.effect)),
-        FLAGS.filter_sg_lemma_threshold),
+        'filter_sg_lemma_threshold'),
 ]
 
 CausalClassifierModel.per_conn_and_shared_feature_extractors = (
