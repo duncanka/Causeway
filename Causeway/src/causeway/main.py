@@ -11,6 +11,10 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
+# Make sure NLPypline is on the path.
+# TODO: is there a more elegant way to do this?
+sys.path.append('../../NLPypline/src')
+
 from causeway import remove_smaller_matches, StanfordNERStage, IAAEvaluator
 from causeway.baseline import BaselineStage
 from causeway.baseline.combiner import BaselineCombinerStage
@@ -28,7 +32,6 @@ from nlpypline.pipeline.models import ClassBalancingClassifierWrapper
 from nlpypline.util import print_indented
 
 
-# TODO: factor out a generic driver function?
 try:
     DEFINE_enum('classifier_model', 'logistic',
                 ['tree', 'knn', 'logistic', 'svm', 'forest', 'nb'],
@@ -114,11 +117,9 @@ def get_stages(candidate_classifier):
 
 # def main(argv):
 if __name__ == '__main__':
-    argv = sys.argv
-
     try:
         FLAGS.Reset()
-        FLAGS(argv)  # parse flags
+        FLAGS(sys.argv)  # parse flags
         if not FLAGS.models_dir:
             FLAGS.models_dir = os.path.join('..', 'models', FLAGS.pipeline_type)
 
@@ -170,8 +171,7 @@ if __name__ == '__main__':
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
-                                CausalityStandoffReader())) # ,
-        # copy_fn=StanfordParsedSentence.shallow_copy_doc_with_sentences_fixed)
+                                CausalityStandoffReader()))
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()
