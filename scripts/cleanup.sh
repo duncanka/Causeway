@@ -1,4 +1,8 @@
 #!/bin/bash
+# Poli-informatics data needs to be preprocessed with the actual sed command
+# below. To do that preprocessing, uncomment the sed line, remove the echo line,
+# and remove the redirect and cat at the bottom to redirect sed output instead
+# of copying input.
 
 
 # TODO: Figure out how to make this eliminate the section headers with

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Requires the Unix task spooler (package task-spooler in Ubuntu).
 
 SEED=2961393773
 OUT_DIR=../outputs/final
