@@ -1,0 +1,3 @@
+[submodule "NLPypline"]
+	path = NLPypline
+	url = https://github.com/duncanka/NLPypline.git
