@@ -8,7 +8,8 @@ import numpy as np
 from scipy.sparse import lil_matrix
 import time
 
-from util import Enum, NameDictionary, get_object_by_fqname, merge_dicts
+from nlpypline.util import (Enum, NameDictionary, get_object_by_fqname,
+                            merge_dicts)
 from pandas.core.algorithms import isin
 
 try:

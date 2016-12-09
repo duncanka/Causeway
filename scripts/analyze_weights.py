@@ -6,7 +6,7 @@ from sklearn.pipeline import Pipeline
 import sys
 
 from causeway.candidate_filter import get_weights_for_lr_classifier
-from util import print_indented
+from nlpypline.util import print_indented
 
 
 def get_global_classifier_weights(pipeline):

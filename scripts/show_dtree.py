@@ -2,7 +2,7 @@ import os
 from sklearn import tree
 import subprocess
 import sys
-from pipeline.models import ClassBalancingClassifierWrapper
+from nlpypline.pipeline.models import ClassBalancingClassifierWrapper
 
 def vis_tree(model, tree_classifier=None, filename='/tmp/tree.dot',
              open_imgs=True):

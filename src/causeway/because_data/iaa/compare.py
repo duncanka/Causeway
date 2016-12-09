@@ -9,7 +9,7 @@ import logging
 import sys
 
 from causeway.because_data import CausalityStandoffReader
-from data.io import DirectoryReader
+from nlpypline.data.io import DirectoryReader
 from iaa import CausalityMetrics, print_indented
 
 

@@ -22,10 +22,10 @@ from causeway.regex_based.crf_stage import ArgumentLabelerStage
 from causeway.regex_based.regex_stage import RegexConnectiveStage
 from causeway.tregex_based.arg_span_stage import ArgSpanStage
 from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
-from data.io import DirectoryReader
-from pipeline import Pipeline, SimpleStage
-from pipeline.models import ClassBalancingClassifierWrapper
-from util import print_indented
+from nlpypline.data.io import DirectoryReader
+from nlpypline.pipeline import Pipeline, SimpleStage
+from nlpypline.pipeline.models import ClassBalancingClassifierWrapper
+from nlpypline.util import print_indented
 
 
 # TODO: factor out a generic driver function?

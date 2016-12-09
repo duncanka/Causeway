@@ -4,8 +4,8 @@ from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 import numpy as np
 from nltk.metrics import confusionmatrix
-from util.scipy import add_rows_and_cols_to_matrix
-from util import floats_same_or_nearly_equal
+from nlpypline.util.scipy import add_rows_and_cols_to_matrix
+from nlpypline.util import floats_same_or_nearly_equal
 
 try:
     DEFINE_bool('metrics_log_raw_counts', False,

@@ -16,10 +16,10 @@ import numpy as np
 import os
 from scipy.sparse.lil import lil_matrix
 
-from data import Annotation, Token, StanfordParsedSentence
-from data.io import (DocumentReader, StanfordParsedSentenceReader,
-                     InstancesDocumentWriter)
-from util import listify, Enum, make_getter, make_setter
+from nlpypline.data import Annotation, Token, StanfordParsedSentence
+from nlpypline.data.io import (DocumentReader, StanfordParsedSentenceReader,
+                               InstancesDocumentWriter)
+from nlpypline.util import listify, Enum, make_getter, make_setter
 from textwrap import TextWrapper
 
 

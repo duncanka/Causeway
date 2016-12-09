@@ -7,7 +7,7 @@ from sklearn.dummy import DummyClassifier
 from sklearn.metrics.classification import accuracy_score
 import unittest
 
-from util.scipy import (
+from nlpypline.util.scipy import (
     add_rows_and_cols_to_matrix, CycleError, dreyfus_wagner,
     get_incoming_indices, get_outgoing_indices, longest_path_in_tree,
     tarjan_topological_sort, UnconnectedNodesError,

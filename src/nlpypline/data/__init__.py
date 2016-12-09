@@ -10,11 +10,13 @@ import numpy as np
 import re
 from scipy.sparse import lil_matrix, csr_matrix, csgraph
 
-from util import Enum, merge_dicts, listify
-from util.nltk import collins_find_heads, nltk_tree_to_graph, is_parent_of_leaf
-from util.scipy import bfs_shortest_path_costs
-from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
-                          is_at_eof, peek_and_revert_unless, read_stream_until)
+from nlpypline.util import Enum, merge_dicts, listify
+from nlpypline.util.nltk import (collins_find_heads, nltk_tree_to_graph,
+                                 is_parent_of_leaf)
+from nlpypline.util.scipy import bfs_shortest_path_costs
+from nlpypline.util.streams import (
+    CharacterTrackingStreamWrapper, eat_whitespace, is_at_eof,
+    peek_and_revert_unless, read_stream_until)
 
 
 try:

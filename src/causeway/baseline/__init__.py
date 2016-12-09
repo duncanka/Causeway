@@ -4,8 +4,8 @@ from itertools import product
 
 from causeway import IAAEvaluator, PossibleCausation, get_causation_tuple
 import logging
-from pipeline import Stage
-from pipeline.models import Model
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models import Model
 
 try:
     DEFINE_integer('baseline_parse_radius', 2,

@@ -1,6 +1,6 @@
 import unittest
 
-from pipeline.featurization import (FeatureExtractor, FeaturizationError,
+from nlpypline.pipeline.featurization import (FeatureExtractor, FeaturizationError,
                                     Featurizer, NestedFeatureExtractor)
 
 

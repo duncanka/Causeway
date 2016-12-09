@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-from data.io import StanfordParsedSentenceReader
+from nlpypline.data.io import StanfordParsedSentenceReader
 
 for filepath in sys.argv[1:]:
     reader = StanfordParsedSentenceReader()

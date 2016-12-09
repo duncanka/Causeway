@@ -5,9 +5,10 @@ from sklearn.utils.mocking import CheckingClassifier
 from scipy.sparse import lil_matrix, vstack
 import unittest
 
-from pipeline.featurization import FeatureExtractor
-from pipeline.models import ClassBalancingClassifierWrapper, ClassifierModel
-from pipeline.models.structured import Semiring, ViterbiDecoder
+from nlpypline.pipeline.featurization import FeatureExtractor
+from nlpypline.pipeline.models import (ClassBalancingClassifierWrapper,
+                                       ClassifierModel)
+from nlpypline.pipeline.models.structured import Semiring, ViterbiDecoder
 
 
 class SmallClassBalancingTest(unittest.TestCase):

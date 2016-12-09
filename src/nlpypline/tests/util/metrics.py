@@ -1,7 +1,7 @@
 from math import isnan
 import unittest
 
-from util.metrics import ClassificationMetrics, ConfusionMatrix
+from nlpypline.util.metrics import ClassificationMetrics, ConfusionMatrix
 
 
 class ClassificationMetricsTest(unittest.TestCase):

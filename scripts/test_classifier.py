@@ -9,8 +9,8 @@ from sklearn.pipeline import Pipeline as SKLPipeline
 from sklearn.feature_selection.univariate_selection import SelectPercentile, \
     f_classif
 
-from pipeline.models import ClassBalancingClassifierWrapper
-from util.metrics import diff_binary_vectors, ClassificationMetrics
+from nlpypline.pipeline.models import ClassBalancingClassifierWrapper
+from nlpypline.util.metrics import diff_binary_vectors, ClassificationMetrics
 from sklearn.tree.tree import DecisionTreeClassifier
 import vis_features
 

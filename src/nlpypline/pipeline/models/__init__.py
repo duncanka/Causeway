@@ -8,10 +8,10 @@ import numpy as np
 from scipy.sparse import lil_matrix, vstack
 from sklearn.base import BaseEstimator
 
-from pipeline.featurization import (FeatureExtractor, Featurizer,
-                                    FeaturizationError)
-from util import NameDictionary, listify
-# from util.metrics import diff_binary_vectors
+from nlpypline.pipeline.featurization import (FeatureExtractor, Featurizer,
+                                              FeaturizationError)
+from nlpypline.util import NameDictionary, listify
+# from nlpypline.util.metrics import diff_binary_vectors
 
 try:
     DEFINE_bool(

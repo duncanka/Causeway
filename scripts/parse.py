@@ -47,7 +47,7 @@ def get_parsed_sentence(sentence_text, parse_text=None):
         txt_path, parse_path = run_parser(
             sentence_text, '../../../stanford-parser/', True)
 
-    from data.io import StanfordParsedSentenceReader
+    from nlpypline.data.io import StanfordParsedSentenceReader
     r = StanfordParsedSentenceReader()
     r.open(txt_path)
     doc = r.get_next()

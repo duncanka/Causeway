@@ -5,8 +5,8 @@ import sys
 from causeway.because_data import CausalityStandoffReader
 from causeway.regex_based.regex_stage import RegexConnectiveStage
 from causeway.tregex_based.tregex_stage import TRegexConnectiveStage
-from data.io import DirectoryReader
-from pipeline import Pipeline
+from nlpypline.data.io import DirectoryReader
+from nlpypline.pipeline import Pipeline
 
 
 try:

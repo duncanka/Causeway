@@ -6,9 +6,10 @@ import logging
 import os
 import re
 
-from data import StanfordParsedSentence, SentencesDocument
-from util import recursively_list_files
-from util.streams import read_stream_until, CharacterTrackingStreamWrapper
+from nlpypline.data import StanfordParsedSentence, SentencesDocument
+from nlpypline.util import recursively_list_files
+from nlpypline.util.streams import (read_stream_until,
+                                    CharacterTrackingStreamWrapper)
 
 
 try:

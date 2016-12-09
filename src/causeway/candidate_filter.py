@@ -15,24 +15,24 @@ from sklearn.pipeline import Pipeline as SKLPipeline
 
 from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
 from causeway.because_data import Token, CausationInstance
-from data import StanfordParsedSentence
+from nlpypline.data import StanfordParsedSentence
 from causeway.because_data.iaa import (make_annotation_comparator,
                                        stringify_connective)
-from pipeline import Stage
-from pipeline.featurization import (
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
     VectorValuedFeatureExtractor, NestedFeatureExtractor,
     MultiNumericalFeatureExtractor, ThresholdedFeatureExtractor, Featurizer,
     BinnedFeatureExtractor)
-from pipeline.models.structured import StructuredDecoder, StructuredModel
-from skpipeline import (make_featurizing_estimator,
-                        make_mostfreq_featurizing_estimator)
-from util import powerset
-from util.diff import SequenceDiff
-from util.metrics import ClassificationMetrics, diff_binary_vectors
-from util.nltk import SennaEmbeddings
-from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
-                        prob_sum_score)
+from nlpypline.pipeline.models.structured import StructuredDecoder, StructuredModel
+from nlpypline.skpipeline import (make_featurizing_estimator,
+                                  make_mostfreq_featurizing_estimator)
+from nlpypline.util import powerset
+from nlpypline.util.diff import SequenceDiff
+from nlpypline.util.metrics import ClassificationMetrics, diff_binary_vectors
+from nlpypline.util.nltk import SennaEmbeddings
+from nlpypline.util.scipy import (AutoWeightedVotingClassifier,
+                                  make_logistic_score, prob_sum_score)
 
 
 try:

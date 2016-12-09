@@ -2,8 +2,8 @@ from __future__ import absolute_import
 
 import unittest
 
-from data import StanfordParsedSentence
-from data.io import StanfordParsedSentenceReader
+from nlpypline.data import StanfordParsedSentence
+from nlpypline.data.io import StanfordParsedSentenceReader
 from tests import get_sentences_from_file
 
 

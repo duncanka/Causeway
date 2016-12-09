@@ -17,12 +17,13 @@ import sys
 from textwrap import wrap
 
 from causeway.because_data import CausationInstance, OverlappingRelationInstance
-from data import StanfordParsedSentence, Token
-from util import (Enum, print_indented, truncated_string, get_terminal_size,
-                  merge_dicts, make_setter, make_getter)
-from util.diff import SequenceDiff
-from util.metrics import (ClassificationMetrics, ConfusionMatrix,
-                          AccuracyMetrics, safe_divide)
+from nlpypline.data import StanfordParsedSentence, Token
+from nlpypline.util import (Enum, print_indented, truncated_string,
+                            get_terminal_size, merge_dicts, make_setter,
+                            make_getter)
+from nlpypline.util.diff import SequenceDiff
+from nlpypline.util.metrics import (ClassificationMetrics, ConfusionMatrix,
+                                    AccuracyMetrics, safe_divide)
 
 np.seterr(divide='ignore') # Ignore nans in division
 

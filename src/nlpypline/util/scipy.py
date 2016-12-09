@@ -9,7 +9,7 @@ from sklearn.ensemble.voting_classifier import VotingClassifier
 from sklearn.preprocessing.label import LabelEncoder
 from sklearn.preprocessing import normalize
 
-from util import pairwise, Enum
+from nlpypline.util import pairwise, Enum
 
 def add_rows_and_cols_to_matrix(matrix, indices_to_add):
     '''

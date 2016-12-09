@@ -4,9 +4,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from causeway.because_data import CausalityStandoffReader
-from data import Token
-from data.io import DirectoryReader
-from util import listify
+from nlpypline.data import Token
+from nlpypline.data.io import DirectoryReader
+from nlpypline.util import listify
 
 
 def not_contiguous(instance):

@@ -12,13 +12,13 @@ import tempfile
 import time
 from threading import Lock
 
-from data import Token
-from pipeline import Stage
-from pipeline.models import Model
+from nlpypline.data import Token
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models import Model
 from causeway import PossibleCausation, IAAEvaluator, get_causation_tuple
-from util import pairwise, igroup, hash_file
-from util.nltk import subtree_at_index, index_of_subtree
-from util.scipy import steiner_tree, longest_path_in_tree
+from nlpypline.util import pairwise, igroup, hash_file
+from nlpypline.util.nltk import subtree_at_index, index_of_subtree
+from nlpypline.util.scipy import steiner_tree, longest_path_in_tree
 import os
 
 try:

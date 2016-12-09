@@ -1,7 +1,7 @@
 from itertools import chain
 
 from causeway.because_data import CausalityStandoffReader
-from data.io import DirectoryReader
+from nlpypline.data.io import DirectoryReader
 
 
 def get_reader():

@@ -1,7 +1,7 @@
 from io import StringIO, BytesIO, SEEK_END
 import unittest
 
-from util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
+from nlpypline.util.streams import (CharacterTrackingStreamWrapper, eat_whitespace,
                           is_at_eof, read_stream_until)
 
 

@@ -5,9 +5,9 @@ import re
 import time
 
 from causeway import PossibleCausation, IAAEvaluator
-from pipeline import Stage
-from pipeline.models import Model
-from util import Enum
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models import Model
+from nlpypline.util import Enum
 
 try:
     DEFINE_bool('regex_include_pos', True,

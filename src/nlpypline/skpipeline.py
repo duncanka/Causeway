@@ -3,12 +3,11 @@ Some utilities for integrating our pipeline system (particularly the
 featurization system) with scikit-learn.
 """
 
-from cPickle import PicklingError
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.dummy import DummyClassifier
 from sklearn.pipeline import Pipeline, _name_estimators
 
-from pipeline.featurization import Featurizer, FeatureExtractor
+from nlpypline.pipeline.featurization import Featurizer, FeatureExtractor
 
 
 class FeaturizingTransformer(BaseEstimator, TransformerMixin):
@@ -49,7 +48,8 @@ dummy_feature_extractor = FeatureExtractor(
 _dummy_feature_extractors = [dummy_feature_extractor]
 def make_mostfreq_featurizing_estimator(estimator_name=None):
     return make_featurizing_estimator(
-        DummyClassifier('prior'), 'skpipeline._dummy_feature_extractors',
+        DummyClassifier('prior'),
+        'nlpypline.skpipeline._dummy_feature_extractors',
         ['dummy'], estimator_name=estimator_name)
 
 def make_featurizing_estimator(

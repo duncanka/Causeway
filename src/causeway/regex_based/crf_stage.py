@@ -6,9 +6,9 @@ import numpy as np
 import os
 
 from causeway import IAAEvaluator, RELATIVE_POSITIONS
-from pipeline.models.structured import CRFModel
-from pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
-from pipeline import Stage
+from nlpypline.pipeline.models.structured import CRFModel
+from nlpypline.pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
+from nlpypline.pipeline import Stage
 
 try:
     DEFINE_list('arg_label_features',

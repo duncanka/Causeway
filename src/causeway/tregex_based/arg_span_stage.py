@@ -3,8 +3,8 @@ from itertools import permutations, chain
 import logging
 
 from causeway import IAAEvaluator
-from pipeline import Stage
-from pipeline.models import Model
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models import Model
 
 class ArgSpanModel(Model):
     def __init__(self, *args, **kwargs):

@@ -3,8 +3,9 @@ from gflags import FLAGS
 
 from causeway import IAAEvaluator
 from causeway.because_data.iaa import stringify_connective
-from pipeline import Stage
-from pipeline.models.structured import StructuredModel, StructuredDecoder
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models.structured import (StructuredModel,
+                                                  StructuredDecoder)
 
 
 class MostFreqSenseFilterModel(StructuredModel, StructuredDecoder):

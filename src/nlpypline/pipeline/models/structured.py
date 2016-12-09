@@ -6,8 +6,8 @@ import pycrfsuite
 import time
 from types import MethodType
 
-from pipeline.models import Model, MultiplyFeaturizedModel
-from pipeline.featurization import DictOnlyFeaturizer, Featurizer
+from nlpypline.pipeline.models import Model, MultiplyFeaturizedModel
+from nlpypline.pipeline.featurization import DictOnlyFeaturizer, Featurizer
 
 try:
     DEFINE_bool('pycrfsuite_verbose', False,

@@ -4,9 +4,9 @@ import logging
 
 from causeway.because_data import CausalityStandoffReader
 from causeway.tregex_based.tregex_stage import TRegexConnectiveModel
-from data.io import DirectoryReader
+from nlpypline.data.io import DirectoryReader
 from iaa import stringify_connective
-from util import print_indented
+from nlpypline.util import print_indented
 
 
 if __name__ == '__main__':

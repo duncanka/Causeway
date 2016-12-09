@@ -2,8 +2,9 @@ from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 
 from causeway import IAAEvaluator
-from pipeline import Stage
-from pipeline.models.structured import StructuredModel, StructuredDecoder
+from nlpypline.pipeline import Stage
+from nlpypline.pipeline.models.structured import (StructuredModel,
+                                                  StructuredDecoder)
 
 try:
     DEFINE_bool('combiner_print_test_instances', False,

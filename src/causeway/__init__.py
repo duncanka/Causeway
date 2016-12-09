@@ -9,8 +9,8 @@ from os import path
 
 from causeway.because_data import CausationInstance
 from causeway.because_data.iaa import CausalityMetrics
-from pipeline import Stage, Evaluator
-from util import listify, print_indented, Enum, make_getter, make_setter
+from nlpypline.pipeline import Stage, Evaluator
+from nlpypline.util import listify, print_indented, Enum, make_getter, make_setter
 
 try:
     DEFINE_bool("iaa_calculate_partial", False,

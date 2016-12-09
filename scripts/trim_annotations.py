@@ -7,7 +7,7 @@ import sys
 from causeway.because_data import (
     CausalityStandoffReader, CausalityStandoffWriter, 
     CausewaySentence)
-from data.io import StanfordParsedSentenceReader
+from nlpypline.data.io import StanfordParsedSentenceReader
 
 
 try:

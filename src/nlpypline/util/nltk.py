@@ -11,7 +11,7 @@ from nltk.tree import Tree, ImmutableTree
 import numpy as np
 from os import path
 from scipy.sparse import lil_matrix
-from util import NameDictionary
+from nlpypline.util import NameDictionary
 
 try:
     DEFINE_string('senna_dir', '/home/jesse/Documents/Work/Research/senna/',

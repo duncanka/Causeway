@@ -10,11 +10,11 @@ import os
 from os import path
 import sys
 
-from data import SentencesDocument
-from pipeline.models import SimpleModel, Model
-from util import listify, partition, print_indented
-from util.metrics import ClassificationMetrics
-from util.freezer import freeze
+from nlpypline.data import SentencesDocument
+from nlpypline.pipeline.models import SimpleModel, Model
+from nlpypline.util import listify, partition, print_indented
+from nlpypline.util.metrics import ClassificationMetrics
+from nlpypline.util.freezer import freeze
 
 
 # Define pipeline-related flags.

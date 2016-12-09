@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from mock import patch, DEFAULT, call
 import unittest
 
-from data.io import DocumentReader, StanfordParsedSentenceReader
+from nlpypline.data.io import DocumentReader, StanfordParsedSentenceReader
 from tests import get_documents_from_file
 
 

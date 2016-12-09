@@ -7,7 +7,7 @@ import sys
 import subprocess
 import shutil
 
-from util import partition
+from nlpypline.util import partition
 
 src, target, pct = sys.argv[1:]
 pct = float(pct)
