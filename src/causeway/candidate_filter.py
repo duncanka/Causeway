@@ -17,7 +17,6 @@ from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
 from causeway.because_data import Token, CausationInstance
 from data import StanfordParsedSentence
 from iaa import make_annotation_comparator, stringify_connective
-from nlp.senna import SennaEmbeddings
 from pipeline import Stage
 from pipeline.featurization import (
     KnownValuesFeatureExtractor, FeatureExtractor, SetValuedFeatureExtractor,
@@ -30,6 +29,7 @@ from skpipeline import (make_featurizing_estimator,
 from util import powerset
 from util.diff import SequenceDiff
 from util.metrics import ClassificationMetrics, diff_binary_vectors
+from util.nltk import SennaEmbeddings
 from util.scipy import (AutoWeightedVotingClassifier, make_logistic_score,
                         prob_sum_score)
 
