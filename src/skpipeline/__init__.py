@@ -1,3 +1,8 @@
+"""
+Some utilities for integrating our pipeline system (particularly the
+featurization system) with scikit-learn.
+"""
+
 from cPickle import PicklingError
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.dummy import DummyClassifier

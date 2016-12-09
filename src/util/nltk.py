@@ -1,3 +1,7 @@
+"""
+Tweaks/tools for NLTK.
+"""
+
 from __future__ import absolute_import
 from itertools import islice
 import logging
@@ -57,7 +61,7 @@ def index_of_subtree(subtree, root=None):
 # Head finding
 #########################
 
-# From https://berkeley-coreference-analyser.googlecode.com/git/nlp_util/head_finder.py
+# Based on https://berkeley-coreference-analyser.googlecode.com/git/nlp_util/head_finder.py
 # (revision e44e5359ba81).
 # See http://www.cs.columbia.edu/~mcollins/papers/heads.
 #
