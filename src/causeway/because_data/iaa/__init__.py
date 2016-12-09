@@ -379,7 +379,7 @@ class _RelationMetrics(object):
             self.agreeing_instances = [
                 (gold_by_file[os.path.split(i1.sentence.source_file_path)[-1]]
                  .index(i1.sentence) + 1, i1)
-                for i1, i2 in matching_instances]
+                for i1, _i2 in matching_instances]
 
         return (connective_metrics, matching_instances)
 
@@ -408,8 +408,8 @@ class _RelationMetrics(object):
                 num_matching = len(diff.get_matching_pairs())
                 match_jaccard = num_matching / float(
                     len(i1_indices) + len(i2_indices) - num_matching)
-            else: # both null; overlap is undefined
-                match_jaccard = np.NaN
+            else: # both empty arguments; overlap is defined as 1.
+                match_jaccard = 1.0
             jaccard_avg_numerator += match_jaccard
 
         return safe_divide(jaccard_avg_numerator, len(matches))
@@ -685,7 +685,7 @@ class _RelationMetrics(object):
 
         property_matrices = defaultdict(list)
         for m in metrics_list:
-            for property_name, property_enum, compare_property in (
+            for property_name, _property_enum, compare_property in (
                 m.properties_to_compare):
                 matrix_attr_name = '%s_matrix' % property_name
                 if not compare_property:
