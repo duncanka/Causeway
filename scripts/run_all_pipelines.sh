@@ -1,13 +1,15 @@
 #!/bin/bash
 # Requires the Unix task spooler (package task-spooler in Ubuntu).
+# Expects to be run from the src directory.
 
 SEED=2961393773
 OUT_DIR=../outputs/final
 LOG_DIR=$OUT_DIR/logs
 DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
-BASE_CMD="python main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category"
+BASE_CMD="python causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category"
 
+export PYTHONPATH=.
 tsp -S 4
 
 # Columns:
