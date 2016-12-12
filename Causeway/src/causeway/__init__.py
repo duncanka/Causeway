@@ -1,4 +1,5 @@
 from collections import defaultdict
+import colorama
 from copy import copy
 from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
 from itertools import chain
@@ -219,3 +220,8 @@ RELATIVE_POSITIONS = Enum(['Before', 'Overlapping', 'After'])
 def get_causation_tuple(connective_tokens, cause_head, effect_head):
     return (tuple(t.index for t in connective_tokens),
             cause_head.index, effect_head.index)
+
+
+# Add some Colorama functionality.
+for style, code in [('UNDERLINE', 4), ('BLINK', 5)]:
+    setattr(colorama.Style, style, '\033[%dm' % code)
