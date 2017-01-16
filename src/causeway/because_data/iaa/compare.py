@@ -9,8 +9,8 @@ import logging
 import sys
 
 from causeway.because_data import CausalityStandoffReader
+from causeway.because_data.iaa import CausalityMetrics, print_indented
 from nlpypline.data.io import DirectoryReader
-from iaa import CausalityMetrics, print_indented
 
 
 try:

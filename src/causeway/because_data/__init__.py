@@ -3,7 +3,7 @@ Data structures and readers/writers for dealing with data from the BECauSE
 corpus.
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
 from bidict import bidict
 import collections
@@ -26,7 +26,7 @@ from textwrap import TextWrapper
 try:
     DEFINE_bool('reader_binarize_degrees', True,
                 'Whether to turn all degrees into "Facilitate" and "Inhibit"')
-    DEFINE_bool('reader_ignore_overlapping', True,
+    DEFINE_bool('reader_ignore_overlapping', False,
                 'Whether, when reading causality data, instances with an'
                 ' accompanying overlapping relation should be ignored')
 except DuplicateFlagError as e:
@@ -298,7 +298,7 @@ for arg_attr_name in ['cause', 'effect', 'means']:
 class OverlappingRelationInstance(_RelationInstance):
     RelationTypes = Enum(['Temporal', 'Correlation', 'Hypothetical',
                           'Obligation_permission', 'Creation_termination',
-                          'Extremity_sufficiency', 'Circumstance'])
+                          'Extremity_sufficiency', 'Context'])
     _types = RelationTypes
 
     def __init__(self, source_sentence, rel_type=None, connective=None,
@@ -433,9 +433,10 @@ class CausalityStandoffReader(DocumentReader):
         recurse = False
         if lines_to_reprocess:
             if len(lines_to_reprocess) >= prev_line_count:
-                logging.warn("Count of lines to process has not shrunk after"
-                             " recursion. Giving up on the following IDs: %s"
-                             % ', '.join(ids_needed_to_reprocess))
+                logging.warn("Count of lines to process in %s has not shrunk"
+                             " after recursion. Giving up on the following IDs:"
+                             " %s" % (self._file_stream.name,
+                                      ', '.join(ids_needed_to_reprocess)))
                 return
             for id_needed in ids_needed_to_reprocess:
                 # Any ID that was referenced before being defined must be
@@ -952,8 +953,11 @@ class CausalityStandoffWriter(InstancesDocumentWriter):
 
 class CausalityOracleTransitionWriter(InstancesDocumentWriter):
     def _write_instance(self, document, sentence):
-        tokens = [token for token in sentence.tokens[1:] # skip ROOT
-                  if token.pos not in Token.PUNCT_TAGS]
+        tokens = [token for token in sentence.tokens[1:]] # skip ROOT
+
+        # Print sentence-initial line with tokens and POS tags.
+        print(u', '.join(u'/'.join([t.original_text, t.pos]) for t in tokens),
+              file=self._file_stream)
 
         # Initialize state. lambda_1 is unexamined tokens to the left of the
         # current token; lambda_2 is examined tokens to the left; and likewise
@@ -1120,22 +1124,22 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         state_line = u"{} {} {token} {} {}".format(
             *stringified_lambdas, token=self._stringify_token(current_token))
         rels_line = self._stringify_rels()
-        self._file_stream.writelines(line + u'\n' for line in
-                                     [state_line, rels_line, transition])
+        for line in [state_line, rels_line, unicode(transition)]:
+            print(line, file=self._file_stream)
         self._last_op = transition
 
     def _stringify_token(self, token):
-        return '{}-{}'.format(token.original_text, token.index)
+        return u'{}-{}'.format(token.original_text, token.index)
 
     def _stringify_token_list(self, token_list):
         token_strings = [self._stringify_token(t) for t in token_list]
-        return '[{}]'.format(', '.join(token_strings))
+        return u'[{}]'.format(u', '.join(token_strings))
 
     def _stringify_rels(self):
         instance_strings = [
-            '{}({}, {})'.format('/'.join([self._stringify_token(c)
-                                          for c in instance.connective]),
-                                self._stringify_token_list(instance.cause),
-                                self._stringify_token_list(instance.effect))
+            u'{}({}, {})'.format(u'/'.join([self._stringify_token(c)
+                                            for c in instance.connective]),
+                                 self._stringify_token_list(instance.cause),
+                                 self._stringify_token_list(instance.effect))
             for instance in self.rels]
-        return '{{{}}}'.format(', '.join(instance_strings))
+        return u'{{{}}}'.format(u', '.join(instance_strings))
