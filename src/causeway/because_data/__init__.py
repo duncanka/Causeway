@@ -1082,17 +1082,16 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                 conn_instance = connective_instances[conn_instance_index]
                 # Leave current token to be compared with new connective.
             else:
-                # TODO: Is it a problem that we can't add a token to both the
-                # argument and the connective? Do we need to add an operation?
-                for arc_type in ['cause', 'effect']:
-                    if token_to_compare in getattr(conn_instance, arc_type):
+                for arc_type in ['cause', 'effect', 'means']:
+                    argument = getattr(conn_instance, arc_type, None)
+                    if argument is not None and token_to_compare in argument:
                         trans = "{}-ARC({})".format(arc_direction,
                                                     arc_type.title())
                         self._write_transition(current_token, trans)
                         if instance_under_construction is None:
                             instance_under_construction = CausationInstance(
                                 conn_instance.sentence, cause=[], effect=[],
-                                connective=[current_token])
+                                means=[], connective=[current_token])
                             self.rels.append(instance_under_construction)
                         getattr(instance_under_construction, arc_type).append(
                             token_to_compare)
@@ -1137,9 +1136,10 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
 
     def _stringify_rels(self):
         instance_strings = [
-            u'{}({}, {})'.format(u'/'.join([self._stringify_token(c)
+            u'{}({}, {}, {})'.format(u'/'.join([self._stringify_token(c)
                                             for c in instance.connective]),
                                  self._stringify_token_list(instance.cause),
-                                 self._stringify_token_list(instance.effect))
+                                 self._stringify_token_list(instance.effect),
+                                 self._stringify_token_list(instance.means))
             for instance in self.rels]
         return u'{{{}}}'.format(u', '.join(instance_strings))
