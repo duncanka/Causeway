@@ -6,7 +6,7 @@ corpus.
 from __future__ import absolute_import, print_function
 
 from bidict import bidict
-import collections
+from collections import defaultdict, deque
 from copy import copy, deepcopy
 from gflags import FLAGS, DuplicateFlagError, DEFINE_bool
 import logging
@@ -244,22 +244,24 @@ class _RelationInstance(object):
         connective = ' '.join([t.original_text for t in instance.connective])
         named_args = instance.get_named_args(convert=True)
         arg_strings = [
-             '{arg_name}={txt}'.format(
+             u'{arg_name}={txt}'.format(
                 arg_name=arg_name,
-                txt=' '.join([t.original_text for t in annotation]
-                             if annotation else ['<None>']))
+                txt=u' '.join([t.original_text for t in annotation]
+                              if annotation else [u'<None>']))
              for arg_name, annotation in sorted(named_args.iteritems())]
-        if instance.type is not None:
-            type_str = instance._types[instance.type]
-        else:
-            type_str = "UNKNOWN"
-        self_str = '{typename}(connective={conn}, {args}, type={type})'.format(
+        self_str = u'{typename}(connective={conn}, {args}, type={type})'.format(
             typename=instance.__class__.__name__, conn=connective,
-            args=', '.join(arg_strings), type=type_str)
-        return '\n'.join(_RelationInstance.__wrapper.wrap(self_str))
+            args=u', '.join(arg_strings), type=instance._get_type_str())
+        return u'\n'.join(_RelationInstance.__wrapper.wrap(self_str))
+
+    def _get_type_str(self):
+        if self.type is not None:
+            return self._types[self.type]
+        else:
+            return "UNKNOWN"
 
     def __repr__(self):
-        return self.pprint(self)
+        return self.pprint(self).encode('utf-8')
 
     arg_names = bidict({'arg0': 'arg0', 'arg1': 'arg1'})
 
@@ -304,6 +306,9 @@ class OverlappingRelationInstance(_RelationInstance):
     def __init__(self, source_sentence, rel_type=None, connective=None,
                  arg0=None, arg1=None, annotation_id=None,
                  attached_causation=None):
+        if rel_type is None:
+            rel_type = set() # overlapping rel can have multiple types
+
         all_args = locals().copy()
         del all_args['self']
         del all_args['attached_causation']
@@ -311,6 +316,11 @@ class OverlappingRelationInstance(_RelationInstance):
 
         self.attached_causation = attached_causation
 
+    def _get_type_str(self):
+        if self.type:
+            return '+'.join(self._types[t] for t in self.type)
+        else:
+            return 'UNKNOWN'
 
 # Useful shorthand. It's not really a type, but it can be used like one to
 # create new reader objects.
@@ -354,15 +364,16 @@ class CausalityStandoffReader(DocumentReader):
         else:
             ids_to_annotations = {}
             ids_to_instances = {}
-            instances_also_overlapping = []
+            # Map of causal instances to their overlapping relations
+            instances_also_overlapping = defaultdict(set)
             unused_arg_ids = set()
             self.__process_lines(lines, ids_to_annotations, ids_to_instances,
                                  instances_also_overlapping, unused_arg_ids,
                                  document)
 
-            for to_duplicate, instance_type in instances_also_overlapping:
+            for to_duplicate, types in instances_also_overlapping.items():
                 to_duplicate.sentence.add_overlapping_instance(
-                    instance_type, to_duplicate.connective, to_duplicate.arg0,
+                    types, to_duplicate.connective, to_duplicate.arg0,
                     to_duplicate.arg1, to_duplicate.id, to_duplicate)
 
             for sentence in document:
@@ -647,10 +658,9 @@ class CausalityStandoffReader(DocumentReader):
                     OverlappingRelationInstance.RelationTypes, attr_type)
                 instance = ids_to_instances[id_to_modify]
                 if isinstance(instance, OverlappingRelationInstance):
-                    instance.type = overlapping_type
+                    instance.type.add(overlapping_type)
                 else:
-                    instances_also_overlapping.append((instance,
-                                                       overlapping_type))
+                    instances_also_overlapping[instance].add(overlapping_type)
             except AttributeError:
                 raise UserWarning(
                     "Skipping attribute line with unrecognized attribute: %s"
@@ -963,16 +973,16 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         # current token; lambda_2 is examined tokens to the left; and likewise
         # for lambda_4 and lambda_3, respectively, to the right.
         self.lambda_1 = []
-        self.lambda_2 = collections.deque() # we'll be appending to the left end
+        self.lambda_2 = deque() # we'll be appending to the left end
         self.lambda_3 = []
         # We'll be moving stuff off of the left end of lambda_4.
-        self.lambda_4 = collections.deque(tokens)
+        self.lambda_4 = deque(tokens)
         self.lambdas = [self.lambda_1, self.lambda_2, self.lambda_3,
                         self.lambda_4]
         self.rels = []
         self._last_op = None
 
-        connectives_to_instances = collections.defaultdict(list)
+        connectives_to_instances = defaultdict(list)
         for causation in sentence.causation_instances:
             first_conn_token = causation.connective[0]
             connectives_to_instances[first_conn_token].append(causation)
