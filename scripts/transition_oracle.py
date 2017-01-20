@@ -13,7 +13,7 @@ def main(argv):
     files_dir = argv[1]
     
     reader = DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
-                             CausalityStandoffReader())
+                             CausalityStandoffReader(), True)
     reader.open(files_dir)
     documents = reader.get_all()
     

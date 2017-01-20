@@ -59,6 +59,8 @@ try:
                   "Directory in which to save models and from which to load"
                   " them. Relative to the working directory. Defaults to"
                   " ../models/<pipeline type>.")
+    DEFINE_bool('reader_recurse', False,
+                'Whether to recurse into the data directories')
 except DuplicateFlagError:
     logging.warn('Ignoring redefinition of flag')
 
@@ -171,7 +173,8 @@ if __name__ == '__main__':
 
     causality_pipeline = Pipeline(
         stages, DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
-                                CausalityStandoffReader()))
+                                CausalityStandoffReader(),
+                                FLAGS.reader_recurse))
 
     if FLAGS.eval_with_cv:
         eval_results = causality_pipeline.cross_validate()

@@ -251,10 +251,10 @@ class _RelationInstance(object):
              for arg_name, annotation in sorted(named_args.iteritems())]
         self_str = u'{typename}(connective={conn}, {args}, type={type})'.format(
             typename=instance.__class__.__name__, conn=connective,
-            args=u', '.join(arg_strings), type=instance._get_type_str())
+            args=u', '.join(arg_strings), type=instance.get_type_str())
         return u'\n'.join(_RelationInstance.__wrapper.wrap(self_str))
 
-    def _get_type_str(self):
+    def get_type_str(self):
         if self.type is not None:
             return self._types[self.type]
         else:
@@ -316,7 +316,7 @@ class OverlappingRelationInstance(_RelationInstance):
 
         self.attached_causation = attached_causation
 
-    def _get_type_str(self):
+    def get_type_str(self):
         if self.type:
             return '+'.join(self._types[t] for t in self.type)
         else:

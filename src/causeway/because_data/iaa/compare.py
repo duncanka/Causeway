@@ -23,6 +23,8 @@ try:
     DEFINE_bool('iaa_include_partial', False,
                 'Include a comparison that counts partial overlap of spans as a'
                 ' match.')
+    DEFINE_bool('iaa_recurse', False,
+                'Whether to recurse into the data directories')
 except DuplicateFlagError as e:
     logging.warn('Ignoring flag redefinitions; assuming module reload')
 
@@ -90,7 +92,8 @@ def main(argv):
         level=logging.WARN)
     logging.captureWarnings(True)
 
-    reader = DirectoryReader(FLAGS.iaa_file_regexes, CausalityStandoffReader())
+    reader = DirectoryReader(FLAGS.iaa_file_regexes, CausalityStandoffReader(),
+                             FLAGS.iaa_recurse)
     instances_by_path = []
     for path in iaa_paths:
         reader.open(path)

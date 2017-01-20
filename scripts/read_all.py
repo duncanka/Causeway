@@ -4,9 +4,9 @@ from causeway.because_data import CausalityStandoffReader
 from nlpypline.data.io import DirectoryReader
 
 
-def get_reader():
+def get_reader(recursive=False):
     return DirectoryReader((CausalityStandoffReader.FILE_PATTERN,),
-                           CausalityStandoffReader())
+                           CausalityStandoffReader(), recursive)
 
 def read_all(datadir='/var/www/brat/data/finished', instances=True,
              overlapping=False):
