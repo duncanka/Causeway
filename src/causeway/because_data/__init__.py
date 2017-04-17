@@ -251,14 +251,17 @@ class _RelationInstance(object):
              for arg_name, annotation in sorted(named_args.iteritems())]
         self_str = u'{typename}(connective={conn}, {args}, type={type})'.format(
             typename=instance.__class__.__name__, conn=connective,
-            args=u', '.join(arg_strings), type=instance.get_type_str())
+            args=u', '.join(arg_strings), type=instance._get_type_str())
         return u'\n'.join(_RelationInstance.__wrapper.wrap(self_str))
 
-    def get_type_str(self):
+    def get_interpretable_type(self):
         if self.type is not None:
             return self._types[self.type]
         else:
             return "UNKNOWN"
+
+    def _get_type_str(self):
+        return self.get_interpretable_type()
 
     def __repr__(self):
         return self.pprint(self).encode('utf-8')
@@ -268,8 +271,7 @@ class _RelationInstance(object):
 
 class CausationInstance(_RelationInstance):
     Degrees = Enum(['Facilitate', 'Enable', 'Disentail', 'Inhibit'])
-    CausationTypes = Enum(['Consequence', 'Inference', 'Motivation',
-                           'Purpose'])
+    CausationTypes = Enum(['Consequence', 'Motivation','Purpose', 'Inference'])
     _types = CausationTypes
     _num_args = 3
 
@@ -316,11 +318,15 @@ class OverlappingRelationInstance(_RelationInstance):
 
         self.attached_causation = attached_causation
 
-    def get_type_str(self):
+    def get_interpretable_type(self):
         if self.type:
-            return '+'.join(self._types[t] for t in self.type)
+            return set(self._types[t] for t in self.type)
         else:
-            return 'UNKNOWN'
+            return set(['UNKNOWN'])
+
+    def _get_type_str(self):
+        return '+'.join(self.get_interpretable_type())
+
 
 # Useful shorthand. It's not really a type, but it can be used like one to
 # create new reader objects.
@@ -966,7 +972,8 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         tokens = [token for token in sentence.tokens[1:]] # skip ROOT
 
         # Print sentence-initial line with tokens and POS tags.
-        print(u', '.join(u'/'.join([t.original_text, t.pos]) for t in tokens),
+        print(u', '.join(u'/'.join([t.original_text.replace(' ', ''), t.pos])
+                         for t in tokens),
               file=self._file_stream)
 
         # Initialize state. lambda_1 is unexamined tokens to the left of the
@@ -1023,7 +1030,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         (self.lambda_1, self.lambda_2, self.lambda_3, self.lambda_4,
          self.lambdas, self.rels) = [None] * 6 # Reset; release memory
 
-    def _do_shift(self, current_token, last_modified_arg, token_to_compare,
+    def _do_split(self, current_token, last_modified_arg, token_to_compare,
                   instance_under_construction):
         self._write_transition(current_token, 'SPLIT')
 
@@ -1084,7 +1091,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
             # First, see if we should split. But don't split on leftward tokens.
             if (not dir_is_left and token_to_compare in other_connective_tokens
                 and self._last_op != 'SPLIT'):
-                instance_under_construction = self._do_shift(
+                instance_under_construction = self._do_split(
                     current_token, last_modified_arc_type, token_to_compare,
                     instance_under_construction)
                 # Move to next
@@ -1092,6 +1099,17 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                 conn_instance = connective_instances[conn_instance_index]
                 # Leave current token to be compared with new connective.
             else:
+                # If there's a fragment, record it first, before looking at the
+                # args. (The fragment word might still be part of an arg.)
+                if (token_to_compare is not current_token
+                    and self._last_op not in  # no fragments after splits/frags
+                        ['SPLIT',  "CONN-FRAG-{}".format(arc_direction)]
+                    and token_to_compare in conn_instance.connective):
+                    self._write_transition(current_token,
+                                           "CONN-FRAG-{}".format(arc_direction))
+                    instance_under_construction.connective.append(
+                        token_to_compare)
+                    # Don't set has_arc to True; that's determined by next block
                 for arc_type in ['cause', 'effect', 'means']:
                     argument = getattr(conn_instance, arc_type, None)
                     if argument is not None and token_to_compare in argument:
@@ -1108,17 +1126,14 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                         has_arc = True
                         last_modified_arc_type = arc_type
                         break
-                if (not has_arc and token_to_compare is not current_token
-                    and self._last_op != 'SPLIT' # no fragments after splits
-                    and token_to_compare in conn_instance.connective):
-                    self._write_transition(current_token,
-                                           "CONN-FRAG-{}".format(arc_direction))
-                    instance_under_construction.connective.append(
-                        token_to_compare)
-                    has_arc = True
                 if not has_arc:
                     self._write_transition(current_token,
                                            "NO-ARC-{}".format(arc_direction))
+                    if instance_under_construction is None:
+                        instance_under_construction = CausationInstance(
+                            conn_instance.sentence, cause=[], effect=[],
+                            means=[], connective=[current_token])
+                        self.rels.append(instance_under_construction)
 
                 if dir_is_left:
                     compared.appendleft(uncompared.pop())
@@ -1138,7 +1153,8 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         self._last_op = transition
 
     def _stringify_token(self, token):
-        return u'{}-{}'.format(token.original_text, token.index)
+        return u'{}-{}'.format(token.original_text.replace(' ', ''),
+                               token.index)
 
     def _stringify_token_list(self, token_list):
         token_strings = [self._stringify_token(t) for t in token_list]
