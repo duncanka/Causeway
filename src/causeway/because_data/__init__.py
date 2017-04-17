@@ -1086,7 +1086,6 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         last_modified_arc_type = None
         while uncompared:
             token_to_compare = uncompared[first_uncompared_index]
-            has_arc = False
 
             # First, see if we should split. But don't split on leftward tokens.
             if (not dir_is_left and token_to_compare in other_connective_tokens
@@ -1109,13 +1108,12 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                                            "CONN-FRAG-{}".format(arc_direction))
                     instance_under_construction.connective.append(
                         token_to_compare)
-                    # Don't set has_arc to True; that's determined by next block
+
+                arcs_to_add = []
                 for arc_type in ['cause', 'effect', 'means']:
                     argument = getattr(conn_instance, arc_type, None)
                     if argument is not None and token_to_compare in argument:
-                        trans = "{}-ARC({})".format(arc_direction,
-                                                    arc_type.title())
-                        self._write_transition(current_token, trans)
+                        arcs_to_add.append(arc_type)
                         if instance_under_construction is None:
                             instance_under_construction = CausationInstance(
                                 conn_instance.sentence, cause=[], effect=[],
@@ -1123,10 +1121,15 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                             self.rels.append(instance_under_construction)
                         getattr(instance_under_construction, arc_type).append(
                             token_to_compare)
-                        has_arc = True
+                        # TODO: This will do odd things if there's ever a SPLIT
+                        # interacting with a multiple-argument arc.
                         last_modified_arc_type = arc_type
-                        break
-                if not has_arc:
+                if arcs_to_add:
+                    trans = "{}-ARC({})".format(
+                        arc_direction, ','.join(arc_type.title()
+                                                for arc_type in arcs_to_add))
+                    self._write_transition(current_token, trans)
+                else:
                     self._write_transition(current_token,
                                            "NO-ARC-{}".format(arc_direction))
                     if instance_under_construction is None:
