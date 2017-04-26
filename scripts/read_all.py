@@ -9,8 +9,8 @@ def get_reader(recursive=False):
                            CausalityStandoffReader(), recursive)
 
 def read_all(datadir='/var/www/brat/data/finished', instances=True,
-             overlapping=False):
-    reader = get_reader()
+             overlapping=False, recursive=False):
+    reader = get_reader(recursive)
     reader.open(datadir)
     if instances:
         all_sentences = chain.from_iterable(d.sentences for d in reader)
