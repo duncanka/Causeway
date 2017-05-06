@@ -19,7 +19,7 @@ from scipy.sparse.lil import lil_matrix
 from nlpypline.data import Annotation, Token, StanfordParsedSentence
 from nlpypline.data.io import (DocumentReader, StanfordParsedSentenceReader,
                                InstancesDocumentWriter)
-from nlpypline.util import listify, Enum, make_getter, make_setter
+from nlpypline.util import listify, Enum, make_getter, make_setter, Object
 from textwrap import TextWrapper
 
 
@@ -200,7 +200,8 @@ class _RelationInstance(object):
         for token in listify(connective) + listify(arg0) + listify(arg1):
             if token is None:
                 continue
-            assert token.parent_sentence is source_sentence
+            # Parent sentence is no longer always the source sentence
+            # assert token.parent_sentence is source_sentence
 
         self.sentence = source_sentence
         self.connective = connective
@@ -538,8 +539,7 @@ class CausalityStandoffReader(DocumentReader):
         self.__raise_warning_if(
             containing_sentence is None,
             "Skipping annotation for which no sentence could be found")
-        annotation = Annotation(containing_sentence.document_char_offset,
-                                annotation_offsets, text_str, line_id)
+        annotation = Annotation(annotation_offsets, text_str, line_id)
         ids_to_annotations[line_id] = annotation
 
         # Create the instance if necessary.
@@ -571,35 +571,51 @@ class CausalityStandoffReader(DocumentReader):
 
     def _find_tokens_for_annotation(self, sentence, annotation):
         tokens = []
-        tokens_iter = iter(sentence.tokens)
-        tokens_iter.next() # skip ROOT
+        cross_sentence = Object() # wrap in object to allow access by add_token
+        cross_sentence.status = False
+        def add_token(token):
+            tokens.append(token)
+            if token.parent_sentence is not sentence:
+                cross_sentence.status = True
+
+        tokens_to_search = []
+        double_prev_sentence = (sentence.previous_sentence.previous_sentence
+                                if sentence.previous_sentence else None)
+        double_next_sentence = (sentence.next_sentence.next_sentence
+                                if sentence.next_sentence else None)
+        for tokens_sentence in (double_prev_sentence,
+                                sentence.previous_sentence, sentence,
+                                sentence.next_sentence, double_next_sentence):
+            if tokens_sentence:
+                tokens_to_search.extend(tokens_sentence.tokens[1:]) # skip ROOT
+        tokens_iter = iter(tokens_to_search)
         next_token = tokens_iter.next()
         try:
             for start, end in annotation.offsets:
                 prev_token = None
-                while next_token.start_offset < start:
+                while next_token.get_start_offset_doc() < start:
                     prev_token = next_token
                     next_token = tokens_iter.next()
-                if next_token.start_offset != start:
+                if next_token.get_start_offset_doc() != start:
                     warning = ("Start of annotation %s in file %s does not"
                                " correspond to a token start"
                                % (annotation.id, sentence.source_file_path))
-                    if prev_token and prev_token.end_offset >= start:
-                        tokens.append(prev_token)
+                    if prev_token and prev_token.get_end_offset_doc() >= start:
+                        add_token(prev_token)
                         warning += '; the token it bisects has been appended'
                     logging.warn(warning)
                 # We might have grabbed a whole additional token just because
                 # of an annotation that included a final space, so make sure
                 # next_token really is in the annotation span before adding it.
-                if next_token.start_offset < end:
-                    tokens.append(next_token)
+                if next_token.get_start_offset_doc() < end:
+                    add_token(next_token)
 
-                while next_token.end_offset < end:
+                while next_token.get_end_offset_doc() < end:
                     prev_token = next_token
                     next_token = tokens_iter.next()
-                    if next_token.start_offset < end:
-                        tokens.append(next_token)
-                if next_token.end_offset != end:
+                    if next_token.get_start_offset_doc() < end:
+                        add_token(next_token)
+                if next_token.get_end_offset_doc() != end:
                     warning = ("End of annotation %s in file %s does not"
                                " correspond to a token start"
                                % (annotation.id, sentence.source_file_path))
@@ -609,12 +625,17 @@ class CausalityStandoffReader(DocumentReader):
                         warning += '; the token it bisects has been appended'
                     logging.warn(warning)
 
+            if cross_sentence.status:
+                logging.warn("%s: Annotation %s crosses sentence boundary: %s",
+                             sentence.source_file_path, annotation.id,
+                             annotation.text)
+
             # TODO: Should we check to make sure the annotation text is right?
             return tokens
 
         except StopIteration:
             raise ValueError("Annotation %s couldn't be matched against tokens!"
-                         " Ignoring..." % annotation.offsets)
+                             " Ignoring..." % annotation.offsets)
 
     def __process_attribute(self, line, line_parts, ids_to_annotations,
                             ids_to_instances, instances_also_overlapping,
