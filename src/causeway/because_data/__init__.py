@@ -1008,12 +1008,20 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         self.lambdas = [self.lambda_1, self.lambda_2, self.lambda_3,
                         self.lambda_4]
         self.rels = []
+        self.extrasentential_instances = 0
+        self.extrasentential_args = []
         self._last_op = None
 
         connectives_to_instances = defaultdict(list)
         for causation in sentence.causation_instances:
-            first_conn_token = causation.connective[0]
-            connectives_to_instances[first_conn_token].append(causation)
+            # Eliminate any instances with extrasentential tokens, but add them
+            # to the count of tokens we can't handle.
+            if all([t.parent_sentence is sentence
+                    for t in causation.connective]):
+                first_conn_token = causation.connective[0]
+                connectives_to_instances[first_conn_token].append(causation)
+            else:
+                self.extrasentential_instances += 1
 
         # Make sure the instances for each token are sorted by order of
         # appearance.
@@ -1027,12 +1035,26 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
             instance_under_construction = None
             token_instances = connectives_to_instances[current_token]
             if token_instances: # some connective starts with this token
+                # Record extrasentential argument counts.
+                for causation in token_instances:
+                    extrasentential_counts = []
+                    for arg_type in causation.get_arg_types():
+                        arg_extrasentential_count = 0
+                        arg = getattr(causation, arg_type, None)
+                        if arg:
+                            for token in arg:
+                                if token.parent_sentence is not sentence:
+                                    arg_extrasentential_count += 1
+                        extrasentential_counts.append(arg_extrasentential_count)
+                    self.extrasentential_args.append(extrasentential_counts)
+
                 instance_under_construction = self._compare_with_conn(
                     current_token, True, token_instances,
                     instance_under_construction)
                 self._compare_with_conn(current_token, False, token_instances,
                                         instance_under_construction)
                 self._write_transition(current_token, 'SHIFT')
+
             else:
                 self._write_transition(current_token, 'NO-CONN')
 
@@ -1048,8 +1070,8 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                     del self.lambda_3[:]
                 else: # current_token was a no-conn
                     self.lambda_4.popleft()
-        self._file_stream.write(u'\n') # Final blank line
 
+        self._write_sentence_footer()
         (self.lambda_1, self.lambda_2, self.lambda_3, self.lambda_4,
          self.lambdas, self.rels) = [None] * 6 # Reset; release memory
 
@@ -1203,3 +1225,12 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                                  self._stringify_token_list(instance.means))
             for instance in self.rels]
         return u'{{{}}}'.format(u', '.join(instance_strings))
+
+    def _write_sentence_footer(self):
+        extrasentential_args_str = u' '.join(
+            [u'/'.join([unicode(c) for c in counts])
+             for counts in self.extrasentential_args])
+        extrasententials_line = u''.join(
+            [u'--', unicode(self.extrasentential_instances), u' ',
+             extrasentential_args_str, u'\n\n']) # Include final blank line
+        self._file_stream.write(extrasententials_line)
