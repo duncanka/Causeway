@@ -7,9 +7,9 @@ OUT_DIR=../outputs/final
 LOG_DIR=$OUT_DIR/logs
 DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
-BASE_CMD="python causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category"
+BASE_CMD="python src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category"
 
-export PYTHONPATH=.
+export PYTHONPATH="src:NLPypline/src"
 tsp -S 4
 
 # Columns:

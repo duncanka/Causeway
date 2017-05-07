@@ -11,10 +11,6 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
-# Make sure NLPypline is on the path.
-# TODO: is there a more elegant way to do this?
-sys.path.append('../../NLPypline/src')
-
 from causeway import remove_smaller_matches, StanfordNERStage, IAAEvaluator
 from causeway.baseline import BaselineStage
 from causeway.baseline.combiner import BaselineCombinerStage
