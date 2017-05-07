@@ -75,7 +75,8 @@ def make_annotation_comparator(allow_partial):
 
         # Just in case we accidentally added tokens to an annotation in the
         # wrong order, sort by token position.
-        sort_key = lambda token: token.index
+        sort_key = lambda token: (token.parent_sentence.document_char_offset,
+                                  token.index)
         offsets_1 = [(token.start_offset, token.end_offset)
                      for token in sorted(token_list_1, key=sort_key)]
         offsets_2 = [(token.start_offset, token.end_offset)
