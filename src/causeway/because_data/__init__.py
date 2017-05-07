@@ -1032,7 +1032,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                                         instance_under_construction)
                 self._write_transition(current_token, 'SHIFT')
             else:
-                self._write_transition(current_token, "NO-CONN")
+                self._write_transition(current_token, 'NO-CONN')
 
             if current_token is not tokens[-1]:
                 self.lambda_1.extend(self.lambda_2)
@@ -1131,6 +1131,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                         token_to_compare)
 
                 arcs_to_add = []
+                new_instance = False
                 for arc_type in ['cause', 'effect', 'means']:
                     argument = getattr(conn_instance, arc_type, None)
                     if argument is not None and token_to_compare in argument:
@@ -1139,9 +1140,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                             instance_under_construction = CausationInstance(
                                 conn_instance.sentence, cause=[], effect=[],
                                 means=[], connective=[current_token])
-                            self.rels.append(instance_under_construction)
-                        getattr(instance_under_construction, arc_type).append(
-                            token_to_compare)
+                            new_instance = True
                         # TODO: This will do odd things if there's ever a SPLIT
                         # interacting with a multiple-argument arc.
                         last_modified_arc_type = arc_type
@@ -1150,6 +1149,11 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                         arc_direction, ','.join(arc_type.title()
                                                 for arc_type in arcs_to_add))
                     self._write_transition(current_token, trans)
+                    if new_instance:
+                        self.rels.append(instance_under_construction)
+                    for arc_type in arcs_to_add:
+                        getattr(instance_under_construction, arc_type).append(
+                            token_to_compare)
                 else:
                     self._write_transition(current_token,
                                            "NO-ARC-{}".format(arc_direction))
@@ -1187,7 +1191,7 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
     def _stringify_rels(self):
         instance_strings = [
             u'{}({}, {}, {})'.format(u'/'.join([self._stringify_token(c)
-                                            for c in instance.connective]),
+                                                for c in instance.connective]),
                                  self._stringify_token_list(instance.cause),
                                  self._stringify_token_list(instance.effect),
                                  self._stringify_token_list(instance.means))
