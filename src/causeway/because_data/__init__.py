@@ -1018,8 +1018,10 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         # Make sure the instances for each token are sorted by order of
         # appearance.
         for _, causations in connectives_to_instances.iteritems():
-            causations.sort(key=lambda instance: tuple(t.index for t in
-                                                       instance.connective))
+            def sort_key(instance):
+                return tuple(t.index for t in instance.connective
+                             if t.parent_sentence is sentence)
+            causations.sort(key=sort_key)
 
         for current_token in tokens:
             instance_under_construction = None
@@ -1067,7 +1069,14 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
         arg_cutoff_index = instance_under_construction.connective[
             conn_token_index].index
 
-        instance_under_construction = deepcopy(instance_under_construction)
+        # Don't need a full deep copy...don't want to copy all the sentences and
+        # tokens and whatnot. Just make sure we don't modify the original.
+        instance_under_construction = copy(instance_under_construction)
+        instance_under_construction.__dict__.update(
+            {name: copy(arg) for name, arg in
+             instance_under_construction.get_named_args().iteritems()})
+        instance_under_construction.connective = (
+            instance_under_construction.connective[:conn_token_index])
         self.rels.append(instance_under_construction)
 
         # We need to know which tokens to keep from the argument we were
@@ -1079,9 +1088,6 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                         if t.index < arg_cutoff_index]
         setattr(instance_under_construction, last_modified_arg,
                 new_argument)
-
-        instance_under_construction.connective = (
-            instance_under_construction.connective[:conn_token_index])
         instance_under_construction.connective.append(token_to_compare)
         # other_connective_tokens.remove(token_to_compare)
         return instance_under_construction
