@@ -1231,6 +1231,6 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
             [u'/'.join([unicode(c) for c in counts])
              for counts in self.extrasentential_args])
         extrasententials_line = u''.join(
-            [u'--', unicode(self.extrasentential_instances), u' ',
+            [u'>>>', unicode(self.extrasentential_instances), u' ',
              extrasentential_args_str, u'\n\n']) # Include final blank line
         self._file_stream.write(extrasententials_line)
