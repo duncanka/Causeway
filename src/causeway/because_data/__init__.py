@@ -1133,6 +1133,15 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
             [i.connective for i in connective_instances[1:]]))
         other_connective_tokens -= set(conn_instance.connective)
         last_modified_arc_type = None
+
+        def start_new_instance():
+            self._write_transition(current_token, "NEW-CONN")
+            new_instance = CausationInstance(
+                conn_instance.sentence, cause=[], effect=[],
+                means=[], connective=[current_token])
+            self.rels.append(new_instance)
+            return new_instance
+
         while uncompared:
             token_to_compare = uncompared[first_uncompared_index]
 
@@ -1167,26 +1176,20 @@ class CausalityOracleTransitionWriter(InstancesDocumentWriter):
                         # interacting with a multiple-argument arc.
                         last_modified_arc_type = arc_type
                 if arcs_to_add:
+                    if instance_under_construction is None:
+                        instance_under_construction = start_new_instance()
                     trans = "{}-ARC({})".format(
                         arc_direction, ','.join(arc_type.title()
                                                 for arc_type in arcs_to_add))
                     self._write_transition(current_token, trans)
-                    if instance_under_construction is None:
-                        instance_under_construction = CausationInstance(
-                            conn_instance.sentence, cause=[], effect=[],
-                            means=[], connective=[current_token])
-                        self.rels.append(instance_under_construction)
                     for arc_type in arcs_to_add:
                         getattr(instance_under_construction, arc_type).append(
                             token_to_compare)
                 else:
+                    if instance_under_construction is None:
+                        instance_under_construction = start_new_instance()
                     self._write_transition(current_token,
                                            "NO-ARC-{}".format(arc_direction))
-                    if instance_under_construction is None:
-                        instance_under_construction = CausationInstance(
-                            conn_instance.sentence, cause=[], effect=[],
-                            means=[], connective=[current_token])
-                        self.rels.append(instance_under_construction)
 
                 if dir_is_left:
                     compared.appendleft(uncompared.pop())
