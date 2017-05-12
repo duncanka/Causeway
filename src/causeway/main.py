@@ -115,6 +115,11 @@ def get_stages(candidate_classifier):
 
 # def main(argv):
 if __name__ == '__main__':
+    logging.basicConfig(
+        format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
+        level=logging.INFO)
+    logging.captureWarnings(True)
+
     try:
         FLAGS.Reset()
         FLAGS(sys.argv)  # parse flags
@@ -136,10 +141,8 @@ if __name__ == '__main__':
         print '%s\nUsage: %s ARGS\n%s' % (e, sys.argv[0], FLAGS)
         sys.exit(1)
 
-    logging.basicConfig(
-        format='%(filename)s:%(lineno)s:%(levelname)s: %(message)s',
-        level=[logging.INFO, logging.DEBUG][FLAGS.debug])
-    logging.captureWarnings(True)
+    if FLAGS.debug:
+        logging.root.level = logging.DEBUG
 
     seed = FLAGS.seed
     if seed is None:

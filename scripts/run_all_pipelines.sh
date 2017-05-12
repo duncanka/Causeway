@@ -1,9 +1,9 @@
 #!/bin/bash
 # Requires the Unix task spooler (package task-spooler in Ubuntu).
-# Expects to be run from the src directory.
+# Expects to be run from the Causeway root directory.
 
 SEED=2961393773
-OUT_DIR=../outputs/final
+OUT_DIR=outputs/final
 LOG_DIR=$OUT_DIR/logs
 DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
@@ -33,7 +33,7 @@ run_pipeline() {
 	DIR=$3
 	FLAGS=$4
     echo -e "Pipeline:" $PIPELINE "\tRun type:" $NAME
-    tsp -n -L "$NAME" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir='../models/$NAME' $FLAGS > '$OUT_DIR/$NAME.txt' 2> '$LOG_DIR/$NAME.log'"
+    tsp -n -L "$NAME" bash -c "$BASE_CMD --train_paths=$DIR --pipeline_type=$PIPELINE --models_dir='models/$NAME' $FLAGS > '$OUT_DIR/$NAME.txt' 2> '$LOG_DIR/$NAME.log'"
 }
 
 mkdir -p $OUT_DIR
@@ -47,7 +47,7 @@ for PIPELINE_TYPE in tregex regex; do
         run_pipeline "$PIPELINE_TYPE" "${PIPELINE_TYPE}_${RUN_TYPE}" $DIR $FLAGS
     done
     run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $DIR
-	run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $DIR
+    run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $DIR
 done
 
-tsp -l
+tsp -l # Print spooled tasks
