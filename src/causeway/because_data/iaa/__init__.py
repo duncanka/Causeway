@@ -858,6 +858,24 @@ class _RelationMetrics(object):
                 '(', filename, ':', sentence_num, ': "', encoded_instance, '")',
                 sep='', file=log_file)
 
+    @staticmethod
+    def _csv_metrics(metrics_dict):
+        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
+        for category, metrics in metrics_dict.iteritems():
+            csv_metrics = (str(x) for x in [
+                category,
+                metrics.connective_metrics.tp,
+                metrics.connective_metrics.fp,
+                metrics.connective_metrics.fn,
+                metrics.arg0_metrics.span_metrics.accuracy,
+                metrics.arg0_metrics.head_metrics.accuracy,
+                metrics.arg0_metrics.jaccard,
+                metrics.arg1_metrics.span_metrics.accuracy,
+                metrics.arg1_metrics.head_metrics.accuracy,
+                metrics.arg1_metrics.jaccard])
+            lines.append(','.join(csv_metrics))
+        return '\n'.join(lines)
+
 
 class CausalityMetrics(_RelationMetrics):
     _GOLD_INSTANCES_PROPERTY_NAME = 'causation_instances'
@@ -909,24 +927,6 @@ class CausalityMetrics(_RelationMetrics):
                 by_connective[to_remap[connective]] += metrics
                 del by_connective[connective]
                 # print "Replaced", connective
-
-    @staticmethod
-    def _csv_metrics(metrics_dict):
-        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
-        for category, metrics in metrics_dict.iteritems():
-            csv_metrics = (str(x) for x in [
-                category,
-                metrics.connective_metrics.tp,
-                metrics.connective_metrics.fp,
-                metrics.connective_metrics.fn,
-                metrics.cause_metrics.span_metrics.accuracy,
-                metrics.cause_metrics.head_metrics.accuracy,
-                metrics.cause_metrics.jaccard,
-                metrics.effect_metrics.span_metrics.accuracy,
-                metrics.effect_metrics.head_metrics.accuracy,
-                metrics.effect_metrics.jaccard])
-            lines.append(','.join(csv_metrics))
-        return '\n'.join(lines)
 
     def metrics_by_connective_category(self):
         return self.get_aggregate_metrics(self.get_connective_category)
