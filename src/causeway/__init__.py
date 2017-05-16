@@ -4,9 +4,13 @@ from copy import copy
 from gflags import DEFINE_bool, DEFINE_string, FLAGS, DuplicateFlagError
 from itertools import chain
 import logging
+import nltk
 from nltk.tag.stanford import StanfordNERTagger
 import operator
+import os
 from os import path
+from subprocess import PIPE
+import tempfile
 
 from causeway.because_data import CausationInstance
 from causeway.because_data.iaa import CausalityMetrics
@@ -157,6 +161,52 @@ class IAAEvaluator(Evaluator):
             return results_list[0].aggregate(results_list)
 
 
+# Fix stupid issues with Stanford trying to sentence-split already-split text.
+# Unfortunately, the only way to do this without re-running the tagger seems to
+# be to split every sentence into a separate file.
+class SentenceSplitStanfordNERTagger(StanfordNERTagger):
+    def tag_sents(self, sentences):
+        encoding = self._encoding
+        default_options = ' '.join(nltk.internals._java_options)
+        nltk.internals.config_java(options=self.java_options, verbose=False)
+
+        self._input_files = [tempfile.NamedTemporaryFile('w')
+                             for _ in sentences]
+        for sentence, input_file in zip(sentences, self._input_files):
+            _input = ' '.join(sentence)
+            if isinstance(_input, nltk.compat.text_type) and encoding:
+                _input = _input.encode(encoding)
+            input_file.write(_input)
+            input_file.flush()
+
+        cmd = list(self._cmd)
+        cmd.extend(['-encoding', encoding])
+
+        # Run the tagger and get the output
+        stanpos_output, _stderr = nltk.internals.java(
+            cmd, classpath=self._stanford_jar, stdout=PIPE, stderr=PIPE)
+        stanpos_output = stanpos_output.decode(encoding)
+
+        for input_file in self._input_files:
+            input_file.close()
+        del self._input_files
+
+        # Return java configurations to their default values
+        nltk.internals.config_java(options=default_options, verbose=False)
+
+        return self.parse_output(stanpos_output, sentences)
+
+    @property
+    def _cmd(self):
+        file_names = ','.join([f.name for f in self._input_files])
+        return [
+            'edu.stanford.nlp.ie.crf.CRFClassifier', '-loadClassifier',
+            self._stanford_model, '-textFiles', file_names,
+            '-outputFormat', self._FORMAT, '-tokenizerFactory',
+            'edu.stanford.nlp.process.WhitespaceTokenizer', '-tokenizerOptions',
+            '\"tokenizeNLs=false\"']
+
+
 class StanfordNERStage(Stage):
     NER_TYPES = Enum(['Person', 'Organization', 'Location', 'O'])
 
@@ -171,7 +221,7 @@ class StanfordNERStage(Stage):
         model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
-        tagger = StanfordNERTagger(model_path, jar_path)
+        tagger = SentenceSplitStanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
             for sentence in chain.from_iterable(sentences_by_doc)]
