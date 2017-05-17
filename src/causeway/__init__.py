@@ -14,6 +14,7 @@ import tempfile
 
 from causeway.because_data import CausationInstance
 from causeway.because_data.iaa import CausalityMetrics
+from nlpypline.data import StanfordParsedSentence
 from nlpypline.pipeline import Stage, Evaluator
 from nlpypline.util import listify, print_indented, Enum, make_getter, make_setter
 
@@ -222,18 +223,30 @@ class StanfordNERStage(Stage):
         jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
         tagger = SentenceSplitStanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
-            [token.original_text for token in sentence.tokens[1:]]
+            [StanfordParsedSentence.escape_token_text(token.original_text)
+             # Omit fictitious tokens.
+             for token in sentence.tokens if token.start_offset is not None]
             for sentence in chain.from_iterable(sentences_by_doc)]
 
         # Batch process sentences (faster than repeatedly running Stanford NLP)
         ner_results = tagger.tag_sents(tokens_by_sentence)
         all_sentences = chain.from_iterable(sentences_by_doc)
         for sentence, sentence_result in zip(all_sentences, ner_results):
-            sentence.tokens[0].ner_tag = None # ROOT has no NER tag
-            for token, token_result in zip(sentence.tokens[1:],
-                                           sentence_result):
-                tag = token_result[1]
-                token.ner_tag = self.NER_TYPES.index(tag.title())
+            sentence_result_iter = iter(sentence_result)
+            for token in sentence.tokens:
+                if token.start_offset is None: # Ignore fictitious tokens.
+                    token.ner_tag = None
+                else:
+                    # Throws StopIteration if result is too short.
+                    _token_text, tag = next(sentence_result_iter)
+                    token.ner_tag = self.NER_TYPES.index(tag.title())
+            # Make sure there are no extra tags for the sentence. NLTK is dumb.
+            try:
+                next(sentence_result_iter)
+                assert(False)
+            except StopIteration:
+                pass
+
             if writer:
                 writer.instance_complete(sentence)
 
