@@ -170,31 +170,30 @@ class SentenceSplitStanfordNERTagger(StanfordNERTagger):
         default_options = ' '.join(nltk.internals._java_options)
         nltk.internals.config_java(options=self.java_options, verbose=False)
 
-        self._input_files = [tempfile.NamedTemporaryFile('w')
-                             for _ in sentences]
-        for sentence, input_file in zip(sentences, self._input_files):
+        self._input_files = []
+        for sentence in sentences:
             _input = ' '.join(sentence)
             if isinstance(_input, nltk.compat.text_type) and encoding:
                 _input = _input.encode(encoding)
-            input_file.write(_input)
-            input_file.flush()
-
-        cmd = list(self._cmd)
-        cmd.extend(['-encoding', encoding])
+            with tempfile.NamedTemporaryFile('w', delete=False) as input_file:
+                input_file.write(_input)
+                self._input_files.append(input_file)
 
         # Run the tagger and get the output
-        stanpos_output, _stderr = nltk.internals.java(
+        cmd = list(self._cmd)
+        cmd.extend(['-encoding', encoding])
+        stanford_ner_output, _stderr = nltk.internals.java(
             cmd, classpath=self._stanford_jar, stdout=PIPE, stderr=PIPE)
-        stanpos_output = stanpos_output.decode(encoding)
+        stanford_ner_output = stanford_ner_output.decode(encoding)
 
         for input_file in self._input_files:
-            input_file.close()
+            os.unlink(input_file.name)
         del self._input_files
 
         # Return java configurations to their default values
         nltk.internals.config_java(options=default_options, verbose=False)
 
-        return self.parse_output(stanpos_output, sentences)
+        return self.parse_output(stanford_ner_output, sentences)
 
     @property
     def _cmd(self):
@@ -225,6 +224,7 @@ class StanfordNERStage(Stage):
         tokens_by_sentence = [
             [token.original_text for token in sentence.tokens[1:]]
             for sentence in chain.from_iterable(sentences_by_doc)]
+
         # Batch process sentences (faster than repeatedly running Stanford NLP)
         ner_results = tagger.tag_sents(tokens_by_sentence)
         all_sentences = chain.from_iterable(sentences_by_doc)

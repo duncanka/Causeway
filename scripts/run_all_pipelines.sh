@@ -11,7 +11,6 @@ BASE_CMD="python src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 
 
 export PYTHONPATH="src:NLPypline/src"
 tsp -S 4
-ulimit -n 10000
 
 # Columns:
 # Run_type data_dir extra_flags
