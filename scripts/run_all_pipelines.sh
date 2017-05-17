@@ -46,8 +46,8 @@ for PIPELINE_TYPE in tregex regex; do
         read RUN_TYPE DIR FLAGS <<<$line
         run_pipeline "$PIPELINE_TYPE" "${PIPELINE_TYPE}_${RUN_TYPE}" $DIR $FLAGS
     done
-    run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $DIR
-    run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $DIR
+    run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $DATA_DIR
+    run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $DATA_DIR
 done
 
 tsp -l # Print spooled tasks
