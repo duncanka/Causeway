@@ -3,6 +3,8 @@ from collections import Counter, defaultdict
 from itertools import chain
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator
+import numpy as np
 
 from causeway.because_data import (CausalityStandoffReader, CausationInstance,
                                    OverlappingRelationInstance)
@@ -148,24 +150,36 @@ def plot_arg_lengths(cause_lengths, effect_lengths):
     mpl.rc('font',**{'family':'serif','serif':['Times']})
     mpl.rc('text', usetex=True)
 
-    min_bin, max_bin = 1, 21
+    min_bin, max_bin = 1, 22
     bins = range(min_bin, max_bin)
+    bins[-1] -= 0.0001
     causes, effects = [list(chain.from_iterable([i] * l[i] for i in bins))
                        for l in cause_lengths, effect_lengths]
-    plt.hist(causes, bins=bins, color='#6f93c3')
-    plt.hist(effects, bins=bins, color='#FA8072', alpha=0.7)
+    cause_y, bin_edges = np.histogram(causes, bins=bins)
+    effect_y, _ = np.histogram(effects, bins=bins)
+    plt.plot(bin_edges[:-1], cause_y, '--', color='#3c6090', marker='o')
+    plt.plot(bin_edges[:-1], effect_y, '-', color='#e84330', marker='s')
 
     ax = plt.gca()
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-    plt.tick_params(axis='both', labelsize=20, length=0)
-    plt.xlim(min_bin, max_bin-1)
-    plt.xlabel('Argument length', fontsize=22)
-    plt.ylabel('Count', fontsize=22)
-    plt.text(3.3, 125, 'Causes', color='#3c6090', fontsize=24)
-    plt.text(7.3, 85, 'Effects', color='#e84330', fontsize=24)
+    plt.tick_params(axis='both', labelsize=18, length=0)
+    plt.xlim(0, max_bin - 1.5)
+    # 0 is an uninteresting tick, but 1 is relevant.
+    ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
+    plt.xlabel('Argument length (in tokens)', fontsize=20)
+    plt.ylabel('Count', fontsize=20)
+    plt.text(3.3, 125, 'Causes', color='#3c6090', fontsize=22)
+    plt.text(7.3, 85, 'Effects', color='#e84330', fontsize=22)
+    plt.tight_layout()
     plt.show(False)
+
+
+def length_median(arg_lengths):
+    return np.median(list(chain.from_iterable([i] * arg_lengths[i]
+                                              for i in arg_lengths)))
+
 
 def latex_for_corpus_counts(counts):
     causation_types = CausationInstance.CausationTypes[:-1] # skip Inference
