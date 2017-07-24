@@ -66,7 +66,6 @@ class PossibleCausation(CausationInstance):
 
 class IAAEvaluator(Evaluator):
     # TODO: refactor arguments
-    # TODO: provide both pairwise and non-pairwise stats
     def __init__(self, compare_degrees, compare_types, log_test_instances,
                  compare_args, pairwise_only,
                  causations_property_name='causation_instances',
@@ -160,6 +159,43 @@ class IAAEvaluator(Evaluator):
                     IAAEvaluator._STRICT_KEY: strict}
         else:
             return results_list[0].aggregate(results_list)
+
+
+class PairwiseAndNonIAAEvaluator(IAAEvaluator):
+    _PAIRWISE_KEY = 'Pairwise'
+    _NON_PAIRWISE_KEY = 'Non-pairwise'
+
+    def __init__(self, compare_degrees, compare_types, log_test_instances,
+                 compare_args, causations_property_name='causation_instances',
+                 log_by_connective=None, log_by_category=None,
+                 BaseEvaluator=IAAEvaluator):
+        self.pairwise = BaseEvaluator(compare_degrees, compare_types,
+                                      log_test_instances, compare_args,
+                                      True, causations_property_name,
+                                      log_by_connective, log_by_category)
+        self.non_pairwise = BaseEvaluator(compare_degrees, compare_types,
+                                          log_test_instances, compare_args,
+                                          False, causations_property_name,
+                                          log_by_connective, log_by_category)
+
+    def evaluate(self, document, original_document, sentences,
+                 original_sentences):
+        self.pairwise.evaluate(document, original_document, sentences,
+                               original_sentences)
+        self.non_pairwise.evaluate(document, original_document, sentences,
+                               original_sentences)
+
+    def complete_evaluation(self):
+        return {self._PAIRWISE_KEY: self.pairwise.complete_evaluation(),
+                self._NON_PAIRWISE_KEY: self.non_pairwise.complete_evaluation()}
+
+    def aggregate_results(self, results_list):
+        pairwise = IAAEvaluator.aggregate_results(
+            self, [r[self._PAIRWISE_KEY] for r in results_list])
+        non_pairwise = IAAEvaluator.aggregate_results(
+            self, [r[self._NON_PAIRWISE_KEY] for r in results_list])
+        return {self._PAIRWISE_KEY: pairwise,
+                self._NON_PAIRWISE_KEY: non_pairwise}
 
 
 # Fix stupid issues with Stanford trying to sentence-split already-split text.

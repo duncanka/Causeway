@@ -2,7 +2,7 @@ from gflags import FLAGS
 from itertools import permutations, chain
 import logging
 
-from causeway import IAAEvaluator
+from causeway import PairwiseAndNonIAAEvaluator
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models import Model
 
@@ -133,5 +133,6 @@ class ArgSpanStage(Stage):
             pc.cause, pc.effect = args
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.args_print_test_instances,
-                            True, True, 'possible_causations')
+        return PairwiseAndNonIAAEvaluator(False, False,
+                                          FLAGS.args_print_test_instances,
+                                          True, 'possible_causations')

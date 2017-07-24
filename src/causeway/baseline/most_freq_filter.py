@@ -1,7 +1,7 @@
 from collections import defaultdict
 from gflags import FLAGS
 
-from causeway import IAAEvaluator
+from causeway import PairwiseAndNonIAAEvaluator
 from causeway.because_data.iaa import stringify_connective
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models.structured import (StructuredModel,
@@ -15,14 +15,14 @@ class MostFreqSenseFilterModel(StructuredModel, StructuredDecoder):
 
     def _make_parts(self, instance, is_train):
         return instance.possible_causations
-    
+
     def _train_structured(self, instances, parts_by_instance):
         for instance_pcs in parts_by_instance:
             for possible_causation in instance_pcs:
                 label = bool(possible_causation.true_causation_instance)
                 connective = stringify_connective(possible_causation)
                 self.frequencies_dict[connective][label] += 1
-        
+
         for key in self.frequencies_dict:
             negative, positive = self.frequencies_dict[key]
             self.frequencies_dict[key] = float(positive) / (positive + negative)
@@ -51,5 +51,5 @@ class MostFreqSenseFilterStage(Stage):
         sentence.causation_instances = predicted_causations
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False,
-                            FLAGS.filter_print_test_instances, True, True)
+        return PairwiseAndNonIAAEvaluator(False, False,
+                            FLAGS.filter_print_test_instances, True)

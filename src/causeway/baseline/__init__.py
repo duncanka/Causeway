@@ -2,7 +2,8 @@ from collections import defaultdict
 from gflags import DEFINE_integer, FLAGS, DuplicateFlagError
 from itertools import product
 
-from causeway import IAAEvaluator, PossibleCausation, get_causation_tuple
+from causeway import (PairwiseAndNonIAAEvaluator, PossibleCausation,
+                      get_causation_tuple)
 import logging
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models import Model
@@ -18,7 +19,7 @@ except DuplicateFlagError as e:
 class BaselineModel(Model):
     _STOP_LEMMAS = ['be', 'the', 'a']
     _STOP_POSES = ['MD', 'CC', 'UH', ':', "''", ',' '.']
-    
+
     def __init__(self, save_results_in):
         self._connectives = set()
         # (connective word tuple, parse path to cause, parse path to effect) ->
@@ -124,7 +125,7 @@ class BaselineModel(Model):
         # Pass 2: Represent causations as tuples of token indices for easy
         # checking of whether a given possible causation is in the gold
         # standard. List of lists of token indices (1 list per sentence).
-        true_causation_tuples = [ 
+        true_causation_tuples = [
             [get_causation_tuple(i.connective, sentence.get_head(i.cause),
                                  sentence.get_head(i.effect))
              # Filter to pairwise.
@@ -191,5 +192,5 @@ class BaselineStage(Stage):
         self.produced_attributes = [record_results_in]
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, False, True, True,
-                            self.produced_attributes[0])
+        return PairwiseAndNonIAAEvaluator(False, False, False, True,
+                                          self.produced_attributes[0])

@@ -1,7 +1,7 @@
 from gflags import DEFINE_bool, FLAGS, DuplicateFlagError
 import logging
 
-from causeway import IAAEvaluator
+from causeway import PairwiseAndNonIAAEvaluator
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models.structured import (StructuredModel,
                                                   StructuredDecoder)
@@ -65,5 +65,5 @@ class BaselineCombinerStage(Stage):
         self.consumed_attributes = [baseline_causations_attr_name]
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.combiner_print_test_instances,
-                            True, True)
+        return PairwiseAndNonIAAEvaluator(
+            False, False, FLAGS.combiner_print_test_instances, True)

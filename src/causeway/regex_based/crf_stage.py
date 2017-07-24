@@ -5,7 +5,8 @@ import logging
 import numpy as np
 import os
 
-from causeway import IAAEvaluator, RELATIVE_POSITIONS
+from causeway import (IAAEvaluator, PairwiseAndNonIAAEvaluator,
+                      RELATIVE_POSITIONS)
 from nlpypline.pipeline.models.structured import CRFModel
 from nlpypline.pipeline.featurization import FeatureExtractor, SetValuedFeatureExtractor
 from nlpypline.pipeline import Stage
@@ -228,6 +229,6 @@ class ArgumentLabelerStage(Stage):
     '''
 
     def _make_evaluator(self):
-        return ArgumentLabelerEvaluator(
-            False, False, FLAGS.args_print_test_instances, True, True,
-            'possible_causations')
+        return PairwiseAndNonIAAEvaluator(
+            False, False, FLAGS.args_print_test_instances, True,
+            'possible_causations', BaseEvaluator=ArgumentLabelerEvaluator)

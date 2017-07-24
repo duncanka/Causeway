@@ -4,7 +4,7 @@ import logging
 import re
 import time
 
-from causeway import PossibleCausation, IAAEvaluator
+from causeway import PossibleCausation, PairwiseAndNonIAAEvaluator
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models import Model
 from nlpypline.util import Enum
@@ -195,7 +195,8 @@ class RegexConnectiveStage(Stage):
             name=name, model=RegexConnectiveModel())
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
-                            False, True, 'possible_causations', False)
+        return PairwiseAndNonIAAEvaluator(False, False,
+                                          FLAGS.patterns_print_test_instances,
+                                          False, 'possible_causations', False)
 
     produced_attributes = ['possible_causations']

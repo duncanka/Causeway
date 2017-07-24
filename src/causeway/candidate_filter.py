@@ -13,7 +13,8 @@ import sklearn
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.pipeline import Pipeline as SKLPipeline
 
-from causeway import IAAEvaluator, StanfordNERStage, RELATIVE_POSITIONS
+from causeway import (PairwiseAndNonIAAEvaluator, IAAEvaluator,
+                      StanfordNERStage, RELATIVE_POSITIONS)
 from causeway.because_data import Token, CausationInstance
 from nlpypline.data import StanfordParsedSentence
 from causeway.because_data.iaa import (make_annotation_comparator,
@@ -1128,9 +1129,12 @@ class CausationPatternFilterStage(Stage):
         sentence.causation_instances = predicted_causations
 
     def _make_evaluator(self):
-        return self.ClassifierIAAEvaluator(self.model.decoder, False, False,
-                                           FLAGS.filter_print_test_instances,
-                                           True, True)
+        def ClassifierEvaluatorCtor(*args, **kwargs):
+            return self.ClassifierIAAEvaluator(self.model.decoder, *args,
+                                               **kwargs)
+        return PairwiseAndNonIAAEvaluator(
+            False, False, FLAGS.filter_print_test_instances, True,
+            BaseEvaluator=ClassifierEvaluatorCtor)
 
 
 def get_weights_for_lr_classifier(classifier_pipeline, sort_weights=True):

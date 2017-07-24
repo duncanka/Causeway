@@ -176,7 +176,6 @@ class _RelationMetrics(object):
     _INSTANCE_CLASS = None
 
     # TODO: Refactor order of parameters
-    # TODO: provide both pairwise and non-pairwise stats
     def __init__(self, gold, predicted, allow_partial, save_differences,
                  ids_considered, compare_args, properties_to_compare,
                  pairwise_only, save_agreements, instances_property_name):

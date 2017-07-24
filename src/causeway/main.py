@@ -11,7 +11,8 @@ from sklearn import tree, neighbors, linear_model, svm, ensemble, naive_bayes
 import subprocess
 import sys
 
-from causeway import remove_smaller_matches, StanfordNERStage, IAAEvaluator
+from causeway import (remove_smaller_matches, StanfordNERStage,
+                      PairwiseAndNonIAAEvaluator)
 from causeway.baseline import BaselineStage
 from causeway.baseline.combiner import BaselineCombinerStage
 from causeway.baseline.most_freq_filter import MostFreqSenseFilterStage
@@ -107,8 +108,8 @@ def get_stages(candidate_classifier):
     if FLAGS.filter_overlapping and FLAGS.pipeline_type != 'baseline':
         smaller_filter_stage = SimpleStage(
             'Filter smaller connectives', remove_smaller_matches,
-            lambda: IAAEvaluator(False, False,
-                                 FLAGS.filter_print_test_instances, True, True))
+            lambda: PairwiseAndNonIAAEvaluator(
+                False, False, FLAGS.filter_print_test_instances, True))
         stages.append(smaller_filter_stage)
     return stages
 

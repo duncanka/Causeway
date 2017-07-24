@@ -15,7 +15,8 @@ from threading import Lock
 from nlpypline.data import Token
 from nlpypline.pipeline import Stage
 from nlpypline.pipeline.models import Model
-from causeway import PossibleCausation, IAAEvaluator, get_causation_tuple
+from causeway import (PossibleCausation, PairwiseAndNonIAAEvaluator,
+                      get_causation_tuple)
 from nlpypline.util import pairwise, igroup, hash_file
 from nlpypline.util.nltk import subtree_at_index, index_of_subtree
 from nlpypline.util.scipy import steiner_tree, longest_path_in_tree
@@ -810,8 +811,9 @@ class TRegexConnectiveStage(Stage):
     produced_attributes = ['possible_causations']
 
     def _make_evaluator(self):
-        return IAAEvaluator(False, False, FLAGS.patterns_print_test_instances,
-                            True, True, 'possible_causations', False)
+        return PairwiseAndNonIAAEvaluator(False, False,
+                                          FLAGS.patterns_print_test_instances,
+                                          True, 'possible_causations', False)
 
     # No need for _label_instance, as we take care of that in _test_documents.
 
