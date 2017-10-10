@@ -8,9 +8,10 @@ import numpy as np
 
 from causeway.because_data import (CausalityStandoffReader, CausationInstance,
                                    OverlappingRelationInstance)
+from causeway.because_data.iaa import stringify_connective
 from nlpypline.data import Token
 from nlpypline.data.io import DirectoryReader
-from nlpypline.util import listify
+from nlpypline.util import listify, partition
 
 
 def not_contiguous(instance):
@@ -236,3 +237,27 @@ def latex_for_corpus_counts(counts):
     print(' &', latex_type_count(non_causal_count), end='')
     total += non_causal_count
     print(' &', latex_type_count(total), end=r' \\')
+
+
+def pattern_saturation(documents, num_folds=20, num_increments=20):
+    sentences = list(chain.from_iterable(d.sentences for d in documents))
+    xs = np.linspace(0, 1, num_increments + 1)
+    ys = np.empty((num_folds, num_increments + 1))
+    ys[:, 0] = 0 # At 0% of sentences, we always have 0% of the patterns.
+
+    for fold in range(num_folds):
+        np.random.shuffle(sentences)
+        patterns_seen = set()
+        increments = partition(sentences, num_increments)
+        for i, increment in enumerate(increments):
+            for sentence in increment:
+                for causation in sentence.causation_instances:
+                    patterns_seen.add(stringify_connective(causation))
+            ys[fold, i + 1] = len(patterns_seen)
+    averages = np.average(ys, 0)
+
+    plt.plot(xs, averages)
+    plt.xlabel('% of sentences in corpus', fontsize=18)
+    plt.ylabel('# of patterns', fontsize=18)
+    plt.tight_layout()
+    plt.show(False)
