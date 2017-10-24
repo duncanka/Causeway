@@ -915,12 +915,17 @@ class CausalityMetrics(_RelationMetrics):
 
     @staticmethod
     def _remap_by_connective(by_connective):
-        to_remap = {'for too to':'too for to', 'for too':'too for',
-                    'reason be':'reason', 'that now':'now that',
-                    'to for':'for to', 'give':'given', 'thank to': 'thanks to',
-                    'result of':'result', 'to need': 'need to'}
+        to_remap = {'for too to': 'too for to', 'for too': 'too for',
+                'that now': 'now that', 'to for': 'for to', 'give': 'given',
+                'citizen-sparked': 'spark', 'encouraging': 'encourage',
+                'have to for to': 'for to have to', 'thank to': 'thanks to',
+                'on ground of': 'on grounds of', 'precipitating': 'precipitate',
+                'to need': 'need to', 'to need to': 'need to to',
+                'to take': 'take to', 'reason be': 'reason',
+                'result of': 'result' # 'of' and 'be' for old corpus
+        }
         for connective, metrics in by_connective.items():
-            if connective.startswith('be '):
+            if connective.startswith('be '): # for old corpus
                 by_connective[connective[3:]] += metrics
                 del by_connective[connective]
                 # print 'Replaced', connective
