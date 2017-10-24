@@ -23,7 +23,8 @@ from nlpypline.util import (Enum, print_indented, truncated_string,
                             make_getter)
 from nlpypline.util.diff import SequenceDiff
 from nlpypline.util.metrics import (ClassificationMetrics, ConfusionMatrix,
-                                    AccuracyMetrics, safe_divide)
+                                    AccuracyMetrics, safe_divide,
+                                    FloatWithStddev)
 
 np.seterr(divide='ignore') # Ignore nans in division
 
@@ -724,7 +725,8 @@ class _RelationMetrics(object):
             if jaccard_values: # At least some are not None
                 jaccard_values = [v for v in jaccard_values if not np.isnan(v)]
                 if jaccard_values:
-                    arg_metrics.jaccard = np.mean(jaccard_values)
+                    arg_metrics.jaccard = FloatWithStddev.from_list(
+                        jaccard_values)
                 else:
                     arg_metrics.jaccard = np.nan
             else:
