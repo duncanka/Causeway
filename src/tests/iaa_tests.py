@@ -6,7 +6,7 @@ import unittest
 
 from causeway.because_data import CausalityStandoffReader
 from causeway.because_data.iaa import CausalityMetrics
-from tests import get_sentences_from_file
+from nlpypline.tests import get_sentences_from_file
 from nlpypline.util.metrics import ClassificationMetrics, AccuracyMetrics
 
 gflags.FLAGS([]) # Prevent UnparsedFlagAccessError
