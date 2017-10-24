@@ -45,7 +45,7 @@ if __name__ == '__main__':
             connective = to_remap[connective]
             # print 'Replaced', connective
         patterns_and_instances_by_connective[connective][pattern].append(i)
-        
+
     for connective, by_pattern in patterns_and_instances_by_connective.iteritems():
         print '"%s":' % connective
         print_indented(1, len(by_pattern), 'unique patterns')

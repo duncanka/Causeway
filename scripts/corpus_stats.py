@@ -261,3 +261,20 @@ def pattern_saturation(documents, num_folds=20, num_increments=20):
     plt.ylabel('# of patterns', fontsize=18)
     plt.tight_layout()
     plt.show(False)
+
+
+def count_connectives_remapped(instances):
+    to_remap = {'for too to': 'too for to', 'for too': 'too for',
+                'that now': 'now that', 'to for': 'for to', 'give': 'given',
+                'citizen-sparked': 'spark', 'encouraging': 'encourage',
+                'have to for to': 'for to have to', 'thank to': 'thanks to',
+                'on ground of': 'on grounds of', 'precipitating': 'precipitate',
+                'to need': 'need to', 'to need to': 'need to to',
+                'to take': 'take to', 'reason be': 'reason',
+                'result of': 'result' # from old corpus
+    }
+    stringified = [stringify_connective(causation).lower()
+                   for causation in instances]
+    for s, inst in zip(stringified, instances):
+        assert s != 'without '
+    return Counter([to_remap.get(s, s) for s in stringified])
