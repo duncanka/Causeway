@@ -141,10 +141,13 @@ def _wrapped_sentence_highlighting_instance(instance):
 
 
 class ArgumentMetrics(object):
-    def __init__(self, span_metrics, head_metrics, jaccard):
+    def __init__(self, span_metrics, head_metrics, jaccard, instance_count):
         self.span_metrics = span_metrics
         self.head_metrics = head_metrics
         self.jaccard = jaccard
+        # Track instance counts so that when we add Jaccard indices, we know
+        # how much to weight each one by to get the right average
+        self._instance_count = instance_count
 
     def __add__(self, other):
         if self.span_metrics is not None and other.span_metrics is not None:
@@ -156,15 +159,18 @@ class ArgumentMetrics(object):
         else:
             added_head_metrics = None
 
+        instance_count = self._instance_count + other._instance_count
         # Ignore NaNs and Nones.
         if self.jaccard is None or np.isnan(self.jaccard):
             added_jaccard = other.jaccard
         elif other.jaccard is None or np.isnan(other.jaccard):
             added_jaccard = self.jaccard
         else:
-            added_jaccard = (self.jaccard + other.jaccard) / 2.0
+            added_jaccard = (self.jaccard * self._instance_count
+                             + other.jaccard * other._instance_count
+                             ) / instance_count
         return ArgumentMetrics(added_span_metrics, added_head_metrics,
-                               added_jaccard)
+                               added_jaccard, instance_count)
 
 
 class _RelationMetrics(object):
@@ -508,13 +514,13 @@ class _RelationMetrics(object):
 
         for arg_num in range(self._INSTANCE_CLASS._num_args):
             arg_name = 'arg%d' % arg_num
-            arg_jaccard = self._get_jaccard(matches, arg_name)
             arg_span_metrics = AccuracyMetrics(
                 correct_args[arg_num], len(matches) - correct_args[arg_num])
             arg_head_metrics = AccuracyMetrics(
                 correct_heads[arg_num], len(matches) - correct_heads[arg_num])
+            arg_jaccard = self._get_jaccard(matches, arg_name)
             arg_metrics = ArgumentMetrics(arg_span_metrics, arg_head_metrics,
-                                          arg_jaccard)
+                                          arg_jaccard, len(matches))
             setattr(self, arg_name + '_metrics', arg_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
@@ -640,7 +646,7 @@ class _RelationMetrics(object):
             if self.arg0_metrics is not None: # we're matching arguments
                 conn_metrics._match_arguments(conn_matches)
             else:
-                null_metrics = ArgumentMetrics(None, None, None)
+                null_metrics = ArgumentMetrics(None, None, None, 0)
                 for arg_num in range(self._INSTANCE_CLASS._num_args):
                     setattr(conn_metrics, 'arg%d_metrics' % arg_num,
                             null_metrics)
