@@ -166,9 +166,9 @@ class ArgumentMetrics(object):
         elif other.jaccard is None or np.isnan(other.jaccard):
             added_jaccard = self.jaccard
         else:
-            added_jaccard = (self.jaccard * self._instance_count
-                             + other.jaccard * other._instance_count
-                             ) / instance_count
+            added_jaccard = safe_divide(self.jaccard * self._instance_count
+                                        + other.jaccard * other._instance_count,
+                                        instance_count)
         return ArgumentMetrics(added_span_metrics, added_head_metrics,
                                added_jaccard, instance_count)
 
