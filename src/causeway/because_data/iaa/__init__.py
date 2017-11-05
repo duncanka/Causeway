@@ -227,7 +227,7 @@ class _RelationMetrics(object):
         if compare_args:
             self._match_arguments(matches, gold)
         else:
-            null_metrics = ArgumentMetrics(None, None, None)
+            null_metrics = ArgumentMetrics(None, None, None, 0)
             for arg_num in range(self._INSTANCE_CLASS._num_args):
                 setattr(self, 'arg%d_metrics' % arg_num, null_metrics)
 
