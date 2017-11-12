@@ -18,10 +18,11 @@ for line in evaluation.split('\n'):
         continue
 
     chunks = line.split()
-    if chunks[-1] == 'nan':
+    number_chunk = chunks[-1].decode('utf8').split(u'\u00b1')[0]
+    if number_chunk == 'nan':
         continue
     try:
-        numbers.append(float(chunks[-1]))
+        numbers.append(float(number_chunk))
     except ValueError:
         print "Skipping non-numeric line", line
 

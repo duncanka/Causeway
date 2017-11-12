@@ -1,10 +1,13 @@
 from __future__ import print_function
 from collections import Counter, defaultdict
 from itertools import chain
+from math import log
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FixedLocator
+from matplotlib.ticker import FixedLocator, FuncFormatter
 import numpy as np
+import re
+from warnings import warn
 
 from causeway.because_data import (CausalityStandoffReader, CausationInstance,
                                    OverlappingRelationInstance)
@@ -12,6 +15,8 @@ from causeway.because_data.iaa import stringify_connective
 from nlpypline.data import Token
 from nlpypline.data.io import DirectoryReader
 from nlpypline.util import listify, partition
+
+from read_all import read_all # just for easy access
 
 
 def not_contiguous(instance):
@@ -61,7 +66,7 @@ def count_connectives(documents):
     counts = Counter()
     for d in documents:
         for s in d.sentences:
-            counts += Counter(tuple(t.lemma for t in i.connective)
+            counts += Counter(' '.join([t.lemma for t in i.connective])
                               for i in s.causation_instances)
     return counts
 
@@ -128,8 +133,10 @@ def arg_deps(instances, pairwise=True):
         for arg, deps in zip([cause, effect], [cause_deps, effect_deps]):
             if arg:
                 arg_head = sentence.get_head(arg)
-                incoming_dep, parent = sentence.get_most_direct_parent(arg_head)
-                deps[incoming_dep] += 1
+                if arg_head:
+                    incoming_dep, parent = sentence.get_most_direct_parent(arg_head)
+                    deps[incoming_dep] += 1
+                # Else skip invalid head
     return cause_deps, effect_deps
 
 
@@ -171,8 +178,8 @@ def plot_arg_lengths(cause_lengths, effect_lengths):
     ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
     plt.xlabel('Argument length (in tokens)', fontsize=20)
     plt.ylabel('Count', fontsize=20)
-    plt.text(3.3, 125, 'Causes', color='#3c6090', fontsize=22)
-    plt.text(7.3, 85, 'Effects', color='#e84330', fontsize=22)
+    plt.text(2.8, 190, 'Causes', color='#3c6090', fontsize=22)
+    plt.text(7.3, 120, 'Effects', color='#e84330', fontsize=22)
     plt.tight_layout()
     plt.show(False)
 
@@ -256,25 +263,94 @@ def pattern_saturation(documents, num_folds=20, num_increments=20):
             ys[fold, i + 1] = len(patterns_seen)
     averages = np.average(ys, 0)
 
+    tmp_A = []
+    for i in range(1, len(xs)):
+        tmp_A.append([np.log(xs[i])**2, np.log(xs[i]), 1])
+    b = np.matrix(averages[1:]).T
+    A = np.matrix(tmp_A)
+    fit = (A.T * A).I * A.T * b
+    print(fit)
+    # errors = b - A * fit
+    # residual = np.linalg.norm(errors)
+
+    fit_x = np.linspace(0, 4, 2000)
+    fit_y = [float(fit[0]) * np.log(x)**2 + float(fit[1]) * np.log(x)
+             + float(fit[2]) for x in fit_x]
+
+    mpl.rc('xtick', labelsize=12)
+    mpl.rc('ytick', labelsize=12)
+    mpl.rc('font', **{"family": 'serif', 'serif': 'Times New Roman'})
+
+    plt.plot(fit_x, fit_y, color='k', dashes=[3,3], alpha=0.5)
     plt.plot(xs, averages)
-    plt.xlabel('% of sentences in corpus', fontsize=18)
-    plt.ylabel('# of patterns', fontsize=18)
+    plt.xlabel('% of sentences in corpus', fontsize=15.5, labelpad=12)
+    plt.ylabel('# of patterns', fontsize=15.5, labelpad=12)
     plt.tight_layout()
+    plt.fill_between([1, 4], 0, 375, color='gray', alpha=0.1, lw=0)
+    plt.gca().xaxis.set_major_formatter(FuncFormatter(lambda x, _: '{:.0%}'.format(x)))
+
+
     plt.show(False)
 
 
-def count_connectives_remapped(instances):
+def count_connectives_remapped(docs):
     to_remap = {'for too to': 'too for to', 'for too': 'too for',
                 'that now': 'now that', 'to for': 'for to', 'give': 'given',
                 'citizen-sparked': 'spark', 'encouraging': 'encourage',
                 'have to for to': 'for to have to', 'thank to': 'thanks to',
-                'on ground of': 'on grounds of', 'precipitating': 'precipitate',
+                'on grounds of': 'on ground of', 'precipitating': 'precipitate',
                 'to need': 'need to', 'to need to': 'need to to',
-                'to take': 'take to', 'reason be': 'reason',
-                'result of': 'result' # from old corpus
+                'to take': 'take to', 'HELPS': 'help', 'helps': 'help'
     }
+    instances = chain.from_iterable(chain.from_iterable(
+        [s.causation_instances for s in doc.sentences] for doc in docs))
     stringified = [stringify_connective(causation).lower()
                    for causation in instances]
     for s, inst in zip(stringified, instances):
         assert s != 'without '
     return Counter([to_remap.get(s, s) for s in stringified])
+
+
+def entropy_by_pattern(docs):
+    connective_counts = count_connectives(docs)
+    potential_connectives = Counter()
+    connective_regexes = {conn: re.compile('.*'.join([r'\b{}\b'.format(word)
+                                                      for word in conn.split()]))
+                          for conn in connective_counts}
+    for doc in docs:
+        for sentence in doc:
+            for conn, regex in connective_regexes.iteritems():
+                sent_str = ' '.join([t.lemma for t in sentence.tokens[1:]])
+                hits = regex.findall(sent_str)
+                potential_connectives[conn] += len(hits)
+
+    to_merge = [
+        ('for too to', 'too for to'), ('for too', 'too for'), ('give', 'given'),
+        ('citizen-sparked', 'spark'), ('have to for to', 'for to have to'),
+        ('thank to', 'thanks to'), ('on grounds of', 'on ground of'),
+        ('HELPS', 'help'), ('to take', 'take to'), ('Therefore', 'therefore'),
+        ('precipitating', 'precipitate'), ('on grounds', 'on ground'),
+        ('TO', 'to'), ('encouraging', 'encourage'), ('to need', 'need to'),
+        ('to need to', 'need to to')]
+
+    for merge_from, merge_into in to_merge:
+        try:
+            connective_counts[merge_into] = connective_counts.pop(merge_from)
+            potential_connectives[merge_into] = potential_connectives.pop(
+                merge_from)
+        except KeyError:
+            warn("No such connective: %s" % merge_from)
+
+    probabilities = {}
+    for conn in connective_counts:
+        potentials = potential_connectives[conn]
+        true_count = connective_counts[conn]
+        if true_count > potentials: # Happens when instances crossed sentences
+            potentials = true_count
+            warn("Odd match count for %s" % conn)
+        probabilities[conn] = true_count / float(potentials)
+
+    # Entropy formula
+    return {conn: 0.0 if prob in [0.0, 1.0]
+                  else -sum(p * log(p, 2) for p in [prob, 1 - prob])
+            for conn, prob in probabilities.iteritems()}

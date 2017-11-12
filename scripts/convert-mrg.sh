@@ -6,7 +6,7 @@ elif [ $# -lt 2 ]; then
     echo "Usage: convert-mrg.sh txt-input-dir mrg-input-dir [parser-dir]"
     exit;
 else
-    PARSERDIR=../../../stanford-parser
+    PARSERDIR=../../../stanford-parser-2015-04-20/
 fi
 
 TXT_DIR=$1
