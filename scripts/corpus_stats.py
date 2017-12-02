@@ -12,7 +12,7 @@ from warnings import warn
 from causeway.because_data import (CausalityStandoffReader, CausationInstance,
                                    OverlappingRelationInstance)
 from causeway.because_data.iaa import stringify_connective
-from nlpypline.data import Token
+from nlpypline.data import DependencyPath, Token
 from nlpypline.data.io import DirectoryReader
 from nlpypline.util import listify, partition
 
@@ -34,6 +34,7 @@ def not_contiguous(instance):
             return True
         else:
             start = conn_token.index
+    return False
 
 
 def mwe(instance):
@@ -300,7 +301,8 @@ def count_connectives_remapped(docs):
                 'have to for to': 'for to have to', 'thank to': 'thanks to',
                 'on grounds of': 'on ground of', 'precipitating': 'precipitate',
                 'to need': 'need to', 'to need to': 'need to to',
-                'to take': 'take to', 'HELPS': 'help', 'helps': 'help'
+                'to take': 'take to', 'HELPS': 'help', 'helps': 'help',
+                'on grounds that': 'on ground that'
     }
     instances = chain.from_iterable(chain.from_iterable(
         [s.causation_instances for s in doc.sentences] for doc in docs))
@@ -310,6 +312,15 @@ def count_connectives_remapped(docs):
         assert s != 'without '
     return Counter([to_remap.get(s, s) for s in stringified])
 
+
+V2_REMAPPINGS = {
+    'for too to': 'too for to', 'for too': 'too for', 'give': 'given',
+    'citizen-sparked': 'spark', 'have to for to': 'for to have to',
+    'thank to': 'thanks to', 'on grounds of': 'on ground of',
+    'HELPS': 'help', 'to take': 'take to', 'Therefore': 'therefore',
+    'precipitating': 'precipitate', 'on grounds': 'on ground',
+    'TO': 'to', 'encouraging': 'encourage', 'to need': 'need to',
+    'to need to': 'need to to'}
 
 def entropy_by_pattern(docs):
     connective_counts = count_connectives(docs)
@@ -324,16 +335,7 @@ def entropy_by_pattern(docs):
                 hits = regex.findall(sent_str)
                 potential_connectives[conn] += len(hits)
 
-    to_merge = [
-        ('for too to', 'too for to'), ('for too', 'too for'), ('give', 'given'),
-        ('citizen-sparked', 'spark'), ('have to for to', 'for to have to'),
-        ('thank to', 'thanks to'), ('on grounds of', 'on ground of'),
-        ('HELPS', 'help'), ('to take', 'take to'), ('Therefore', 'therefore'),
-        ('precipitating', 'precipitate'), ('on grounds', 'on ground'),
-        ('TO', 'to'), ('encouraging', 'encourage'), ('to need', 'need to'),
-        ('to need to', 'need to to')]
-
-    for merge_from, merge_into in to_merge:
+    for merge_from, merge_into in V2_REMAPPINGS.iteritems():
         try:
             connective_counts[merge_into] = connective_counts.pop(merge_from)
             potential_connectives[merge_into] = potential_connectives.pop(
@@ -351,6 +353,49 @@ def entropy_by_pattern(docs):
         probabilities[conn] = true_count / float(potentials)
 
     # Entropy formula
-    return {conn: 0.0 if prob in [0.0, 1.0]
-                  else -sum(p * log(p, 2) for p in [prob, 1 - prob])
-            for conn, prob in probabilities.iteritems()}
+    entropies = {conn: 0.0 if prob in [0.0, 1.0]
+                       else -sum(p * log(p, 2) for p in [prob, 1 - prob])
+                 for conn, prob in probabilities.iteritems()}
+    # Give and given are indistinguishable.
+    entropies['give'] = entropies['given']
+    return entropies
+
+
+# Based on https://stackoverflow.com/a/42295369
+def entropy(counter):
+    total_counted = float(sum(counter.values()))
+    prob_dict = {k: v / total_counted for k, v in counter.iteritems()}
+    probs = np.array(list(prob_dict.values()))
+    return - probs.dot(np.log2(probs))
+
+def arg_path_diversity_by_pattern(instances, outgoing_only=False):
+    cause_paths = defaultdict(Counter)
+    effect_paths = defaultdict(Counter)
+
+    cause_path_lens = defaultdict(list)
+    effect_path_lens = defaultdict(list)
+
+    for i in instances:
+        sentence = i.sentence
+        cause, effect = i.cause, i.effect
+        connective_str = stringify_connective(i).lower()
+        connective_str = V2_REMAPPINGS.get(connective_str, connective_str)
+        for arg, paths, path_lens in zip([cause, effect],
+                                         [cause_paths, effect_paths],
+                                         [cause_path_lens, effect_path_lens]):
+            if arg:
+                arg_head = sentence.get_head(arg)
+                if arg_head:
+                    conn_head = sentence.get_closest_of_tokens(arg_head, i.connective)[0]
+                    path = sentence.extract_dependency_path(conn_head, arg_head)
+                    path_lens[connective_str].append(len(path))
+                    if outgoing_only:
+                        path = DependencyPath(path.start, [path[0]])
+                    paths[connective_str][str(path)] += 1
+                # Else skip invalid head
+
+    cause_effect_path_entropies = [{k: entropy(v) for k, v in paths.iteritems()}
+                                   for paths in [cause_paths, effect_paths]]
+    cause_effect_path_len_stds = [{k: np.std(v) for k, v in lens.iteritems()}
+                                  for lens in [cause_path_lens, effect_path_lens]]
+    return cause_effect_path_entropies + cause_effect_path_len_stds
