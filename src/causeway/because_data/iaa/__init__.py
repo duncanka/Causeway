@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 import colorama
 import itertools
 colorama.init()
@@ -141,9 +141,8 @@ def _wrapped_sentence_highlighting_instance(instance):
 
 
 class ArgumentMetrics(object):
-    def __init__(self, span_metrics, head_metrics, jaccard, instance_count):
+    def __init__(self, span_metrics, jaccard, instance_count):
         self.span_metrics = span_metrics
-        self.head_metrics = head_metrics
         self.jaccard = jaccard
         # Track instance counts so that when we add Jaccard indices, we know
         # how much to weight each one by to get the right average
@@ -154,10 +153,6 @@ class ArgumentMetrics(object):
             added_span_metrics = self.span_metrics + other.span_metrics
         else:
             added_span_metrics = None
-        if self.head_metrics is not None and other.head_metrics is not None:
-            added_head_metrics = self.head_metrics + other.head_metrics
-        else:
-            added_head_metrics = None
 
         instance_count = self._instance_count + other._instance_count
         # Ignore NaNs and Nones.
@@ -169,8 +164,8 @@ class ArgumentMetrics(object):
             added_jaccard = safe_divide(self.jaccard * self._instance_count
                                         + other.jaccard * other._instance_count,
                                         instance_count)
-        return ArgumentMetrics(added_span_metrics, added_head_metrics,
-                               added_jaccard, instance_count)
+        return ArgumentMetrics(added_span_metrics, added_jaccard,
+                               instance_count)
 
 
 class _RelationMetrics(object):
@@ -222,12 +217,10 @@ class _RelationMetrics(object):
             else:
                 setattr(self, matrix_attr_name, None)
 
-        # TODO: add back metrics that account for the possibility of null args
-        # (i.e., P/R/F1).
         if compare_args:
             self._match_arguments(matches, gold)
         else:
-            null_metrics = ArgumentMetrics(None, None, None, 0)
+            null_metrics = ArgumentMetrics(None, None, 0)
             for arg_num in range(self._INSTANCE_CLASS._num_args):
                 setattr(self, 'arg%d_metrics' % arg_num, null_metrics)
 
@@ -431,7 +424,7 @@ class _RelationMetrics(object):
             print(property_name,
                   ('property not set in Annotation %d;' % number),
                   'not including in analysis (sentence: "',
-                  _wrapped_sentence_highlighting_instance(instance_1).encode(
+                  _wrapped_sentence_highlighting_instance(instance).encode(
                       'utf-8') + '")',
                   file=sys.stderr)
 
@@ -453,36 +446,36 @@ class _RelationMetrics(object):
 
         return ConfusionMatrix(labels_1, labels_2)
 
+    _MATCH_TYPES = Enum(['TP', 'FP', 'FN', 'Mismatch'])
     def _match_instance_args(self, arg_1, arg_2):
-        if arg_1 is None or arg_2 is None:
-            if arg_1 is arg_2: # both None
-                spans_match = True
-                heads_match = True
-            else: # one is None and the other isn't
-                spans_match = False
-                heads_match = False
-        else:
-            spans_match = self._annotation_comparator(arg_1, arg_2)
-            arg_1_head, arg_2_head = [arg[0].parent_sentence.get_head(arg)
-                                      for arg in [arg_1, arg_2]]
-            if arg_1_head is None or arg_2_head is None:
-                if arg_1_head is arg_2_head: # both None
-                    heads_match = True
-                else:
-                    heads_match = False
-            else:
-                heads_match = (arg_1_head.index == arg_2_head.index)
+        # Normalize null args
+        if arg_1 is None: arg_1 = []
+        if arg_2 is None: arg_2 = []
 
-        return spans_match, heads_match
+        # No arguments -> don't count this argument for span match stats
+        if not arg_1 and not arg_2:
+            return None
+
+        spans_match = self._annotation_comparator(arg_1, arg_2)
+        if spans_match:
+            return self._MATCH_TYPES.TP
+        elif not arg_1: # no gold
+            return self._MATCH_TYPES.FP
+        elif not arg_2: # no predicted
+            return self._MATCH_TYPES.FN
+        else:
+            return self._MATCH_TYPES.Mismatch
 
     @staticmethod
     def _filter_punct_tokens(tokens):
         return [t for t in tokens if t.pos not in Token.PUNCT_TAGS]
 
     def _match_arguments(self, matches, gold=None):
+        # NOTE: Assumes that self.connectives is available with tp, fp, fn.
         iaa_check_punct = FLAGS.iaa_check_punct
-        correct_args = [0] * self._INSTANCE_CLASS._num_args
-        correct_heads = [0] * self._INSTANCE_CLASS._num_args
+        arg_match_counts = [Counter() for _ in
+                            range(self._INSTANCE_CLASS._num_args)]
+        MATCH_TYPES = self._MATCH_TYPES
 
         for instance_1, instance_2 in matches:
             if gold is not None:
@@ -501,12 +494,10 @@ class _RelationMetrics(object):
                         self._filter_punct_tokens(arg) if arg else None
                         for arg in [i1_args[arg_num], i2_args[arg_num]]]
 
-                args_match, arg_heads_match = self._match_instance_args(
-                    first_arg, second_arg)
-                correct_args[arg_num] += args_match
-                correct_heads[arg_num] += arg_heads_match
-                all_args_match = all_args_match and args_match
-
+                match_result = self._match_instance_args(first_arg, second_arg)
+                arg_match_counts[arg_num].update([match_result])
+                all_args_match = (all_args_match and
+                                  match_result in [MATCH_TYPES.TP, None])
             # If there's any difference, record it.
             if self.save_differences and not all_args_match:
                 self.argument_differences.append((instance_1, instance_2,
@@ -514,13 +505,16 @@ class _RelationMetrics(object):
 
         for arg_num in range(self._INSTANCE_CLASS._num_args):
             arg_name = 'arg%d' % arg_num
-            arg_span_metrics = AccuracyMetrics(
-                correct_args[arg_num], len(matches) - correct_args[arg_num])
-            arg_head_metrics = AccuracyMetrics(
-                correct_heads[arg_num], len(matches) - correct_heads[arg_num])
+            arg_counts = arg_match_counts[arg_num]
+            arg_span_metrics = ClassificationMetrics(
+                arg_counts[MATCH_TYPES.TP],
+                self.connective_metrics.fp + arg_counts[MATCH_TYPES.FP]
+                    + arg_counts[MATCH_TYPES.Mismatch],
+                self.connective_metrics.fn + arg_counts[MATCH_TYPES.FN]
+                    + arg_counts[MATCH_TYPES.Mismatch])
             arg_jaccard = self._get_jaccard(matches, arg_name)
-            arg_metrics = ArgumentMetrics(arg_span_metrics, arg_head_metrics,
-                                          arg_jaccard, len(matches))
+            arg_metrics = ArgumentMetrics(arg_span_metrics, arg_jaccard,
+                                          len(matches))
             setattr(self, arg_name + '_metrics', arg_metrics)
 
     def pp(self, log_confusion=None, log_stats=None, log_differences=None,
@@ -598,12 +592,7 @@ class _RelationMetrics(object):
                     indent + 3,
                     getattr(self, arg_type + '_metrics').span_metrics,
                     file=log_file)
-                print_indented(indent + 2, 'Heads:', file=log_file)
-                print_indented(
-                    indent + 3,
-                    getattr(self, arg_type + '_metrics').head_metrics,
-                    file=log_file)
-                print_indented(indent + 2, 'Jaccard index: ',
+                print_indented(indent + 2, 'Jaccard index (conditional): ',
                                getattr(self, arg_type + '_metrics').jaccard,
                                file=log_file)
 
@@ -646,7 +635,7 @@ class _RelationMetrics(object):
             if self.arg0_metrics is not None: # we're matching arguments
                 conn_metrics._match_arguments(conn_matches)
             else:
-                null_metrics = ArgumentMetrics(None, None, None, 0)
+                null_metrics = ArgumentMetrics(None, None, 0)
                 for arg_num in range(self._INSTANCE_CLASS._num_args):
                     setattr(conn_metrics, 'arg%d_metrics' % arg_num,
                             null_metrics)
@@ -715,15 +704,15 @@ class _RelationMetrics(object):
             arg_metrics = object.__new__(ArgumentMetrics)
             setattr(aggregated, arg_metrics_attr_name, arg_metrics)
 
-            for sub_attr_name in ['span_metrics', 'head_metrics']:
-                sub_attr_values = [getattr(getattr(m, arg_metrics_attr_name),
-                                       sub_attr_name) for m in metrics_list]
-                sub_attr_values = [v for v in sub_attr_values if v is not None]
-                if sub_attr_values:
-                    setattr(arg_metrics, sub_attr_name,
-                            sub_attr_values[0].average(sub_attr_values))
-                else:
-                    setattr(arg_metrics, sub_attr_name, None)
+            span_metrics_values = [getattr(m, arg_metrics_attr_name
+                                           ).span_metrics for m in metrics_list]
+            span_metrics_values = [v for v in span_metrics_values
+                                   if v is not None]
+            if span_metrics_values:
+                arg_metrics.span_metrics = span_metrics_values[0].average(
+                    span_metrics_values)
+            else:
+                arg_metrics.span_metrics = None
 
             jaccard_values = [getattr(m, arg_metrics_attr_name).jaccard
                               for m in metrics_list]
@@ -867,18 +856,20 @@ class _RelationMetrics(object):
 
     @staticmethod
     def _csv_metrics(metrics_dict):
-        lines = [',TP,FP,FN,S_c,H_c,J_c,S_e,H_e,J_e']
+        lines = [',TP,FP,FN,P_c,R_c,F_c,J_c,P_e,R_e,F_e,J_e']
         for category, metrics in metrics_dict.iteritems():
             csv_metrics = (str(x) for x in [
                 category,
                 metrics.connective_metrics.tp,
                 metrics.connective_metrics.fp,
                 metrics.connective_metrics.fn,
-                metrics.arg0_metrics.span_metrics.accuracy,
-                metrics.arg0_metrics.head_metrics.accuracy,
+                metrics.arg0_metrics.span_metrics.precision,
+                metrics.arg0_metrics.span_metrics.recall,
+                metrics.arg0_metrics.span_metrics.f1,
                 metrics.arg0_metrics.jaccard,
-                metrics.arg1_metrics.span_metrics.accuracy,
-                metrics.arg1_metrics.head_metrics.accuracy,
+                metrics.arg1_metrics.span_metrics.precision,
+                metrics.arg1_metrics.span_metrics.recall,
+                metrics.arg1_metrics.span_metrics.f1,
                 metrics.arg1_metrics.jaccard])
             lines.append(','.join(csv_metrics))
         return '\n'.join(lines)
