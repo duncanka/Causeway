@@ -17,8 +17,8 @@ for line in evaluation.split('\n'):
         lines_to_skip = 4
         continue
 
-    chunks = line.split()
-    number_chunk = chunks[-1].decode('utf8').split(u'\u00b1')[0]
+    chunks = line.split(':')
+    number_chunk = chunks[-1].decode('utf8').split(u'\u00b1')[0].strip()
     if number_chunk == 'nan':
         continue
     try:
