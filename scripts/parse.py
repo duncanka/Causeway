@@ -11,7 +11,7 @@ def write_parse_results(txt_file_name, parse_text):
 def run_parser(sentence, parser_path, write_results=False):
     if write_results:
         delete = False
-        output_format = 'words,wordsAndTags,penn,typedDependencies'
+        output_format = 'words,wordsAndTags,typedDependencies'
     else:
         delete = True
         output_format = 'typedDependencies'
@@ -20,10 +20,14 @@ def run_parser(sentence, parser_path, write_results=False):
         sentence_file.write(sentence)
         sentence_file.file.flush()
         parser_process = subprocess.Popen(
-            ['java', '-mx4600m', '-cp', '%s/*' % parser_path,
+            ['java', '-mx2600m',
+             '-cp', '%s/classes:%s/*:' % (parser_path, parser_path),
              'edu.stanford.nlp.parser.lexparser.LexicalizedParser',
              '-tokenizerOptions',
-             'ptb3Escaping=false,americanize=false,untokenizable=firstKeep',
+             'ptb3Escaping=false,normalizeParentheses=true,normalizeSpace=true,'
+                 'americanize=false,untokenizable=firstKeep,'
+                 'normalizeAmpersandEntity=true,normalizeFractions=true,'
+                 'ptb3Ellipsis=true',
              '-outputFormat', output_format,
              '-outputFormatOptions', 'nonCollapsedDependencies,stem',
              'edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz',
@@ -45,7 +49,7 @@ def get_parsed_sentence(sentence_text, parse_text=None):
         parse_path = write_parse_results(sentence_file.name, parse_text)
     else:
         txt_path, parse_path = run_parser(
-            sentence_text, '../../../stanford-parser/', True)
+            sentence_text, '../../stanford-corenlp-full-2016-10-31/', True)
 
     from nlpypline.data.io import StanfordParsedSentenceReader
     r = StanfordParsedSentenceReader()
