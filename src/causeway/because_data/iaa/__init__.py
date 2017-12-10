@@ -33,7 +33,7 @@ try:
         'iaa_given_connective_ids', [], "Annotation IDs for connectives"
         " that were given as gold and should be treated separately for IAA.")
     DEFINE_float(
-        'iaa_min_partial_overlap', 0.25, "Minimum fraction of the larger of two"
+        'iaa_min_partial_overlap', 0.5, "Minimum fraction of the larger of two"
         " annotations that must be overlapping for the two annotations to be"
         " considered a partial match.")
     DEFINE_bool('iaa_log_confusion', False, "Log confusion matrices for IAA.")
@@ -74,46 +74,21 @@ def make_annotation_comparator(allow_partial):
         else:
             min_partial_overlap = 1.0
 
-        # Just in case we accidentally added tokens to an annotation in the
-        # wrong order, sort by token position.
-        sort_key = lambda token: (token.parent_sentence.document_char_offset,
-                                  token.index)
-        offsets_1 = [(token.start_offset, token.end_offset)
-                     for token in sorted(token_list_1, key=sort_key)]
-        offsets_2 = [(token.start_offset, token.end_offset)
-                     for token in sorted(token_list_2, key=sort_key)]
-        if offsets_1 == offsets_2:
+        indices_1, indices_2 = [set([token.index for token in token_list])
+                                for token_list in [token_list_1, token_list_2]]
+        if indices_1 == indices_2:
             return True
 
         # No partial matching allowed
         if min_partial_overlap == 1.0:
             return False
 
-        a1_length = sum([end - start for start, end in offsets_1])
-        a2_length = sum([end - start for start, end in offsets_2])
-        # Larger length is converted to float below to avoid having to do that
-        # repeatedly when computing fractions.
+        a1_length, a2_length = len(indices_1), len(indices_2)
+        num_overlapping = float(len(indices_1.intersection(indices_2)))
         if a1_length > a2_length:
-            larger_offsets, smaller_offsets, larger_length = (
-                offsets_1, offsets_2, float(a1_length))
+            fraction_of_larger_overlapping = num_overlapping / a1_length
         else:
-            larger_offsets, smaller_offsets, larger_length = (
-                offsets_2, offsets_1, float(a2_length))
-
-        # This algorithm assumes no fragments ever overlap with each other.
-        # Thus, each token of the smaller annotation can only ever overlap with
-        # a single fragment from the larger annotation. This means we can safely
-        # add a separate fraction to the total percent overlap each time we
-        # detect any overlap at all.
-        fraction_of_larger_overlapping = 0.0
-        for larger_offset in larger_offsets:
-            for smaller_offset in smaller_offsets:
-                overlap_start = max(larger_offset[0], smaller_offset[0])
-                overlap_end = min(larger_offset[1], smaller_offset[1])
-                overlap_size = overlap_end - overlap_start
-                if overlap_size > 0:
-                    fraction_of_larger_overlapping += (
-                        overlap_size / larger_length)
+            fraction_of_larger_overlapping = num_overlapping / a2_length
 
         return fraction_of_larger_overlapping > min_partial_overlap
 
