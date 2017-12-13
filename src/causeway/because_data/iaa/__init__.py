@@ -74,9 +74,15 @@ def make_annotation_comparator(allow_partial):
         else:
             min_partial_overlap = 1.0
 
-        indices_1, indices_2 = [set([token.index for token in token_list])
-                                for token_list in [token_list_1, token_list_2]]
-        if indices_1 == indices_2:
+        # Just in case we accidentally added tokens to an annotation in the
+        # wrong order, sort by token position.
+        sort_key = lambda token: (token.parent_sentence.document_char_offset,
+                                  token.index)
+        offsets_1 = [(token.start_offset, token.end_offset)
+                     for token in sorted(token_list_1, key=sort_key)]
+        offsets_2 = [(token.start_offset, token.end_offset)
+                     for token in sorted(token_list_2, key=sort_key)]
+        if offsets_1 == offsets_2:
             return True
 
         # No partial matching allowed
@@ -84,7 +90,7 @@ def make_annotation_comparator(allow_partial):
             return False
 
         a1_length, a2_length = len(indices_1), len(indices_2)
-        num_overlapping = float(len(indices_1.intersection(indices_2)))
+        num_overlapping = float(len(set(indices_1).intersection(set(indices_2))))
         if a1_length > a2_length:
             fraction_of_larger_overlapping = num_overlapping / a1_length
         else:
