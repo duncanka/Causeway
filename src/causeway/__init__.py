@@ -149,12 +149,11 @@ class IAAEvaluator(Evaluator):
 
     def aggregate_results(self, results_list):
         if FLAGS.iaa_calculate_partial:
-            permissive = results_list[0].aggregate(
-                [result_dict[IAAEvaluator._PERMISSIVE_KEY]
-                 for result_dict in results_list])
-            strict = results_list[0].aggregate(
-                [result_dict[IAAEvaluator._STRICT_KEY]
-                 for result_dict in results_list])
+            aggregator = next(results_list[0].itervalues()).aggregate
+            permissive = aggregator([result_dict[IAAEvaluator._PERMISSIVE_KEY]
+                                     for result_dict in results_list])
+            strict = aggregator([result_dict[IAAEvaluator._STRICT_KEY]
+                                 for result_dict in results_list])
             return {IAAEvaluator._PERMISSIVE_KEY: permissive,
                     IAAEvaluator._STRICT_KEY: strict}
         else:
