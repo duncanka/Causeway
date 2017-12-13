@@ -89,8 +89,8 @@ def make_annotation_comparator(allow_partial):
         if min_partial_overlap == 1.0:
             return False
 
-        a1_length, a2_length = len(indices_1), len(indices_2)
-        num_overlapping = float(len(set(indices_1).intersection(set(indices_2))))
+        a1_length, a2_length = len(offsets_1), len(offsets_2)
+        num_overlapping = float(len(set(offsets_1).intersection(set(offsets_2))))
         if a1_length > a2_length:
             fraction_of_larger_overlapping = num_overlapping / a1_length
         else:
