@@ -32,6 +32,8 @@ try:
         'Maximum number of Steiner nodes to be allowed in TRegex patterns')
     DEFINE_integer('tregex_max_threads', 30,
                    'Max number of TRegex processor threads')
+    DEFINE_integer('tregex_max_cache_filename_len', 255,
+                   'Max filename length to allow for files in the TRegex cache')
     DEFINE_enum('tregex_pattern_type', 'dependency',
                 ['dependency', 'constituency'],
                 'Type of tree to generate and run TRegex patterns with')
@@ -617,13 +619,13 @@ class TRegexConnectiveModel(Model):
         def _create_output_file_if_not_exists(self, pattern, connective_labels,
                                               tree_file_path):
             pattern_dir_name = pattern.replace('/', '\\')
-            if len(pattern_dir_name) > 255:
+            if len(pattern_dir_name) > FLAGS.tregex_max_cache_filename_len:
                 # The combination of the start of the pattern plus the hash
                 # should be very hard indeed to accidentally match.
                 pattern_hash = hash(pattern_dir_name)
                 # Leave room for up to 20 characters of numerical hash (the max
                 # we could get on a 64-bit system).
-                pattern_dir_name = pattern_dir_name[:235]
+                pattern_dir_name = pattern_dir_name[:FLAGS.tregex_max_cache_filename_len - 20]
                 pattern_dir_name += str(pattern_hash)
 
             file_hash = hash_file(tree_file_path)
