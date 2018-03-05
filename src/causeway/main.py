@@ -46,7 +46,7 @@ try:
     DEFINE_enum('pipeline_type', 'tregex',
                 ['tregex', 'regex', 'baseline', 'tregex+baseline',
                  'regex+baseline', 'tregex_mostfreq', 'regex_mostfreq',
-                 'tregex_preproc'],
+                 'tregex_cache'],
                 'Which causality pipeline to run')
     DEFINE_bool('filter_overlapping', True,
                 'Whether to filter smaller connectives that overlap with larger'
@@ -72,7 +72,7 @@ def get_stages(candidate_classifier):
                   ArgSpanStage('Argument span expander'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier')]
-    if FLAGS.pipeline_type == 'tregex_preproc':
+    elif FLAGS.pipeline_type == 'tregex_cache':
         stages = [TRegexConnectiveStage('TRegex connectives')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
@@ -108,7 +108,8 @@ def get_stages(candidate_classifier):
                   ArgumentLabelerStage('CRF arg labeler'),
                   MostFreqSenseFilterStage('Most frequent sense filter')]
 
-    if FLAGS.filter_overlapping and FLAGS.pipeline_type != 'baseline':
+    if FLAGS.filter_overlapping and FLAGS.pipeline_type not in [
+            'baseline', 'tregex_cache']:
         smaller_filter_stage = SimpleStage(
             'Filter smaller connectives', remove_smaller_matches,
             lambda: PairwiseAndNonIAAEvaluator(
