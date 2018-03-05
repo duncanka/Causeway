@@ -18,6 +18,11 @@ from nlpypline.util import listify, partition
 
 from read_all import read_all # just for easy access
 
+def utopia_context():
+    return mpl.rc_context(rc={'font.family': 'serif',
+                              'font.serif': 'Utopia',
+                              'text.latex.preamble': '\usepackage{fourier}',
+                              'text.usetex': True})
 
 def not_contiguous(instance):
     connective = instance.connective
@@ -156,9 +161,6 @@ def arg_lengths(instances, pairwise=True):
 
 
 def plot_arg_lengths(cause_lengths, effect_lengths):
-    mpl.rc('font',**{'family':'serif','serif':['Times']})
-    mpl.rc('text', usetex=True)
-
     min_bin, max_bin = 1, 22
     bins = range(min_bin, max_bin)
     bins[-1] -= 0.0001
@@ -166,6 +168,7 @@ def plot_arg_lengths(cause_lengths, effect_lengths):
                        for l in cause_lengths, effect_lengths]
     cause_y, bin_edges = np.histogram(causes, bins=bins)
     effect_y, _ = np.histogram(effects, bins=bins)
+
     plt.plot(bin_edges[:-1], cause_y, '--', color='#3c6090', marker='o')
     plt.plot(bin_edges[:-1], effect_y, '-', color='#e84330', marker='s')
 
@@ -173,16 +176,24 @@ def plot_arg_lengths(cause_lengths, effect_lengths):
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-    plt.tick_params(axis='both', labelsize=18, length=0)
-    plt.xlim(0, max_bin - 1.5)
-    # 0 is an uninteresting tick, but 1 is relevant.
-    ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
-    plt.xlabel('Argument length (in tokens)', fontsize=20)
-    plt.ylabel('Count', fontsize=20)
-    plt.text(2.8, 190, 'Causes', color='#3c6090', fontsize=22)
-    plt.text(7.3, 120, 'Effects', color='#e84330', fontsize=22)
-    plt.tight_layout()
-    plt.show(False)
+    with utopia_context():
+        plt.tick_params(axis='both', labelsize=11)
+        plt.xlim(0, max_bin - 1.5)
+        # 0 is an uninteresting tick, but 1 is relevant.
+        ax.xaxis.set_major_locator(FixedLocator([1, 5, 10, 15, 20]))
+        plt.xlabel('Argument length (in tokens)', fontsize=13, labelpad=12)
+        plt.ylabel('Count', fontsize=13, labelpad=12)
+        plt.text(2.8, 190, 'Causes', color='#3c6090', fontsize=15)
+        plt.text(7.3, 120, 'Effects', color='#e84330', fontsize=15)
+
+        plt.tight_layout()
+
+        fig = plt.gcf()
+        size = fig.get_size_inches()
+        fig.set_size_inches(size[0], size[1] * 0.8)
+
+        #plt.show(False)
+        plt.savefig('/home/jesse/Documents/Work/Research/My Publications/Thesis/tagging/arg_lengths.pdf')
 
 
 def length_median(arg_lengths):
@@ -278,20 +289,25 @@ def pattern_saturation(documents, num_folds=20, num_increments=20):
     fit_y = [float(fit[0]) * np.log(x)**2 + float(fit[1]) * np.log(x)
              + float(fit[2]) for x in fit_x]
 
-    mpl.rc('xtick', labelsize=12)
-    mpl.rc('ytick', labelsize=12)
-    mpl.rc('font', **{"family": 'serif', 'serif': 'Times New Roman'})
+    with utopia_context():
+        plt.tick_params(axis='both', labelsize=11)
 
-    plt.plot(fit_x, fit_y, color='k', dashes=[3,3], alpha=0.5)
-    plt.plot(xs, averages)
-    plt.xlabel('% of sentences in corpus', fontsize=15.5, labelpad=12)
-    plt.ylabel('# of patterns', fontsize=15.5, labelpad=12)
-    plt.tight_layout()
-    plt.fill_between([1, 4], 0, 375, color='gray', alpha=0.1, lw=0)
-    plt.gca().xaxis.set_major_formatter(FuncFormatter(lambda x, _: '{:.0%}'.format(x)))
+        plt.fill_between([1, 4], 0, 380, color='gray', alpha=0.1, lw=0)
+        plt.plot(xs, averages, color='black')
+        plt.plot(fit_x, fit_y, color='orange', dashes=[3,4], alpha=0.8)
+        plt.xlabel(r'\% of sentences in corpus', fontsize=13, labelpad=12)
+        plt.ylabel(r'\# of patterns', fontsize=13, labelpad=12)
 
+        fig = plt.gcf()
+        size = fig.get_size_inches()
+        fig.set_size_inches(size[0]*1.25, size[1])
 
-    plt.show(False)
+        ax = plt.gca()
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: '{:.0%}'.format(x)))
+
+        plt.tight_layout()
+        # plt.show(False)
+        plt.savefig('/home/jesse/Documents/Work/Research/My Publications/Thesis/repr_annot/saturation.pdf')
 
 
 def count_connectives_remapped(docs):
