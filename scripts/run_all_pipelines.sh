@@ -11,7 +11,6 @@ PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
 BASE_CMD="python src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140"
 
 export PYTHONPATH="src:NLPypline/src"
-tsp -S 4
 
 # Columns:
 # Run_type data_dir extra_flags
@@ -40,8 +39,12 @@ run_pipeline() {
 mkdir -p $OUT_DIR
 mkdir -p $LOG_DIR
 
-run_pipeline baseline baseline $DATA_DIR
+tsp -S 1 # for TRegex caching
+run_pipeline tregex_cache tregex_cache $DATA_DIR
+run_pipeline tregex_cache tregex_cache_ptb $PTB_DATA_DIR
+tsp -n -L "parallelize" "tsp -S 4"
 
+run_pipeline baseline baseline $DATA_DIR
 for PIPELINE_TYPE in tregex regex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
         read RUN_TYPE DIR FLAGS <<<$line

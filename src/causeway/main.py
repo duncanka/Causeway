@@ -45,7 +45,8 @@ try:
     DEFINE_integer('seed', None, 'Seed for the numpy RNG.')
     DEFINE_enum('pipeline_type', 'tregex',
                 ['tregex', 'regex', 'baseline', 'tregex+baseline',
-                 'regex+baseline', 'tregex_mostfreq', 'regex_mostfreq'],
+                 'regex+baseline', 'tregex_mostfreq', 'regex_mostfreq',
+                 'tregex_preproc'],
                 'Which causality pipeline to run')
     DEFINE_bool('filter_overlapping', True,
                 'Whether to filter smaller connectives that overlap with larger'
@@ -71,6 +72,8 @@ def get_stages(candidate_classifier):
                   ArgSpanStage('Argument span expander'),
                   CausationPatternFilterStage(candidate_classifier,
                                               'Candidate classifier')]
+    if FLAGS.pipeline_type == 'tregex_preproc':
+        stages = [TRegexConnectiveStage('TRegex connectives')]
     elif FLAGS.pipeline_type == 'regex':
         stages = [RegexConnectiveStage('Regex connectives'),
                   StanfordNERStage('NER'),
