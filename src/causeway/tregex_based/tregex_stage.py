@@ -377,7 +377,7 @@ class TRegexConnectiveModel(Model):
 
         # Next, we need to make sure all the edges that weren't included in the
         # longest path get incorporated into the pattern. For this, it's OK to
-        # have a few colon-separated pattern segments.
+        # have a few colon-separated pattern segments (which slow TRegex down).
         def get_named_node_pattern(node):
             try:
                 return '=' + node_names[node]
@@ -442,7 +442,7 @@ class TRegexConnectiveModel(Model):
         # Once the sentence has been preprocessed, it is possible some nodes
         # will have been deleted. We make sure to delete these from the list
         # of required nodes. (We check whether each has an incoming or outgoing
-        # edge.
+        # edge.)
         # TODO: remember what nodes have been deleted, so that they can be
         #       re-added as part of the connective_tokens span if the pattern
         #       matches.
