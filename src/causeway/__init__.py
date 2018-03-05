@@ -16,6 +16,7 @@ from causeway.because_data import CausationInstance
 from causeway.because_data.iaa import CausalityMetrics
 from nlpypline.data import StanfordParsedSentence
 from nlpypline.pipeline import Stage, Evaluator
+from nlpypline.pipeline.models import Model
 from nlpypline.util import listify, print_indented, Enum, make_getter, make_setter
 
 try:
@@ -247,7 +248,7 @@ class StanfordNERStage(Stage):
 
     def __init__(self, name):
         self.name = name
-        # Omit models
+        self.model = Model()
 
     def train(self, documents, instances_by_doc):
         pass
