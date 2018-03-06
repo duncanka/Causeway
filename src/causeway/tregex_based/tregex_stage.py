@@ -47,6 +47,7 @@ class TRegexConnectiveModel(Model):
         self.tregex_patterns = []
         # Internal hackery properties, used for training.
         self._ptb_strings = None
+        self._num_sentences = None # Poor man's check for same sentences
 
     def reset(self):
         self.tregex_patterns = []
@@ -56,12 +57,14 @@ class TRegexConnectiveModel(Model):
         # Dirty hack to avoid redoing all the preprocessing when test() is
         # called to provide input to the next stage.
         self._ptb_strings = ptb_strings
+        self._num_sentences = len(sentences)
 
     def test(self, sentences):
         logging.info('Tagging possible connectives...')
         start_time = time.time()
 
-        if self._ptb_strings is not None:
+        if (self._ptb_strings is not None
+            and self._num_sentences == len(sentences)):
             ptb_strings = self._ptb_strings
             self._ptb_strings = None
         else:
