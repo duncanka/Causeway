@@ -1,6 +1,6 @@
 reverted:
---- src-orig/edu/stanford/nlp/parser/lexparser/LexicalizedParser.java	2013-12-09 15:59:12.000000000 -0500
-+++ src/edu/stanford/nlp/parser/lexparser/LexicalizedParser.java	2014-06-05 22:52:29.000000000 -0400
+--- a/src/edu/stanford/nlp/parser/lexparser/LexicalizedParser.java	2013-12-09 15:59:12.000000000 -0500
++++ b/src/edu/stanford/nlp/parser/lexparser/LexicalizedParser.java	2014-06-05 22:52:29.000000000 -0400
 @@ -1331,6 +1331,9 @@
          argIndex = argIndex + ArgUtils.numSubArgs(args, argIndex) + 1;
          tunePath = treebankDescription.first();
@@ -12,9 +12,27 @@ reverted:
          int oldIndex = argIndex;
          argIndex = op.setOptionOrWarn(args, argIndex);
 reverted:
---- src-orig/edu/stanford/nlp/parser/lexparser/ParseFiles.java	2013-05-29 16:35:50.000000000 -0400
-+++ src/edu/stanford/nlp/parser/lexparser/ParseFiles.java	2014-06-06 10:57:30.000000000 -0400 
-@@ -269,7 +273,7 @@
+--- a/src/edu/stanford/nlp/parser/lexparser/ParseFiles.java	2013-05-29 16:35:50.000000000 -0400
++++ b/src/edu/stanford/nlp/parser/lexparser/ParseFiles.java	2014-06-06 10:57:30.000000000 -0400
+@@ -8,6 +8,7 @@
+ import java.net.URL;
+ import java.text.DecimalFormat;
+ import java.text.NumberFormat;
++import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+ import java.util.function.Function;
+@@ -15,7 +16,9 @@
+ import edu.stanford.nlp.io.IOUtils;
+ import edu.stanford.nlp.io.RuntimeIOException;
+ import edu.stanford.nlp.ling.HasWord;
++import edu.stanford.nlp.ling.Label;
+ import edu.stanford.nlp.ling.Sentence;
++import edu.stanford.nlp.ling.Word;
+ import edu.stanford.nlp.parser.common.ParserQuery;
+ import edu.stanford.nlp.parser.common.ParsingThreadsafeProcessor;
+ import edu.stanford.nlp.parser.metrics.AbstractEval;
+@@ -269,7 +276,7 @@
      saidMemMessage = saidMemMessage || parserQuery.saidMemMessage();
      Tree ansTree = parserQuery.getBestParse();
      if (ansTree == null) {
@@ -23,7 +41,7 @@ reverted:
        return;
      }
      if (ansTree != null) {
-@@ -293,8 +297,8 @@
+@@ -293,8 +300,8 @@
          treePrint.printTree(null, Integer.toString(num), pwo);
        } catch (Exception e) {
          pwErr.println("Sentence skipped: out of memory or error calling TreePrint.");
@@ -33,11 +51,10 @@ reverted:
        }
      }
      // crude addition of k-best tree printing
-@@ -308,4 +312,14 @@
-       treePrint.printTrees(trees, Integer.toString(num), pwo);
+@@ -308,4 +316,13 @@
      }
    }
-+
+ 
 +  private void printParseFailure(ParserQuery parserQuery, PrintWriter pwo) {
 +    List<Label> words = new ArrayList<Label>();
 +    for (HasWord word : parserQuery.originalSentence()) {
@@ -49,29 +66,29 @@ reverted:
 +  }
  }
 reverted:
---- src-orig/edu/stanford/nlp/parser/lexparser/TestOptions.java	2013-04-27 22:48:08.000000000 -0400
-+++ src/edu/stanford/nlp/parser/lexparser/TestOptions.java	2014-06-05 22:40:43.000000000 -0400
+--- a/src/edu/stanford/nlp/parser/lexparser/TestOptions.java	2013-04-27 22:48:08.000000000 -0400
++++ b/src/edu/stanford/nlp/parser/lexparser/TestOptions.java	2014-06-05 22:40:43.000000000 -0400
 @@ -274,6 +274,12 @@
     * negative consequence that output is not quite as nicely ordered.
     */
    public int testingThreads = 1;
-+  
++
 +  /**
 +   * If this is true and "words" is one of the selected formats for output, the
 +   * parser will output words even if the parse failed.
 +   */
 +  public boolean printWordsForUnparsed = false;
- 
+
    /**
     * Determines method for print trees on output.
 reverted:
---- src-orig/edu/stanford/nlp/trees/TreePrint.java	2013-12-20 18:35:36.000000000 -0500
-+++ src/edu/stanford/nlp/trees/TreePrint.java	2014-06-05 22:51:21.000000000 -0400
+--- a/src/edu/stanford/nlp/trees/TreePrint.java	2013-12-20 18:35:36.000000000 -0500
++++ b/src/edu/stanford/nlp/trees/TreePrint.java	2014-06-05 22:51:21.000000000 -0400
 @@ -329,6 +329,31 @@
        }
      }
    }
-+  
++
 +  public void printWordsIfRequested(List<Label> words, final PrintWriter pw, final boolean inXml) {
 +    if (!formats.containsKey("words")) {
 +    	return;
@@ -96,13 +113,13 @@ reverted:
 +      }
 +    }
 +  }
- 
- 
+
+
    /** Print the internal part of a tree having already identified it.
 @@ -346,26 +371,7 @@
        outputTree = outputTree.prune(new BobChrisTreeNormalizer.EmptyFilter());
      }
- 
+
 +    printWordsIfRequested(outputTree.yield(), pw, inXml);
 -    if (formats.containsKey("words")) {
 -      if (inXml) {
@@ -124,13 +141,13 @@ reverted:
 -        }
 -      }
 -    }
- 
+
      if (propertyToBoolean(options, "removeTopBracket")) {
        String s = outputTree.label().value();
 @@ -1009,4 +1015,7 @@
      pw.println(toString(dependencies, format, includeTags));
    }
- 
+
 +  public boolean printsFormat(String format) {
 +	  return formats.containsKey(format);
 +  }

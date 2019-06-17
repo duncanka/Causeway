@@ -1,6 +1,6 @@
-diff -ur src-orig/edu/stanford/nlp/trees/PennTreeReader.java src/edu/stanford/nlp/trees/PennTreeReader.java
---- src-orig/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-11 23:57:21.432509148 -0500
-+++ src/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-12 17:48:24.315909845 -0500
+diff -ur a/src/edu/stanford/nlp/trees/PennTreeReader.java b/src/edu/stanford/nlp/trees/PennTreeReader.java
+--- a/src/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-11 23:57:21.432509148 -0500
++++ b/src/edu/stanford/nlp/trees/PennTreeReader.java	2014-11-12 17:48:24.315909845 -0500
 @@ -134,7 +134,9 @@
    public Tree readTree() throws IOException {
      Tree t = null;
@@ -12,12 +12,12 @@ diff -ur src-orig/edu/stanford/nlp/trees/PennTreeReader.java src/edu/stanford/nl
 
        //Setup PDA
        this.currentTree = null;
-diff -ur src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java src/edu/stanford/nlp/trees/tregex/TregexPattern.java
---- src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-11 23:57:21.440509149 -0500
-+++ src/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-12 17:45:26.695905623 -0500
-@@ -726,29 +726,37 @@
+diff -ur a/src/edu/stanford/nlp/trees/tregex/TregexPattern.java b/src/edu/stanford/nlp/trees/tregex/TregexPattern.java
+--- a/src/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-11 23:57:21.440509149 -0500
++++ b/src/edu/stanford/nlp/trees/tregex/TregexPattern.java	2014-11-12 17:45:26.695905623 -0500
+@@ -745,30 +745,37 @@
        p.prettyPrint(errPW);
-
+ 
        String[] handles = argsMap.get(printHandleOption);
 +      TRegexTreeVisitor vis = new TRegexTreeVisitor(p, handles, encoding);
        if (argsMap.containsKey("-filter")) {
@@ -39,34 +39,32 @@ diff -ur src-orig/edu/stanford/nlp/trees/tregex/TregexPattern.java src/edu/stanf
 -        Tree t = r.readTree();
 -        treebank = new MemoryTreebank();
 -        treebank.add(t);
--      } else {
+       } else {
 -        int last = args.length - 1;
 -        errPW.println("Reading trees from file(s) " + args[last]);
 -        TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
--        treebank = new DiskTreebank(trf, encoding);
--        treebank.loadPath(args[last], null, true);
-+      } else {
-+    	  if (args.length == 1) {
-+	        errPW.println("using default tree");
-+	        TreeReader r = new PennTreeReader(new StringReader("(VP (VP (VBZ Try) (NP (NP (DT this) (NN wine)) (CC and) (NP (DT these) (NNS snails)))) (PUNCT .))"), new LabeledScoredTreeFactory(new StringLabelFactory()));
-+	        Tree t = r.readTree();
-+	        treebank = new MemoryTreebank();
-+	        treebank.add(t);
-+	        r.close();
-+	      } else {
-+	        int last = args.length - 1;
-+	        errPW.println("Reading trees from file(s) " + args[last]);
-+	        TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
-+	        treebank = new DiskTreebank(trf, encoding);
-+	        treebank.loadPath(args[last], null, true);
++        if (args.length == 1) {
++            errPW.println("using default tree");
++            TreeReader r = new PennTreeReader(new StringReader("(VP (VP (VBZ Try) (NP (NP (DT this) (NN wine)) (CC and) (NP (DT these) (NNS snails)))) (PUNCT .))"), new LabeledScoredTreeFactory(new StringLabelFactory()));
++            Tree t = r.readTree();
++            treebank = new MemoryTreebank();
++            treebank.add(t);
++            r.close();
++          } else {
++            int last = args.length - 1;
++            errPW.println("Reading trees from file(s) " + args[last]);
++            TreeReaderFactory trf = getTreeReaderFactory(treeReaderFactoryClassName);
++            treebank = new DiskTreebank(trf, encoding);
++            treebank.loadPath(args[last], extension, true);
 +	      }
-+
+ 
+-        treebank = new DiskTreebank(trf, encoding);
+-        treebank.loadPath(args[last], extension, true);
 +	      treebank.apply(vis);
        }
 -      TRegexTreeVisitor vis = new TRegexTreeVisitor(p, handles, encoding);
--
+ 
 -      treebank.apply(vis);
-+
        Timing.endTime();
        if (TRegexTreeVisitor.printMatches) {
          errPW.println("There were " + vis.numMatches() + " matches in total.");
