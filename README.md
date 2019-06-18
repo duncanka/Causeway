@@ -38,11 +38,11 @@ To reproduce the results from the Causeway paper:
       unzip stanford-parser-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz
       ```
 
-   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from the root `stanford-parser-full-2015-04-20` directory; replace `$PATH_TO_CAUSEWAY` with the path of the `Causeway` directory from step 3):
+   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from the root `stanford-parser-full-2015-04-20` directory; replace `$CAUSEWAY_DIR` with the path of the `Causeway` directory from step 3):
       ```bash
       mkdir /tmp/stanford-sources
       unzip stanford-parser-3.5.2-sources.jar -d /tmp/stanford-sources
-      cp $PATH_TO_CAUSEWAY/stanford-patches/*.patch /tmp/stanford-sources
+      cp $CAUSEWAY_DIR/stanford-patches/*.patch /tmp/stanford-sources
       (cd /tmp/stanford-sources && {
           for PATCH in *.patch; do
               patch -p 2 < $PATCH
@@ -76,7 +76,7 @@ To reproduce the results from the Causeway paper:
 
    4. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
       ```bash
-      python $BECAUSE_DIR/scripts/extract_nyt_txt.py NYT $(for FNAME in NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
+      python $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
       ```
       Again, you should end up with a bunch of `.txt` files alongside the `.ann` files in the `NYT` subdirectory.
 
