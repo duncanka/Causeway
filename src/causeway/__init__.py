@@ -22,7 +22,7 @@ from nlpypline.util import listify, print_indented, Enum, make_getter, make_sett
 try:
     DEFINE_bool("iaa_calculate_partial", False,
                 "Whether to compute metrics for partial overlap")
-    DEFINE_string('stanford_ser_path',
+    DEFINE_string('stanford_ner_path',
                   '/home/jesse/Documents/Work/Research/stanford-ner-2015-04-20',
                   'Path to Stanford NER directory')
     DEFINE_string(
@@ -254,9 +254,9 @@ class StanfordNERStage(Stage):
         pass
 
     def _test_documents(self, documents, sentences_by_doc, writer):
-        model_path = path.join(FLAGS.stanford_ser_path, 'classifiers',
+        model_path = path.join(FLAGS.stanford_ner_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
-        jar_path = path.join(FLAGS.stanford_ser_path, 'stanford-ner.jar')
+        jar_path = path.join(FLAGS.stanford_ner_path, 'stanford-ner.jar')
         tagger = SentenceSplitStanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [StanfordParsedSentence.escape_token_text(token.original_text)
