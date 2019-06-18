@@ -9,7 +9,7 @@ ALL_DATA_DIR=/var/www/brat/data/finished
 PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
 STANFORD_DIR=/home/jesse/Documents/Work/Research/stanford-parser-full-2015-04-20/
 # Set max TRegex cache filename length to work with eCryptfs.
-BASE_CMD="python src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR"
+BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR"
 
 export PYTHONPATH="src:NLPypline/src"
 
