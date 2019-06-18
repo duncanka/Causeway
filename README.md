@@ -88,7 +88,7 @@ To reproduce the results from the Causeway paper:
    ```
 
 7. Run the system.
-   1. Edit the `DATA_DIR`, `PTB_DIR`, and `STANFORD_DIR` variables in [`run_all_pipelines.sh`](../blob/master/Causeway/scripts/run_all_pipelines.sh) to match your setup.
+   1. Edit the `DATA_DIR`, `PTB_DIR`, and `STANFORD_DIR` variables in [`run_all_pipelines.sh`](scripts/run_all_pipelines.sh) to match your setup.
    2. Run the script from the root Causeway directory.
 
 #### Citations
