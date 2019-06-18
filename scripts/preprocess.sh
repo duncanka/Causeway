@@ -4,6 +4,7 @@
 
 if [ $# -ge 2 ]; then
     PARSERDIR=$2
+    FILESDIR=$1
 elif [ $# -eq 0 ]; then
     echo "Usage: preprocess.sh input-dir [parser-dir]"
     exit;
