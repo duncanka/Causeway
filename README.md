@@ -47,8 +47,8 @@ To reproduce the results from the Causeway paper:
           for PATCH in *.patch; do
               patch -p 2 < $PATCH
           done
-          TO_RECOMPILE=$(grep '+++' *.patch | sed -e 's/.*\(edu.*\.java\).*/\1/' | sort | uniq)
       })
+      TO_RECOMPILE=$(grep '+++' /tmp/stanford-sources/*.patch | sed -e 's/.*\(edu.*\.java\).*/\1/' | sort | uniq)
       for SRC_FILE in $TO_RECOMPILE; do
           javac -cp /tmp/stanford-sources /tmp/stanford-sources/$SRC_FILE
           jar uf stanford-parser.jar -C /tmp/stanford-sources/ ${SRC_FILE%.java}.class
@@ -57,6 +57,7 @@ To reproduce the results from the Causeway paper:
       rm -R /tmp/stanford-sources
 
       ```
+      You might see a bit of error output from the Java compiler. Don't worry about it.
 
 5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus.
    1. Clone the repository.
