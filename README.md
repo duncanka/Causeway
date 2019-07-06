@@ -21,7 +21,7 @@ To reproduce the results from the Causeway paper:
 
 2. Install the external Python packages that Causeway depends on:
    ```bash
-   sudo pip2 install bidict colorama nltk cython
+   sudo pip2 install bidict colorama nltk cython python-gflags numpy scipy scikit-learn python-crfsuite
    ```
 
 3. Clone the Causeway repository, including the [NLPypline](https://github.com/duncanka/NLPypline) framework for NLP pipelines (included as a Git submodule):
