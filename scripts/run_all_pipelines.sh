@@ -7,7 +7,7 @@ OUT_DIR=outputs/final
 LOG_DIR=$OUT_DIR/logs
 BECAUSE_DIR=/home/jesse/Documents/BECAUSE
 PTB_BECAUSE_DIR=$BECAUSE_DIR/PTB
-STANFORD_DIR=/home/jesse/Documents/stanford-parser-full-2015-04-20/
+STANFORD_DIR=/home/jesse/Documents/stanford-corenlp-full-2015-04-20/
 # Set max TRegex cache filename length to work with eCryptfs.
 BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR --reader_recurse"
 

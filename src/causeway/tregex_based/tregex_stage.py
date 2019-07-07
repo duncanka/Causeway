@@ -25,7 +25,7 @@ import os
 try:
     DEFINE_string('tregex_dir',
                   '/home/jesse/Documents/Work/Research/'
-                  'stanford-tregex-2014-10-26',
+                  'stanford-corenlp-full-2015-04-20',
                   'Command to run TRegex')
     DEFINE_integer(
         'tregex_max_steiners', 6,

@@ -64,17 +64,18 @@ To reproduce the results from the Causeway paper:
       Again, you should end up with a bunch of `.txt` files alongside the `.ann` files in the `NYT` subdirectory.
 
 6. Set up version 3.5.2 of the Stanford parser.
-   1. Download the full Stanford parser [package](https://nlp.stanford.edu/software/stanford-parser-full-2015-04-20.zip). Unzip it somewhere, resulting in a folder called `stanford-parser-full-2015-04-20` (henceforth, `$STANFORD_DIR`).
+   1. Download the full Stanford CoreNLP [package](http://nlp.stanford.edu/software/stanford-corenlp-full-2015-04-20.zip). Unzip it somewhere, resulting in a folder called `stanford-corenlp-full-2015-04-20` (henceforth, `$STANFORD_DIR`).
 
-   2. Unzip the English PCFG model:
+   2. Unzip the pretrained PCFG and NER models:
       ```bash
-      (cd $STANFORD_DIR && unzip stanford-parser-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz)
+      unzip $STANFORD_DIR/stanford-corenlp-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz -d $STANFORD_DIR
+      unzip -j $STANFORD_DIR/stanford-corenlp-3.5.2-models.jar edu/stanford/nlp/models/ner/english.all.3class.distsim.crf.ser.gz -d $STANFORD_DIR/classifiers
       ```
 
    3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from `$STANFORD_DIR`):
       ```bash
       mkdir /tmp/stanford-sources
-      unzip stanford-parser-3.5.2-sources.jar -d /tmp/stanford-sources
+      unzip stanford-corenlp-3.5.2-sources.jar -d /tmp/stanford-sources
       cp $CAUSEWAY_DIR/stanford-patches/*.patch /tmp/stanford-sources
       (cd /tmp/stanford-sources && {
           for PATCH in *.patch; do
@@ -84,7 +85,7 @@ To reproduce the results from the Causeway paper:
       TO_RECOMPILE=$(grep '+++' /tmp/stanford-sources/*.patch | sed -e 's/.*\(edu.*\.java\).*/\1/' | sort | uniq)
       for SRC_FILE in $TO_RECOMPILE; do
           javac -cp /tmp/stanford-sources /tmp/stanford-sources/$SRC_FILE
-          jar uf stanford-parser.jar -C /tmp/stanford-sources/ ${SRC_FILE%.java}.class
+          jar uf stanford-corenlp-3.5.2.jar -C /tmp/stanford-sources/ ${SRC_FILE%.java}.class
       done
 
       rm -R /tmp/stanford-sources
@@ -93,8 +94,9 @@ To reproduce the results from the Causeway paper:
 
     4. Create the TRegex/TSurgeon run scripts (adapted from the [https://nlp.stanford.edu/software/tregex.html](standalone TRegex download)).
        ```bash
-       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-parser.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tsurgeon.Tsurgeon "$@"\n' > $STANFORD_DIR/tsurgeon.sh
-       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-parser.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tregex.TregexPattern "$@"\n' > $STANFORD_DIR/tregex.sh
+       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-corenlp-3.5.2.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.TregexPattern "$@"\n' > $STANFORD_DIR/tregex.sh
+       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-corenlp-3.5.2.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tsurgeon.Tsurgeon "$@"\n' > $STANFORD_DIR/tsurgeon.sh
+       chmod ugo+x $STANFORD_DIR/tregex.sh $STANFORD_DIR/tsurgeon.sh
        ```
 
 7. Run the Stanford parser on the data:

@@ -9,6 +9,7 @@ from nltk.tag.stanford import StanfordNERTagger
 import operator
 import os
 from os import path
+import subprocess
 from subprocess import PIPE
 import tempfile
 
@@ -23,8 +24,10 @@ try:
     DEFINE_bool("iaa_calculate_partial", False,
                 "Whether to compute metrics for partial overlap")
     DEFINE_string('stanford_ner_path',
-                  '/home/jesse/Documents/Work/Research/stanford-ner-2015-04-20',
+                  '/home/jesse/Documents/Work/Research/stanford-corenlp-full-2015-04-20',
                   'Path to Stanford NER directory')
+    DEFINE_string('stanford_ner_jar', 'stanford-corenlp-3.5.2.jar',
+                  'Name of JAR file containing Stanford NER')
     DEFINE_string(
         'stanford_ner_model_name', 'english.all.3class.distsim.crf.ser.gz',
         'Name of model file for Stanford NER')
@@ -219,6 +222,7 @@ class SentenceSplitStanfordNERTagger(StanfordNERTagger):
         # Run the tagger and get the output
         cmd = list(self._cmd)
         cmd.extend(['-encoding', encoding])
+        subprocess.DEVNULL = -3 # Hack for compatibility with latest NLTK
         stanford_ner_output, _stderr = nltk.internals.java(
             cmd, classpath=self._stanford_jar, stdout=PIPE, stderr=PIPE)
         stanford_ner_output = stanford_ner_output.decode(encoding)
@@ -256,7 +260,7 @@ class StanfordNERStage(Stage):
     def _test_documents(self, documents, sentences_by_doc, writer):
         model_path = path.join(FLAGS.stanford_ner_path, 'classifiers',
                                FLAGS.stanford_ner_model_name)
-        jar_path = path.join(FLAGS.stanford_ner_path, 'stanford-ner.jar')
+        jar_path = path.join(FLAGS.stanford_ner_path, FLAGS.stanford_ner_jar)
         tagger = SentenceSplitStanfordNERTagger(model_path, jar_path)
         tokens_by_sentence = [
             [StanfordParsedSentence.escape_token_text(token.original_text)
