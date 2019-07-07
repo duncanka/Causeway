@@ -1,0 +1,14 @@
+diff -ur a/src/edu/stanford/nlp/trees/PennTreebankLanguagePack.java b/src/edu/stanford/nlp/trees/PennTreebankLanguagePack.java
+--- a/src/edu/stanford/nlp/trees/PennTreebankLanguagePack.java	2019-07-07 00:43:17.513050114 -0400
++++ b/src/edu/stanford/nlp/trees/PennTreebankLanguagePack.java	2019-07-07 00:43:24.229050114 -0400
+@@ -206,7 +206,11 @@
+   /** {@inheritDoc} */
+   @Override
+   public HeadFinder typedDependencyHeadFinder() {
+-    return new SemanticHeadFinder(this, true);
++    if (generateOriginalDependencies) {
++      return new SemanticHeadFinder(this, true);
++    } else {
++      return new UniversalSemanticHeadFinder(this, true);
++    }
+   }
