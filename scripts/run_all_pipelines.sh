@@ -9,21 +9,21 @@ BECAUSE_DIR=/home/jesse/Documents/BECAUSE
 PTB_BECAUSE_DIR=$BECAUSE_DIR/PTB
 STANFORD_DIR=/home/jesse/Documents/stanford-parser-full-2015-04-20/
 # Set max TRegex cache filename length to work with eCryptfs.
-BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR"
+BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR --reader_recurse"
 
 export PYTHONPATH="src:NLPypline/src"
 
 # Columns:
 # Run_type data_dir extra_flags
 read -r -d '' PER_RUN_VARS << EOM
-all3          $ALL_DATA_DIR
-mostfreq      $ALL_DATA_DIR --filter_classifiers=mostfreq
-global        $ALL_DATA_DIR --filter_classifiers=global
-perconn       $ALL_DATA_DIR --filter_classifiers=perconn
-no_perconn    $ALL_DATA_DIR --filter_classifiers=global,mostfreq
-no_mostfreq   $ALL_DATA_DIR --filter_classifiers=global,perconn
-no_global     $ALL_DATA_DIR --filter_classifiers=mostfreq,perconn
-no_world_knol $ALL_DATA_DIR --filter_features_to_cancel=cause_ner:effect_ner,cause_hypernyms,effect_hypernyms,cause_lemma_skipgrams,effect_lemma_skipgrams
+all3          $BECAUSE_DIR
+mostfreq      $BECAUSE_DIR --filter_classifiers=mostfreq
+global        $BECAUSE_DIR --filter_classifiers=global
+perconn       $BECAUSE_DIR --filter_classifiers=perconn
+no_perconn    $BECAUSE_DIR --filter_classifiers=global,mostfreq
+no_mostfreq   $BECAUSE_DIR --filter_classifiers=global,perconn
+no_global     $BECAUSE_DIR --filter_classifiers=mostfreq,perconn
+no_world_knol $BECAUSE_DIR --filter_features_to_cancel=cause_ner:effect_ner,cause_hypernyms,effect_hypernyms,cause_lemma_skipgrams,effect_lemma_skipgrams
 ptb_all3      $PTB_BECAUSE_DIR
 ptb_all3_gold $PTB_BECAUSE_DIR --reader_gold_parses
 EOM
@@ -41,18 +41,18 @@ mkdir -p $OUT_DIR
 mkdir -p $LOG_DIR
 
 tsp -S 1 # for TRegex caching
-run_pipeline tregex_cache tregex_cache $ALL_DATA_DIR
+run_pipeline tregex_cache tregex_cache $BECAUSE_DIR
 run_pipeline tregex_cache tregex_cache_ptb $PTB_BECAUSE_DIR
 tsp -n -L "parallelize" "tsp -S 4"
 
-run_pipeline baseline baseline $ALL_DATA_DIR
+run_pipeline baseline baseline $BECAUSE_DIR
 for PIPELINE_TYPE in tregex regex; do
     printf '%s\n' "$PER_RUN_VARS" | while IFS="\n" read line; do
         read RUN_TYPE DIR FLAGS <<<$line
         run_pipeline "$PIPELINE_TYPE" "${PIPELINE_TYPE}_${RUN_TYPE}" $DIR $FLAGS
     done
-    run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $ALL_DATA_DIR
-    run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $ALL_DATA_DIR
+    run_pipeline "${PIPELINE_TYPE}+baseline" "${PIPELINE_TYPE}+baseline" $BECAUSE_DIR
+    run_pipeline "${PIPELINE_TYPE}_mostfreq" "${PIPELINE_TYPE}_mostfreq_sep" $BECAUSE_DIR
 done
 
 tsp -l # Print spooled tasks
