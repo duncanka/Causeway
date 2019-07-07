@@ -23,6 +23,10 @@ To reproduce the results from the Causeway paper:
    ```bash
    sudo pip2 install bidict colorama nltk cython python-gflags numpy scipy scikit-learn python-crfsuite
    ```
+   Also make sure that NLTK has access to WordNet:
+   ```bash
+   python -c "import nltk; nltk.download('wordnet')"
+   ```
 
 3. Clone the Causeway repository, including the [NLPypline](https://github.com/duncanka/NLPypline) framework for NLP pipelines (included as a Git submodule):
    ```bash
