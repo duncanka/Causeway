@@ -25,20 +25,47 @@ To reproduce the results from the Causeway paper:
    ```
 
 3. Clone the Causeway repository, including the [NLPypline](https://github.com/duncanka/NLPypline) framework for NLP pipelines (included as a Git submodule):
-
    ```bash
    git clone --recursive https://github.com/duncanka/Causeway.git
    ```
+   We'll refer to the resulting `Causeway` directory as `$CAUSEWAY_DIR`.
 
-4. Set up version 3.5.2 of the Stanford parser.
-   1. Download the full Stanford parser [package](https://nlp.stanford.edu/software/stanford-parser-full-2015-04-20.zip). Unzip it somewhere, resulting in a folder called `stanford-parser-full-2015-04-20`.
+4. Compile the one Cython file in the project:
+   ```
+   (cd $CAUSEWAY_DIR/NLPypline/src/nlpypline/util && cythonize -i streams.pyx)
+   ```
 
-   2. Within `stanford-parser-full-2015-04-20`, unzip the English PCFG model:
+5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus.
+   1. Clone the repository from whatever directory you'd like the data to live in.
+      ```bash
+      git clone https://github.com/duncanka/BECAUSE.git
+      (cd BECAUSE && git checkout 1.0)
+      ```
+      We'll refer to the resulting directory named `BECAUSE` as `$BECAUSE_DIR`.
+
+   2. If you haven't previously done so, follow the [NLTK instructions](https://www.nltk.org/data.html#manual-installation) for manually setting up NLTK access to the Penn Treebank. (You'll need to use your institution's LDC license to acquire the data, and combine all the `.mrg` files into one directory.)
+
+   3. Run the WSJ text extraction script to get the raw text for the PTB annotations:
+      ```bash
+      python $BECAUSE_DIR/scripts/extract_wsj_txt.py $BECAUSE_DIR/PTB
+      ```
+      You should end up with a bunch of `.txt` files alongside the `.ann` files in the `PTB` subdirectory.
+
+   4. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
+      ```bash
+      python $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
+      ```
+      Again, you should end up with a bunch of `.txt` files alongside the `.ann` files in the `NYT` subdirectory.
+
+6. Set up version 3.5.2 of the Stanford parser.
+   1. Download the full Stanford parser [package](https://nlp.stanford.edu/software/stanford-parser-full-2015-04-20.zip). Unzip it somewhere, resulting in a folder called `stanford-parser-full-2015-04-20` (henceforth, `$STANFORD_DIR`).
+
+   2. Within `$STANFORD_DIR`, unzip the English PCFG model:
       ```bash
       unzip stanford-parser-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz
       ```
 
-   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from the root `stanford-parser-full-2015-04-20` directory; replace `$CAUSEWAY_DIR` with the path of the `Causeway` directory from step 3):
+   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from `$STANFORD_DIR`):
       ```bash
       mkdir /tmp/stanford-sources
       unzip stanford-parser-3.5.2-sources.jar -d /tmp/stanford-sources
@@ -62,42 +89,15 @@ To reproduce the results from the Causeway paper:
    4. Download the TRegex/TSurgeon package and extract the relevant files. (The TRegex/TSurgeon binaries are included with the Stanford parser; this is just to get the run scripts.)
       ```bash
       wget https://nlp.stanford.edu/software/stanford-tregex-2018-10-16.zip
-      unzip -j stanford-tregex-2018-10-16.zip stanford-tregex-2018-10-16/tregex.sh stanford-tregex-2018-10-16/tsurgeon.sh -d stanford-parser-full-2015-04-20
+      unzip -j stanford-tregex-2018-10-16.zip stanford-tregex-2018-10-16/tregex.sh stanford-tregex-2018-10-16/tsurgeon.sh -d $STANFORD_DIR
       rm stanford-tregex-2018-10-16.zip
       ```
 
-5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus.
-   1. Clone the repository.
-      ```bash
-      git clone https://github.com/duncanka/BECAUSE.git
-      (cd BECAUSE && git checkout 1.0)
-      ```
-      We'll refer to the resulting directory named `BECAUSE` as `$BECAUSE_DIR`.
-
-   2. If you haven't previously done so, follow the [NLTK instructions](https://www.nltk.org/data.html#manual-installation) for manually setting up NLTK access to the Penn Treebank. (You'll need to use your institution's LDC license to acquire the data, and combine all the `.mrg` files into one directory.)
-
-   3. Run the WSJ text extraction script to get the raw text for the PTB annotations:
-      ```bash
-      python $BECAUSE_DIR/scripts/extract_wsj_txt.py $BECAUSE_DIR/PTB
-      ```
-      You should end up with a bunch of `.txt` files alongside the `.ann` files in the `PTB` subdirectory.
-
-   4. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
-      ```bash
-      python $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
-      ```
-      Again, you should end up with a bunch of `.txt` files alongside the `.ann` files in the `NYT` subdirectory.
-
-6. Run the Stanford parser (located in `$STANFORD_DIR`) on the data:
+7. Run the Stanford parser on the data:
    ```bash
    for DATA_DIR in $BECAUSE_DIR/PTB $BECAUSE_DIR/NYT $BECAUSE_DIR/CongressionalHearings; do
        $CAUSEWAY_DIR/scripts/preprocess.sh $DATA_DIR $STANFORD_DIR;
    done
-   ```
-
-7. While you're waiting, compile the one Cython file in the project:
-   ```
-   (cd $CAUSEWAY_DIR/NLPypline/src/nlpypline/util && cythonize -i streams.pyx)
    ```
 
 8. Run the system.
