@@ -43,15 +43,17 @@ To reproduce the results from the Causeway paper:
       ```
       We'll refer to the resulting directory named `BECAUSE` as `$BECAUSE_DIR`.
 
-   2. If you haven't previously done so, follow the [NLTK instructions](https://www.nltk.org/data.html#manual-installation) for manually setting up NLTK access to the Penn Treebank. (You'll need to use your institution's LDC license to acquire the data, and combine all the `.mrg` files into one directory.)
-
-   3. Run the WSJ text extraction script to get the raw text for the PTB annotations:
+   2. Extract the raw WSJ text corresponding to the PTB subset used in BECAUSE. Assuming you have the PTB2 files unpacked in `$PTB_DIR` (with the same directory structure as the official CD), run the following:
       ```bash
-      python $BECAUSE_DIR/scripts/extract_wsj_txt.py $BECAUSE_DIR/PTB
+      for ANN_FILE in $BECAUSE_DIR/PTB/*.ann; do
+          BASE_FILE=$(basename $ANN_FILE)
+          DIGITS=$(echo $BASE_FILE | cut -d'_' -f2)
+          cp $PTB_DIR/raw/${DIGITS:0:2}/${BASE_FILE%.*}.txt $BECAUSE_DIR/PTB/
+      done
       ```
       You should end up with a bunch of `.txt` files alongside the `.ann` files in the `PTB` subdirectory.
 
-   4. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
+   3. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
       ```bash
       python $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
       ```
@@ -60,9 +62,9 @@ To reproduce the results from the Causeway paper:
 6. Set up version 3.5.2 of the Stanford parser.
    1. Download the full Stanford parser [package](https://nlp.stanford.edu/software/stanford-parser-full-2015-04-20.zip). Unzip it somewhere, resulting in a folder called `stanford-parser-full-2015-04-20` (henceforth, `$STANFORD_DIR`).
 
-   2. Within `$STANFORD_DIR`, unzip the English PCFG model:
+   2. Unzip the English PCFG model:
       ```bash
-      unzip stanford-parser-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz
+      (cd $STANFORD_DIR && unzip stanford-parser-3.5.2-models.jar edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz)
       ```
 
    3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from `$STANFORD_DIR`):
@@ -82,7 +84,6 @@ To reproduce the results from the Causeway paper:
       done
 
       rm -R /tmp/stanford-sources
-
       ```
       You might see a bit of error output from the Java compiler. Don't worry about it.
 
@@ -96,11 +97,16 @@ To reproduce the results from the Causeway paper:
 7. Run the Stanford parser on the data:
    ```bash
    for DATA_DIR in $BECAUSE_DIR/PTB $BECAUSE_DIR/NYT $BECAUSE_DIR/CongressionalHearings; do
-       $CAUSEWAY_DIR/scripts/preprocess.sh $DATA_DIR $STANFORD_DIR;
+       $CAUSEWAY_DIR/scripts/preprocess.sh $DATA_DIR $STANFORD_DIR
    done
    ```
 
-8. Run the system.
+8. For the PTB files, extract the gold-standard parse trees (to enable gold-standard parse experiments):
+   ```bash
+   $CAUSEWAY_DIR/scripts/convert-mrg.sh $BECAUSE_DIR/PTB $PTB_DIR/combined $STANFORD_DIR
+   ```
+
+9. Run the system.
    1. Edit the `DATA_DIR`, `PTB_DIR`, and `STANFORD_DIR` variables in [`run_all_pipelines.sh`](scripts/run_all_pipelines.sh) to match your setup.
    2. Run the script from the root Causeway directory.
 
