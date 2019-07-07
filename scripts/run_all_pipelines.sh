@@ -5,9 +5,9 @@
 SEED=2961393773
 OUT_DIR=outputs/final
 LOG_DIR=$OUT_DIR/logs
-ALL_DATA_DIR=/var/www/brat/data/finished
-PTB_DATA_DIR=/var/www/brat/data/Jeremy/PTB
-STANFORD_DIR=/home/jesse/Documents/Work/Research/stanford-parser-full-2015-04-20/
+BECAUSE_DIR=/home/jesse/Documents/BECAUSE
+PTB_BECAUSE_DIR=$BECAUSE_DIR/PTB
+STANFORD_DIR=/home/jesse/Documents/stanford-parser-full-2015-04-20/
 # Set max TRegex cache filename length to work with eCryptfs.
 BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR"
 
@@ -24,8 +24,8 @@ no_perconn    $ALL_DATA_DIR --filter_classifiers=global,mostfreq
 no_mostfreq   $ALL_DATA_DIR --filter_classifiers=global,perconn
 no_global     $ALL_DATA_DIR --filter_classifiers=mostfreq,perconn
 no_world_knol $ALL_DATA_DIR --filter_features_to_cancel=cause_ner:effect_ner,cause_hypernyms,effect_hypernyms,cause_lemma_skipgrams,effect_lemma_skipgrams
-ptb_all3      $PTB_DATA_DIR
-ptb_all3_gold $PTB_DATA_DIR --reader_gold_parses
+ptb_all3      $PTB_BECAUSE_DIR
+ptb_all3_gold $PTB_BECAUSE_DIR --reader_gold_parses
 EOM
 
 run_pipeline() {
@@ -42,7 +42,7 @@ mkdir -p $LOG_DIR
 
 tsp -S 1 # for TRegex caching
 run_pipeline tregex_cache tregex_cache $ALL_DATA_DIR
-run_pipeline tregex_cache tregex_cache_ptb $PTB_DATA_DIR
+run_pipeline tregex_cache tregex_cache_ptb $PTB_BECAUSE_DIR
 tsp -n -L "parallelize" "tsp -S 4"
 
 run_pipeline baseline baseline $ALL_DATA_DIR
