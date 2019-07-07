@@ -87,12 +87,11 @@ To reproduce the results from the Causeway paper:
       ```
       You might see a bit of error output from the Java compiler. Don't worry about it.
 
-   4. Download the TRegex/TSurgeon package and extract the relevant files. (The TRegex/TSurgeon binaries are included with the Stanford parser; this is just to get the run scripts.)
-      ```bash
-      wget https://nlp.stanford.edu/software/stanford-tregex-2018-10-16.zip
-      unzip -j stanford-tregex-2018-10-16.zip stanford-tregex-2018-10-16/tregex.sh stanford-tregex-2018-10-16/tsurgeon.sh -d $STANFORD_DIR
-      rm stanford-tregex-2018-10-16.zip
-      ```
+    4. Create the TRegex/TSurgeon run scripts (adapted from the [https://nlp.stanford.edu/software/tregex.html](standalone TRegex download)).
+       ```bash
+       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-parser.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tsurgeon.Tsurgeon "$@"\n' > $STANFORD_DIR/tsurgeon.sh
+       printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-parser.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tregex.TregexPattern "$@"\n' > $STANFORD_DIR/tregex.sh
+       ```
 
 7. Run the Stanford parser on the data:
    ```bash
