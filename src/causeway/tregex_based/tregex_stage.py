@@ -156,19 +156,24 @@ class TRegexConnectiveModel(Model):
                 path.join(module_dir, 'tsurgeon_dep', script_name) + '.ts'
                 for script_name in tsurgeon_script_names]
 
-            with tempfile.NamedTemporaryFile('w', delete=False) as tree_file:
+            with tempfile.NamedTemporaryFile('w', prefix='trees',
+                                             delete=False) as tree_file:
                 encoded_strings = [s.encode('utf-8') for s in ptb_strings]
                 tree_file.writelines(encoded_strings)
                 tree_file.flush()
                 with tempfile.NamedTemporaryFile(
-                    'w+b', delete=False) as surgeried_file:
+                    'w+b', prefix='tsurgeon', delete=False) as surgeried_file:
                     tsurgeon_command = (
                         ([path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
                           '-treeFile', tree_file.name]
                          + tsurgeon_script_names))
-                    subprocess.call(tsurgeon_command, stdout=surgeried_file,
-                                    stderr=(TRegexConnectiveModel
-                                            .TregexProcessorThread.dev_null))
+                    devnull = (
+                        TRegexConnectiveModel.TregexProcessorThread.dev_null)
+                    retval = subprocess.call(
+                        tsurgeon_command, stdout=surgeried_file, stderr=devnull)
+                    if retval != 0:
+                        raise RuntimeError("TSurgeon command failed: %s"
+                                           % tsurgeon_command)
                     surgeried_file.seek(0)
                     ptb_strings = surgeried_file.readlines()
         else:
@@ -615,8 +620,11 @@ class TRegexConnectiveModel(Model):
                 [path.join(FLAGS.tregex_dir, 'tregex.sh'), output_type_arg]
                 + self._FIXED_TREGEX_ARGS + connective_printing_args
                 + [pattern, tree_file_path])
-            subprocess.call(tregex_command, stdout=self.output_file,
-                            stderr=self.dev_null)
+            devnull = TRegexConnectiveModel.TregexProcessorThread.dev_null
+            retcode = subprocess.call(tregex_command, stdout=self.output_file,
+                                      stderr=devnull) # Edit to debug problems
+            if retcode != 0:
+                raise RuntimeError("TRegex command failed: %s" % tregex_command)
 
         _TREGEX_CACHE_DIR = home = path.expanduser("~/tregex_cache")
         def _create_output_file_if_not_exists(self, pattern, connective_labels,

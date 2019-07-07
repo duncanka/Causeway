@@ -72,10 +72,10 @@ To reproduce the results from the Causeway paper:
       unzip -j $STANFORD_DIR/stanford-corenlp-3.5.2-models.jar edu/stanford/nlp/models/ner/english.all.3class.distsim.crf.ser.gz -d $STANFORD_DIR/classifiers
       ```
 
-   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick (run from `$STANFORD_DIR`):
+   3. Apply the [Causeway-specific patches](../master/stanford-patches) to the Stanford parser. The following hacky script should do the trick:
       ```bash
       mkdir /tmp/stanford-sources
-      unzip stanford-corenlp-3.5.2-sources.jar -d /tmp/stanford-sources
+      unzip $STANFORD_DIR/stanford-corenlp-3.5.2-sources.jar -d /tmp/stanford-sources
       cp $CAUSEWAY_DIR/stanford-patches/*.patch /tmp/stanford-sources
       (cd /tmp/stanford-sources && {
           for PATCH in *.patch; do
@@ -84,8 +84,10 @@ To reproduce the results from the Causeway paper:
       })
       TO_RECOMPILE=$(grep '+++' /tmp/stanford-sources/*.patch | sed -e 's/.*\(edu.*\.java\).*/\1/' | sort | uniq)
       for SRC_FILE in $TO_RECOMPILE; do
-          javac -cp /tmp/stanford-sources /tmp/stanford-sources/$SRC_FILE
-          jar uf stanford-corenlp-3.5.2.jar -C /tmp/stanford-sources/ ${SRC_FILE%.java}.class
+          javac -cp /tmp/stanford-sources "/tmp/stanford-sources/$SRC_FILE"
+          for CLASS_FILE in /tmp/stanford-sources/${SRC_FILE%.java}*.class; do
+              jar uf $STANFORD_DIR/stanford-corenlp-3.5.2.jar -C /tmp/stanford-sources/ "${CLASS_FILE#/*/*/}"
+          done
       done
 
       rm -R /tmp/stanford-sources
