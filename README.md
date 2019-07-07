@@ -59,6 +59,13 @@ To reproduce the results from the Causeway paper:
       ```
       You might see a bit of error output from the Java compiler. Don't worry about it.
 
+   4. Download the TRegex/TSurgeon package and extract the relevant files. (The TRegex/TSurgeon binaries are included with the Stanford parser; this is just to get the run scripts.)
+      ```bash
+      wget https://nlp.stanford.edu/software/stanford-tregex-2018-10-16.zip
+      unzip -j stanford-tregex-2018-10-16.zip stanford-tregex-2018-10-16/tregex.sh stanford-tregex-2018-10-16/tsurgeon.sh -d stanford-parser-full-2015-04-20
+      rm stanford-tregex-2018-10-16.zip
+      ```
+
 5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus.
    1. Clone the repository.
       ```bash
