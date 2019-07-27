@@ -8,8 +8,10 @@ LOG_DIR=$OUT_DIR/logs
 BECAUSE_DIR=/home/jesse/Documents/BECAUSE
 PTB_BECAUSE_DIR=$BECAUSE_DIR/PTB
 STANFORD_DIR=/home/jesse/Documents/stanford-corenlp-full-2015-04-20/
-# Set max TRegex cache filename length to work with eCryptfs.
-BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 --iaa_log_by_connective --iaa_log_by_category --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR --reader_recurse"
+# Max TRegex cache filename length is set to work with eCryptfs.
+BASE_CMD="python2 src/causeway/main.py --eval_with_cv --seed=$SEED --cv_folds=20 
+          --tregex_max_cache_filename_len=140 --tregex_dir=$STANFORD_DIR --stanford_ner_path=$STANFORD_DIR
+          --reader_recurse --iaa_compute_overlapping=False" # --iaa_log_by_connective --iaa_log_by_category"
 
 export PYTHONPATH="src:NLPypline/src"
 
@@ -43,7 +45,8 @@ mkdir -p $LOG_DIR
 tsp -S 1 # for TRegex caching
 run_pipeline tregex_cache tregex_cache $BECAUSE_DIR
 run_pipeline tregex_cache tregex_cache_ptb $PTB_BECAUSE_DIR
-tsp -n -L "parallelize" "tsp -S 4"
+NUM_CORES=$(grep -c ^processor /proc/cpuinfo)
+tsp -n -L "parallelize" "tsp -S $NUM_CORES"
 
 run_pipeline baseline baseline $BECAUSE_DIR
 for PIPELINE_TYPE in tregex regex; do
