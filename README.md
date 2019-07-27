@@ -94,7 +94,7 @@ To reproduce the results from the Causeway paper:
       ```
       You might see a bit of error output from the Java compiler. Don't worry about it.
 
-    4. Create the TRegex/TSurgeon run scripts (adapted from the [https://nlp.stanford.edu/software/tregex.html](standalone TRegex download)).
+    4. Create the TRegex/TSurgeon run scripts (adapted from the [standalone TRegex download](https://nlp.stanford.edu/software/tregex.html)).
        ```bash
        printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-corenlp-3.5.2.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.TregexPattern "$@"\n' > $STANFORD_DIR/tregex.sh
        printf '#!/bin/bash\nexport CLASSPATH=$(dirname $0)/stanford-corenlp-3.5.2.jar:$CLASSPATH\njava -mx100m edu.stanford.nlp.trees.tregex.tsurgeon.Tsurgeon "$@"\n' > $STANFORD_DIR/tsurgeon.sh
