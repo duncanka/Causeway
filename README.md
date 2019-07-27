@@ -52,7 +52,7 @@ To reproduce the results from the Causeway paper:
       for ANN_FILE in $BECAUSE_DIR/PTB/*.ann; do
           BASE_FILE=$(basename $ANN_FILE)
           DIGITS=$(echo $BASE_FILE | cut -d'_' -f2)
-          cp $PTB_DIR/raw/${DIGITS:0:2}/${BASE_FILE%.*}.txt $BECAUSE_DIR/PTB/
+          tail -n +3 $PTB_DIR/raw/${DIGITS:0:2}/${BASE_FILE%.*} > $BECAUSE_DIR/PTB/${BASE_FILE%.*}.txt
       done
       ```
       You should end up with a bunch of `.txt` files alongside the `.ann` files in the `PTB` subdirectory.
