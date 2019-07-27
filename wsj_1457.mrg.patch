@@ -1,0 +1,21 @@
+diff -u orig/wsj_1457.mrg fixed/wsj_1457.mrg
+--- orig/wsj_1457.mrg	2016-09-24 23:06:49.000000000 -0400
++++ fixed/wsj_1457.mrg	2019-07-27 17:52:29.200775834 -0400
+@@ -956,7 +956,7 @@
+                 (NP-SBJ (NNP Mr.) (NNP Dinkins) )
+                 (VP (VBZ is) 
+                   (NP-PRD 
+-                    (NP (`` ``) (DT a) (NN fancy'shvartzer) ('' ') )
++                    (NP (`` ``) (DT a) (JJ fancy) (`` `) (NN shvartzer) ('' '))
+                     (PP (IN with) 
+                       (NP (DT a) (NN moustache) ))))))))))
+     (. .) ('' '') ))
+@@ -1313,7 +1313,7 @@
+                         (PP (IN between) 
+                           (NP 
+                             (NP 
+-                              (NP (NN the'breakup) ('' ') (NN value) )
++                              (NP (DT the) (`` `) (NN breakup) ('' ') (NN value) )
+                               (PP (IN of) 
+                                 (NP (DT the) (NNS shares) )))
+                             (CC and) 

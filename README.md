@@ -108,7 +108,13 @@ To reproduce the results from the Causeway paper:
    done
    ```
 
-8. For the PTB files, extract the gold-standard parse trees (to enable gold-standard parse experiments):
+8. For the PTB files, extract the gold-standard parse trees (to enable gold-standard parse experiments).
+  1. Correct a silly PTB tokenization error in one of the `.mrg` files that breaks the system:
+  ```bash
+  (cd $PTB_DIR/combined/14/ && patch -p1 < $CAUSEWAY_DIR/wsj_1457.mrg.patch)
+  ```
+  (If you don't want to modify your main PTB copy, you can copy the PTB data over to a new directory and point `$PTB_DIR` to it.)
+  2. Run the command to extract the trees:
    ```bash
    $CAUSEWAY_DIR/scripts/convert-mrg.sh $BECAUSE_DIR/PTB $PTB_DIR/combined $STANFORD_DIR
    ```
