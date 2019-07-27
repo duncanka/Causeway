@@ -1,0 +1,14 @@
+diff -ur a/src/edu/stanford/nlp/trees/tregex/CoordinationPattern.java b/src/edu/stanford/nlp/trees/tregex/CoordinationPattern.java
+--- a/src/edu/stanford/nlp/trees/tregex/CoordinationPattern.java	2019-07-27 00:22:28.215000000 -0400
++++ b/src/edu/stanford/nlp/trees/tregex/CoordinationPattern.java	2019-07-27 00:23:19.983000000 -0400
+@@ -15,8 +15,8 @@
+ 
+   /* if isConj is true, then it is an "AND" ; if it is false, it is an "OR".*/
+   public CoordinationPattern(List<TregexPattern> children, boolean isConj) {
+-    if (children.size() < 2) {
+-      throw new RuntimeException("Coordination node must have at least 2 children.");
++    if (children.size() < 1) {
++      throw new RuntimeException("Coordination node must have at least 1 child.");
+     }
+     this.children = children;
+     this.isConj = isConj;

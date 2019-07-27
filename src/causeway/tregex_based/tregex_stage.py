@@ -167,7 +167,7 @@ class TRegexConnectiveModel(Model):
                         ([path.join(FLAGS.tregex_dir, 'tsurgeon.sh'), '-s',
                           '-treeFile', tree_file.name]
                          + tsurgeon_script_names))
-                    devnull = (
+                    devnull = ( # To debug errors, change to stderr
                         TRegexConnectiveModel.TregexProcessorThread.dev_null)
                     retval = subprocess.call(
                         tsurgeon_command, stdout=surgeried_file, stderr=devnull)
