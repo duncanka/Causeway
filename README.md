@@ -39,11 +39,11 @@ To reproduce the results from the Causeway paper:
    (cd $CAUSEWAY_DIR/NLPypline/src/nlpypline/util && cythonize -i streams.pyx)
    ```
 
-5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus.
+5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus. (Of course, you can also use the latest version of BECAUSE if you are not trying to reproduce the Causeway paper results.)
    1. Clone the repository from whatever directory you'd like the data to live in.
       ```bash
       git clone https://github.com/duncanka/BECAUSE.git
-      (cd BECAUSE && git checkout 1.0)
+      (cd BECAUSE && git checkout 1.0) # skip if using latest BECAUSE version
       ```
       We'll refer to the resulting directory named `BECAUSE` as `$BECAUSE_DIR`.
 
@@ -109,15 +109,15 @@ To reproduce the results from the Causeway paper:
    ```
 
 8. For the PTB files, extract the gold-standard parse trees (to enable gold-standard parse experiments).
-  1. Correct a silly PTB tokenization error in one of the `.mrg` files that breaks the system:
-  ```bash
-  (cd $PTB_DIR/combined/14/ && patch -p1 < $CAUSEWAY_DIR/wsj_1457.mrg.patch)
-  ```
-  (If you don't want to modify your main PTB copy, you can copy the PTB data over to a new directory and point `$PTB_DIR` to it.)
-  2. Run the command to extract the trees:
-   ```bash
-   $CAUSEWAY_DIR/scripts/convert-mrg.sh $BECAUSE_DIR/PTB $PTB_DIR/combined $STANFORD_DIR
-   ```
+   1. Correct a silly PTB tokenization error in one of the `.mrg` files that breaks the system:
+      ```bash
+      (cd $PTB_DIR/combined/14/ && patch -p1 < $CAUSEWAY_DIR/wsj_1457.mrg.patch)
+      ```
+      (If you don't want to modify your main PTB copy, you can copy the PTB data over to a new directory and point `$PTB_DIR` to it.)
+   2. Run the command to extract the trees:
+      ```bash
+      $CAUSEWAY_DIR/scripts/convert-mrg.sh $BECAUSE_DIR/PTB $PTB_DIR/combined $STANFORD_DIR
+      ```
 
 9. Run the system.
    1. Edit the `BECAUSE_DIR` and `STANFORD_DIR` variables in [`run_all_pipelines.sh`](scripts/run_all_pipelines.sh) to match your setup.
