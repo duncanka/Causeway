@@ -25,7 +25,7 @@ To reproduce the results from the Causeway paper:
    ```
    Also make sure that NLTK has access to WordNet:
    ```bash
-   python -c "import nltk; nltk.download('wordnet')"
+   python2 -c "import nltk; nltk.download('wordnet')"
    ```
 
 3. Clone the Causeway repository, including the [NLPypline](https://github.com/duncanka/NLPypline) framework for NLP pipelines (included as a Git submodule):
@@ -39,7 +39,7 @@ To reproduce the results from the Causeway paper:
    (cd $CAUSEWAY_DIR/NLPypline/src/nlpypline/util && cythonize -i streams.pyx)
    ```
 
-5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECauSE) 1.0 corpus. (Of course, you can also use the latest version of BECAUSE if you are not trying to reproduce the Causeway paper results.)
+5. Reconstitute the [BECAUSE](https://github.com/duncanka/BECAUSE) 1.0 corpus. (Of course, you can also use the latest version of BECAUSE if you are not trying to reproduce the Causeway paper results.)
    1. Clone the repository from whatever directory you'd like the data to live in.
       ```bash
       git clone https://github.com/duncanka/BECAUSE.git
@@ -59,7 +59,7 @@ To reproduce the results from the Causeway paper:
 
    3. Run the NYT text extraction script on your LDC-licensed copy of the [NYT corpus](https://catalog.ldc.upenn.edu/LDC2008T19), which let's assume is stored in directory `$NYT_DIR`:
       ```bash
-      python $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
+      python2 $BECAUSE_DIR/scripts/extract_nyt_txt.py $BECAUSE_DIR/NYT $(for FNAME in $BECAUSE_DIR/NYT/*.ann; do find $NYT_DIR -name $(basename "${FNAME%.ann}.xml"); done)
       ```
       Again, you should end up with a bunch of `.txt` files alongside the `.ann` files in the `NYT` subdirectory.
 
